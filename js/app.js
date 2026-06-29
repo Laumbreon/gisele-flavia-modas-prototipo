@@ -123,6 +123,8 @@ const suppliers = [
   { id: 4, name: "Verde Chic Confecções", segment: "Calças e alfaiataria", city: "Goiânia, GO", contact: "Paula Reis", phone: "(62) 95555-8100", status: "Ativo", delivery: "4 a 6 dias", lastOrder: "Alfaiataria casual", rating: "Premium" },
 ];
 
+let estoqueApiRows = null;
+
 let stockMovements = [
   { id: 1, date: "2026-06-12T09:30:00", product: "Vestido Floral Midi", type: "Entrada", quantity: 8, reason: "Compra fornecedor", responsible: "Gisele" },
   { id: 2, date: "2026-06-13T14:15:00", product: "Saia Plissada", type: "Ajuste", quantity: 1, reason: "Conferência de estoque", responsible: "Flávia" },
@@ -305,6 +307,79 @@ async function carregarProdutosDaApi() {
 }
 
 /* ----------------- NAVEGAÇÃO ENTRE TELAS ----------------- */
+
+function estoqueStatusFrontend(status) {
+  const value = String(status || "").toLowerCase();
+  if (value === "zerado" || value === "zero") return "zero";
+  if (value === "baixo" || value === "low") return "low";
+  return "ok";
+}
+
+function piorStatusEstoque(statusAtual, novoStatus) {
+  const peso = { ok: 0, low: 1, zero: 2 };
+  return peso[novoStatus] > peso[statusAtual] ? novoStatus : statusAtual;
+}
+
+function estoqueParaGestao() {
+  if (!Array.isArray(estoqueApiRows)) return products;
+  const grouped = new Map();
+  estoqueApiRows.forEach(row => {
+    const id = Number(row.produto_id);
+    if (!id) return;
+    const size = normalizarTamanho(row.tamanho);
+    const quantity = numeroApi(row.quantidade);
+    const existingProduct = products.find(p => Number(p.id) === id);
+    if (!grouped.has(id)) {
+      grouped.set(id, { id, name: row.produto_nome || existingProduct?.name || "Produto sem nome", category: normalizarCategoria(row.categoria || existingProduct?.category), price: existingProduct?.price || 0, colors: [], sizes: TAMANHOS.reduce((acc, tamanho) => { acc[tamanho] = 0; return acc; }, {}), stockStatus: "ok" });
+    }
+    const product = grouped.get(id);
+    if (!Object.prototype.hasOwnProperty.call(product.sizes, size)) product.sizes[size] = 0;
+    product.sizes[size] += quantity;
+    if (row.cor && !product.colors.includes(row.cor)) product.colors.push(row.cor);
+    product.stockStatus = piorStatusEstoque(product.stockStatus, estoqueStatusFrontend(row.status));
+  });
+  return Array.from(grouped.values());
+}
+
+async function carregarEstoqueDaApi() {
+  try {
+    const response = await fetch(API_BASE_URL + "/estoque");
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error("Resposta invalida de estoque");
+    estoqueApiRows = data;
+    renderDashboard();
+    renderStockTable();
+  } catch (error) {
+    estoqueApiRows = null;
+    console.info("API de estoque indisponivel. Mantendo estoque mockado.", error);
+  }
+}
+
+function movimentoTipoFrontend(tipo) {
+  const value = String(tipo || "").toLowerCase();
+  if (value === "entrada") return "Entrada";
+  if (value === "saida" || value === "sa\u00edda") return "Sa\u00edda";
+  return "Ajuste";
+}
+
+function adaptarMovimentacaoApi(movimentacao) {
+  return { id: Number(movimentacao.id) || 0, date: movimentacao.created_at || new Date().toISOString(), product: movimentacao.produto || "Produto nao informado", type: movimentoTipoFrontend(movimentacao.tipo), quantity: numeroApi(movimentacao.quantidade), reason: movimentacao.motivo || "Movimentacao de estoque", responsible: movimentacao.responsavel || "Sistema", size: movimentacao.tamanho || "", color: movimentacao.cor || "", sku: movimentacao.sku || "", saleId: movimentacao.venda_id || null };
+}
+
+async function carregarMovimentacoesDaApi() {
+  try {
+    const response = await fetch(API_BASE_URL + "/movimentacoes");
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error("Resposta invalida de movimentacoes");
+    stockMovements = data.map(adaptarMovimentacaoApi);
+    renderMovements();
+  } catch (error) {
+    console.info("API de movimentacoes indisponivel. Mantendo movimentacoes mockadas.", error);
+  }
+}
+
 function buildStoryNav() {
   const track = $("#storyTrack");
   track.innerHTML = NAV_ITEMS.map(item => `
@@ -900,7 +975,6 @@ function checkout() {
   renderMovements();
   renderSuppliers();
   renderHistory();
-  carregarProdutosDaApi();
   showToast("Venda finalizada com sucesso");
 }
 
@@ -949,8 +1023,9 @@ function renderDashboard() {
   const salesToday = sales.filter(s => new Date(s.date).toDateString() === today);
   const totalVendasDia = salesToday.reduce((sum, s) => sum + s.total, 0);
   const totalCaixa = sales.reduce((sum, s) => sum + s.total, 0);
-  const totalPecas = products.reduce((sum, p) => sum + totalStock(p), 0);
-  const baixoEstoque = products.filter(p => productStatus(p) !== "ok").length;
+  const stockProducts = estoqueParaGestao();
+  const totalPecas = stockProducts.reduce((sum, p) => sum + totalStock(p), 0);
+  const baixoEstoque = stockProducts.filter(p => (p.stockStatus || productStatus(p)) !== "ok").length;
 
   const cards = [
     { label: "Vendas de hoje", value: money(totalVendasDia), icon: "money", cls: "pink" },
@@ -967,12 +1042,11 @@ function renderDashboard() {
     </div>
   `).join("");
 
-  // estoque baixo
-  const low = products.filter(p => productStatus(p) !== "ok");
+  const low = stockProducts.filter(p => (p.stockStatus || productStatus(p)) !== "ok");
   $("#lowCount").textContent = low.length;
   $("#lowStockList").innerHTML = low.length
     ? low.map(p => {
-        const st = productStatus(p);
+        const st = p.stockStatus || productStatus(p);
         return `<div class="low-row">
           <div><span class="name">${p.name}</span><div class="meta">${p.category} · ${totalStock(p)} un.</div></div>
           <span class="tag-status ${st === "zero" ? "tag-zero" : "tag-low"}">${statusLabel(st)}</span>
@@ -980,7 +1054,6 @@ function renderDashboard() {
       }).join("")
     : `<p class="empty-note">Tudo certo! Nenhuma peça com estoque baixo.</p>`;
 
-  // últimas vendas
   const recent = [...sales].reverse().slice(0, 4);
   $("#recentSalesList").innerHTML = recent.length
     ? recent.map(s => `<div class="recent-row">
@@ -993,6 +1066,7 @@ function renderDashboard() {
 /* ----------------- GESTÃO: TABELA DE ESTOQUE ----------------- */
 function renderStockTable() {
   const table = $("#stockTable");
+  const stockProducts = estoqueParaGestao();
   const header = `
     <thead>
       <tr>
@@ -1002,44 +1076,44 @@ function renderStockTable() {
       </tr>
     </thead>`;
 
-  if (!products.length) {
+  if (!stockProducts.length) {
     table.innerHTML = header + `<tbody><tr><td colspan="11"><p class="empty-note">Nenhum produto cadastrado.</p></td></tr></tbody>`;
     return;
   }
 
-  const rows = products.map(p => {
-    const st = productStatus(p);
+  const rows = stockProducts.map(p => {
+    const st = p.stockStatus || productStatus(p);
     const tagCls = st === "zero" ? "tag-zero" : (st === "low" ? "tag-low" : "");
     const statusBadge = st === "ok"
       ? `<span class="tag-status" style="background:#D1FAE5;color:#065F46">Normal</span>`
-      : `<span class="tag-status ${tagCls}">${st === "zero" ? "Esgotado" : "Baixo"}</span>`;
+      : `<span class="tag-status ${tagCls}">${st === "zero" ? "Zerado" : "Baixo"}</span>`;
     const sizeCells = TAMANHOS.map(s => {
       const q = p.sizes[s] || 0;
       const style = q === 0 ? 'style="color:var(--danger);font-weight:700"' : "";
       return `<td class="num" ${style}>${q}</td>`;
     }).join("");
+    const canEdit = products.some(item => Number(item.id) === Number(p.id));
+    const actions = canEdit
+      ? `<button class="icon-btn edit" data-edit="${p.id}" type="button">${ICONS.edit} Editar</button>
+          <button class="icon-btn remove" data-remove="${p.id}" type="button">${ICONS.trash}</button>`
+      : `<span class="chip">API</span>`;
 
     return `
     <tr>
       <td><span class="name">${p.name}</span></td>
       <td>${p.category}</td>
-      <td>${money(p.price)}</td>
+      <td>${money(p.price || 0)}</td>
       ${sizeCells}
       <td class="num"><strong>${totalStock(p)}</strong></td>
       <td>${statusBadge}</td>
-      <td>
-        <div class="stock-actions">
-          <button class="icon-btn edit" data-edit="${p.id}" type="button">${ICONS.edit} Editar</button>
-          <button class="icon-btn remove" data-remove="${p.id}" type="button">${ICONS.trash}</button>
-        </div>
-      </td>
+      <td><div class="stock-actions">${actions}</div></td>
     </tr>`;
   }).join("");
 
   table.innerHTML = header + `<tbody>${rows}</tbody>`;
 
-  $$("[data-edit]", table).forEach(b => b.addEventListener("click", () => openProductModal(Number(b.dataset.edit))));
-  $$("[data-remove]", table).forEach(b => b.addEventListener("click", () => removeProduct(Number(b.dataset.remove))));
+  $$('[data-edit]', table).forEach(b => b.addEventListener("click", () => openProductModal(Number(b.dataset.edit))));
+  $$('[data-remove]', table).forEach(b => b.addEventListener("click", () => removeProduct(Number(b.dataset.remove))));
 }
 
 function removeProduct(id) {
@@ -1439,6 +1513,9 @@ function init() {
   renderMovements();
   renderSuppliers();
   renderHistory();
+  carregarProdutosDaApi();
+  carregarEstoqueDaApi();
+  carregarMovimentacoesDaApi();
 
   // navegação (topbar, banner, links)
   $$("[data-nav]").forEach(b => {
