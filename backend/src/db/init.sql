@@ -15,12 +15,14 @@ CREATE TABLE IF NOT EXISTS clientes (
   id SERIAL PRIMARY KEY,
   nome VARCHAR(120) NOT NULL,
   email VARCHAR(160),
+  cpf VARCHAR(20),
   telefone VARCHAR(30),
   whatsapp VARCHAR(30),
   cep VARCHAR(12),
   cidade VARCHAR(100),
   estado VARCHAR(2),
   endereco TEXT,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS fornecedores (
   contato VARCHAR(120),
   whatsapp VARCHAR(30),
   email VARCHAR(160),
+  cpf VARCHAR(20),
   cidade VARCHAR(100),
   estado VARCHAR(2),
   ultima_compra DATE,
@@ -128,3 +131,6 @@ CREATE TABLE IF NOT EXISTS configuracoes_loja (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+
+
