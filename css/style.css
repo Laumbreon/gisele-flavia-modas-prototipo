@@ -282,6 +282,35 @@ img { max-width: 100%; display: block; }
   bottom: -88px;
   background: rgba(6, 63, 43, 0.16);
 }
+.image-hero {
+  min-height: 430px;
+  padding: 0;
+  isolation: isolate;
+  background: var(--pink-brand);
+}
+.hero-banner-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: 0;
+}
+.hero-banner-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(248, 0, 128, 0.88) 0%, rgba(248, 0, 128, 0.58) 42%, rgba(6, 63, 43, 0.20) 100%);
+}
+.image-hero::before,
+.image-hero::after {
+  display: none;
+}
+.image-hero .hero-banner-text {
+  padding: 56px 48px;
+}
 .hero-banner-text { max-width: 560px; position: relative; z-index: 2; }
 .hero-badge {
   display: inline-block;
@@ -1672,6 +1701,8 @@ img { max-width: 100%; display: block; }
   .pdv-cart { position: static; }
   .hero-banner { padding: 40px 28px; }
   .hero-banner-art { display: none; }
+  .image-hero { min-height: 360px; padding: 0; }
+  .image-hero .hero-banner-text { padding: 40px 28px; }
   .movement-hero { padding: 30px; }
   .movement-hero-mark { display: none; }
   .movement-row { grid-template-columns: 1fr 1fr; }
@@ -1711,6 +1742,15 @@ img { max-width: 100%; display: block; }
     min-height: auto;
     padding: 30px 22px;
     border-radius: var(--radius-sm);
+  }
+  .image-hero {
+    min-height: 300px;
+    padding: 0;
+  }
+  .image-hero .hero-banner-text { padding: 28px 22px; }
+  .hero-banner-img { object-position: center top; }
+  .hero-banner-overlay {
+    background: linear-gradient(180deg, rgba(248,0,128,.82), rgba(248,0,128,.58) 54%, rgba(6,63,43,.25));
   }
   .hero-banner-title { font-size: 30px; }
   .hero-banner-sub { font-size: 14px; margin-bottom: 20px; }
@@ -1808,6 +1848,7 @@ img { max-width: 100%; display: block; }
   .btn-instagram { flex: 1; }
   .cart-btn { flex: 0 0 44px; width: 44px; height: 44px; }
   .hero-banner-title { font-size: 27px; }
+  .image-hero { min-height: 280px; }
   .section-title { font-size: 23px; }
   .shop-grid,
   .pdv-grid,
