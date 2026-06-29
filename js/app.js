@@ -881,13 +881,131 @@ function addToCart(id, size, color) {
     return;
   }
 
+  const variacao = encontrarVariacaoApi(p, size, color);
   const existing = cart.find(i => i.id === id && i.size === size && i.color === color);
   if (existing) existing.qty += 1;
-  else cart.push({ id, name: p.name, price: p.price, size, color, qty: 1 });
+  else cart.push({
+    id,
+    productId: id,
+    variacao_id: variacao ? Number(variacao.id) : null,
+    name: p.name,
+    price: p.price,
+    size,
+    color,
+    qty: 1,
+  });
 
   renderCart();
   updateCartBadge();
   showToast(`${p.name} (${size}) adicionado ao carrinho`);
+}
+
+
+function encontrarVariacaoApi(produto, size, color) {
+  const variacoes = Array.isArray(produto.apiVariacoes) ? produto.apiVariacoes : [];
+  const normalizedSize = normalizarTamanho(size);
+  const normalizedColor = String(color || "").trim().toLowerCase();
+
+  return variacoes.find(variacao => {
+    const variationSize = normalizarTamanho(variacao.tamanho);
+    const variationColor = String(variacao.cor || "").trim().toLowerCase();
+    return variationSize === normalizedSize && variationColor === normalizedColor && Number(variacao.id) > 0;
+  }) || null;
+}
+
+function montarPayloadVendaApi(shipping) {
+  const itens = cart.map(item => {
+    const produto = products.find(p => Number(p.id) === Number(item.id));
+    const variacao = produto ? encontrarVariacaoApi(produto, item.size, item.color) : null;
+    const variacaoId = Number(item.variacao_id || variacao?.id);
+
+    return {
+      produto_id: Number(item.productId || item.id),
+      variacao_id: Number.isFinite(variacaoId) && variacaoId > 0 ? variacaoId : null,
+      quantidade: Number(item.qty),
+      preco_unitario: Number(item.price),
+    };
+  });
+
+  if (itens.some(item => !item.produto_id || !item.variacao_id)) return null;
+
+  return {
+    cliente_id: null,
+    itens,
+    forma_pagamento: "pdv",
+    desconto: 0,
+    frete: shipping.shippingValue,
+    observacoes: "Venda PDV - " + shipping.deliveryLabel + (shipping.cep ? " - CEP " + shipping.cep : ""),
+  };
+}
+
+async function enviarVendaParaApi(venda) {
+  const response = await fetch(API_BASE_URL + "/vendas", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(venda),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || "Nao foi possivel finalizar a venda pela API");
+  }
+
+  return data;
+}
+
+function finalizarVendaMockada(shipping, apiVenda = null, options = {}) {
+  const subtotal = cartSubtotal();
+  const total = subtotal + shipping.shippingValue;
+  const aplicarBaixaLocal = options.aplicarBaixaLocal !== false;
+  const registrarMovimentacaoLocal = options.registrarMovimentacaoLocal !== false;
+  const saleItems = cart.map(i => ({ ...i, subtotal: i.price * i.qty }));
+
+  if (aplicarBaixaLocal) {
+    cart.forEach(i => {
+      const p = products.find(x => Number(x.id) === Number(i.id));
+      if (p) p.sizes[i.size] = Math.max(0, (p.sizes[i.size] || 0) - i.qty);
+    });
+  }
+
+  sales.push({
+    id: apiVenda?.id || nextSaleId++,
+    date: apiVenda?.created_at || new Date().toISOString(),
+    subtotal: Number(apiVenda?.subtotal ?? subtotal),
+    shippingType: shipping.deliveryLabel,
+    shippingCep: shipping.cep,
+    shippingValue: Number(apiVenda?.frete_valor ?? shipping.shippingValue),
+    total: Number(apiVenda?.total ?? total),
+    items: saleItems,
+  });
+
+  if (registrarMovimentacaoLocal) {
+    cart.forEach(i => {
+      stockMovements.unshift({
+        id: nextMovementId++,
+        date: new Date().toISOString(),
+        product: i.name,
+        size: i.size,
+        color: i.color,
+        type: "Sa?da",
+        quantity: i.qty,
+        reason: "Venda PDV",
+        responsible: "PDV",
+      });
+    });
+  }
+
+  cart = [];
+  renderCart();
+  updateCartBadge();
+  renderHome();
+  renderCatalog();
+  renderPdv($("#pdvSearch").value);
+  renderDashboard();
+  renderStockTable();
+  renderMovements();
+  renderSuppliers();
+  renderHistory();
 }
 
 function renderCart() {
@@ -925,56 +1043,31 @@ function updateCartBadge() {
   $("#cartBadge").textContent = count;
 }
 
-function checkout() {
+async function checkout() {
   if (!cart.length) { showToast("Adicione itens ao carrinho primeiro"); return; }
 
-  const subtotal = cartSubtotal();
   const shipping = getShippingData();
-  const total = subtotal + shipping.shippingValue;
+  const payload = montarPayloadVendaApi(shipping);
 
-  // baixa no estoque
-  cart.forEach(i => {
-    const p = products.find(x => x.id === i.id);
-    if (p) p.sizes[i.size] = Math.max(0, (p.sizes[i.size] || 0) - i.qty);
-  });
+  if (payload) {
+    try {
+      const vendaApi = await enviarVendaParaApi(payload);
+      finalizarVendaMockada(shipping, vendaApi, { aplicarBaixaLocal: false, registrarMovimentacaoLocal: false });
+      await Promise.allSettled([
+        carregarProdutosDaApi(),
+        carregarEstoqueDaApi(),
+        carregarMovimentacoesDaApi(),
+      ]);
+      showToast("Venda finalizada com sucesso");
+      return;
+    } catch (error) {
+      console.info("API de vendas indisponivel. Finalizando venda no fluxo mockado.", error);
+    }
+  } else {
+    console.info("Venda sem variacao_id valido. Finalizando venda no fluxo mockado.");
+  }
 
-  // registra venda
-  sales.push({
-    id: nextSaleId++,
-    date: new Date().toISOString(),
-    subtotal,
-    shippingType: shipping.deliveryLabel,
-    shippingCep: shipping.cep,
-    shippingValue: shipping.shippingValue,
-    total,
-    items: cart.map(i => ({ ...i, subtotal: i.price * i.qty })),
-  });
-
-  cart.forEach(i => {
-    stockMovements.unshift({
-      id: nextMovementId++,
-      date: new Date().toISOString(),
-      product: i.name,
-      size: i.size,
-      color: i.color,
-      type: "Saída",
-      quantity: i.qty,
-      reason: "Venda PDV",
-      responsible: "PDV",
-    });
-  });
-
-  cart = [];
-  renderCart();
-  updateCartBadge();
-  renderHome();
-  renderCatalog();
-  renderPdv($("#pdvSearch").value);
-  renderDashboard();
-  renderStockTable();
-  renderMovements();
-  renderSuppliers();
-  renderHistory();
+  finalizarVendaMockada(shipping);
   showToast("Venda finalizada com sucesso");
 }
 
