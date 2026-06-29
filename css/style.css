@@ -465,6 +465,40 @@ img { max-width: 100%; display: block; }
 .shop-tag.zero { background: var(--danger); }
 .shop-tag.promo { background: var(--pink-brand); color: var(--white); top: 44px; }
 .thumb-letter { position: relative; z-index: 1; }
+.shop-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+.shop-thumb-img:not([hidden]) ~ .thumb-letter { display: none; }
+.shop-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(31, 41, 55, 0.16), rgba(248, 0, 128, 0.14));
+  pointer-events: none;
+  z-index: 0;
+}
+.shop-thumb .cat-pill,
+.shop-thumb .shop-tag,
+.shop-thumb .thumb-color-label,
+.shop-thumb .media-badge { z-index: 2; }
+.media-badge {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  background: rgba(6, 63, 43, 0.92);
+  color: var(--white);
+  font-family: 'Poppins', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+.media-badge + .shop-thumb-img:not([hidden]) ~ .thumb-color-label { bottom: 46px; }
 .thumb-color-label {
   position: absolute;
   left: 12px;
@@ -1282,6 +1316,97 @@ img { max-width: 100%; display: block; }
   gap: 22px;
   align-items: stretch;
 }
+.detail-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.detail-media-stage {
+  position: relative;
+  min-height: 310px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--pink-soft);
+  border: 1px solid rgba(248, 0, 128, 0.14);
+  box-shadow: var(--shadow-md);
+}
+.detail-media-main {
+  display: block;
+  width: 100%;
+  height: 310px;
+  object-fit: cover;
+  background: var(--green-brand);
+}
+video.detail-media-main { object-fit: contain; }
+.detail-visual-fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  min-height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+.detail-media-stage.media-error .detail-visual-fallback { display: flex; }
+.detail-media-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+  gap: 8px;
+}
+.detail-media-thumb {
+  position: relative;
+  min-height: 68px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--pink-soft);
+  color: var(--pink-brand);
+  cursor: pointer;
+  font-family: inherit;
+}
+.detail-media-thumb.active {
+  border-color: var(--pink-brand);
+  box-shadow: 0 8px 18px rgba(248, 0, 128, 0.16);
+}
+.detail-media-thumb img {
+  width: 100%;
+  height: 100%;
+  min-height: 68px;
+  object-fit: cover;
+  display: block;
+}
+.media-video-thumb {
+  display: grid;
+  place-items: center;
+  min-height: 68px;
+  background: linear-gradient(135deg, var(--green-brand), var(--pink-brand));
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 800;
+}
+.media-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  font-size: 22px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.35);
+}
+.detail-media-thumb small {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.92);
+  color: var(--pink-brand);
+  font-size: 10px;
+  font-weight: 800;
+}
 .detail-visual {
   min-height: 310px;
   border-radius: var(--radius);
@@ -1773,6 +1898,9 @@ img { max-width: 100%; display: block; }
   .detail-layout,
   .detail-info-grid { grid-template-columns: 1fr; }
   .detail-visual { min-height: 220px; }
+  .detail-media-stage { min-height: 240px; }
+  .detail-media-main { height: 240px; }
+  .detail-media-thumbs { grid-template-columns: repeat(4, minmax(58px, 1fr)); }
   .detail-content h2 { font-size: 24px; }
   .detail-measures { min-width: 520px; }
   .detail-section { overflow-x: auto; }
@@ -1846,6 +1974,7 @@ img { max-width: 100%; display: block; }
     gap: 12px;
   }
   .report-meta { text-align: left; }
+  .detail-media-thumbs { grid-template-columns: repeat(3, minmax(56px, 1fr)); }
   .footer-socials,
   .payment-list { max-width: 100%; }
 }

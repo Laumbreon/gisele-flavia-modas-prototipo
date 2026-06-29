@@ -16,14 +16,103 @@ const CATEGORY_GRADIENTS = {
 };
 
 let products = [
-  { id: 1, name: "Vestido Floral Midi", category: "Vestidos", price: 129.90, oldPrice: 169.90, colors: ["Rosa", "Verde", "Preto"], sizes: { Único: 2, P: 4, M: 6, G: 3, GG: 0 } },
-  { id: 2, name: "Blusa Canelada", category: "Blusas", price: 59.90, colors: ["Branco", "Rosa", "Bege"], sizes: { Único: 5, P: 8, M: 10, G: 4, GG: 2 } },
-  { id: 3, name: "Calça Pantalona", category: "Calças", price: 149.90, colors: ["Preto", "Verde", "Caramelo"], sizes: { Único: 1, P: 2, M: 3, G: 2, GG: 1 } },
-  { id: 4, name: "Saia Plissada", category: "Saias", price: 89.90, oldPrice: 119.90, colors: ["Dourado", "Rosa", "Preto"], sizes: { Único: 0, P: 1, M: 2, G: 0, GG: 0 } },
-  { id: 5, name: "Conjunto Alfaiataria", category: "Conjuntos", price: 219.90, colors: ["Verde", "Preto", "Off-white"], sizes: { Único: 3, P: 5, M: 5, G: 4, GG: 2 } },
-  { id: 6, name: "Cropped Básico", category: "Blusas", price: 45.00, colors: ["Rosa", "Branco", "Preto"], sizes: { Único: 6, P: 9, M: 7, G: 3, GG: 1 } },
-  { id: 7, name: "Vestido Tubinho", category: "Vestidos", price: 159.90, colors: ["Preto", "Vermelho", "Rosa"], sizes: { Único: 2, P: 1, M: 1, G: 0, GG: 0 } },
-  { id: 8, name: "Camisa Social Feminina", category: "Blusas", price: 99.90, oldPrice: 139.90, colors: ["Branco", "Azul", "Bege"], sizes: { Único: 4, P: 6, M: 8, G: 5, GG: 3 } },
+  {
+    id: 1,
+    name: "Vestido Floral Midi",
+    category: "Vestidos",
+    price: 129.90,
+    oldPrice: 169.90,
+    colors: ["Rosa", "Verde", "Preto"],
+    sizes: { "?nico": 2, P: 4, M: 6, G: 3, GG: 0 },
+    midias: [
+      { id: 1, produto_id: 1, tipo: "imagem", url: "assets/produtos/vestido-floral-midi-1.jpg", titulo: "Imagem principal - Vestido Floral Midi", ordem: 1, principal: true },
+      { id: 2, produto_id: 1, tipo: "imagem", url: "assets/produtos/vestido-floral-midi-2.jpg", titulo: "Detalhe do tecido - Vestido Floral Midi", ordem: 2, principal: false },
+      { id: 3, produto_id: 1, tipo: "video", url: "assets/produtos/vestido-floral-midi-video.mp4", titulo: "Vídeo demonstrativo - Vestido Floral Midi", ordem: 3, principal: false },
+    ],
+  },
+  {
+    id: 2,
+    name: "Blusa Canelada",
+    category: "Blusas",
+    price: 59.90,
+    colors: ["Branco", "Rosa", "Bege"],
+    sizes: { "?nico": 5, P: 8, M: 10, G: 4, GG: 2 },
+    midias: [
+      { id: 4, produto_id: 2, tipo: "imagem", url: "assets/produtos/blusa-canelada-1.jpg", titulo: "Imagem principal - Blusa Canelada", ordem: 1, principal: true },
+      { id: 5, produto_id: 2, tipo: "video", url: "assets/produtos/blusa-canelada-video.mp4", titulo: "Vídeo demonstrativo - Blusa Canelada", ordem: 2, principal: false },
+    ],
+  },
+  {
+    id: 3,
+    name: "Cal?a Pantalona",
+    category: "Cal?as",
+    price: 149.90,
+    colors: ["Preto", "Verde", "Caramelo"],
+    sizes: { "?nico": 1, P: 2, M: 3, G: 2, GG: 1 },
+    midias: [
+      { id: 6, produto_id: 3, tipo: "imagem", url: "assets/produtos/calca-pantalona-1.jpg", titulo: "Imagem principal - Cal?a Pantalona", ordem: 1, principal: true },
+      { id: 7, produto_id: 3, tipo: "imagem", url: "assets/produtos/calca-pantalona-2.jpg", titulo: "Detalhe do caimento - Cal?a Pantalona", ordem: 2, principal: false },
+    ],
+  },
+  {
+    id: 4,
+    name: "Saia Plissada",
+    category: "Saias",
+    price: 89.90,
+    oldPrice: 119.90,
+    colors: ["Dourado", "Rosa", "Preto"],
+    sizes: { "?nico": 0, P: 1, M: 2, G: 0, GG: 0 },
+    midias: [
+      { id: 8, produto_id: 4, tipo: "imagem", url: "assets/produtos/saia-plissada-1.jpg", titulo: "Imagem principal - Saia Plissada", ordem: 1, principal: true },
+    ],
+  },
+  {
+    id: 5,
+    name: "Conjunto Alfaiataria",
+    category: "Conjuntos",
+    price: 219.90,
+    colors: ["Verde", "Preto", "Off-white"],
+    sizes: { "?nico": 3, P: 5, M: 5, G: 4, GG: 2 },
+    midias: [
+      { id: 9, produto_id: 5, tipo: "imagem", url: "assets/produtos/conjunto-alfaiataria-1.jpg", titulo: "Imagem principal - Conjunto Alfaiataria", ordem: 1, principal: true },
+      { id: 10, produto_id: 5, tipo: "video", url: "assets/produtos/conjunto-alfaiataria-video.mp4", titulo: "Vídeo demonstrativo - Conjunto Alfaiataria", ordem: 2, principal: false },
+    ],
+  },
+  {
+    id: 6,
+    name: "Cropped B?sico",
+    category: "Blusas",
+    price: 45.00,
+    colors: ["Rosa", "Branco", "Preto"],
+    sizes: { "?nico": 6, P: 9, M: 7, G: 3, GG: 1 },
+    midias: [
+      { id: 11, produto_id: 6, tipo: "imagem", url: "assets/produtos/cropped-basico-1.jpg", titulo: "Imagem principal - Cropped B?sico", ordem: 1, principal: true },
+    ],
+  },
+  {
+    id: 7,
+    name: "Vestido Tubinho",
+    category: "Vestidos",
+    price: 159.90,
+    colors: ["Preto", "Vermelho", "Rosa"],
+    sizes: { "?nico": 2, P: 1, M: 1, G: 0, GG: 0 },
+    midias: [
+      { id: 12, produto_id: 7, tipo: "imagem", url: "assets/produtos/vestido-tubinho-1.jpg", titulo: "Imagem principal - Vestido Tubinho", ordem: 1, principal: true },
+      { id: 13, produto_id: 7, tipo: "video", url: "assets/produtos/vestido-tubinho-video.mp4", titulo: "Vídeo demonstrativo - Vestido Tubinho", ordem: 2, principal: false },
+    ],
+  },
+  {
+    id: 8,
+    name: "Camisa Social Feminina",
+    category: "Blusas",
+    price: 99.90,
+    oldPrice: 139.90,
+    colors: ["Branco", "Azul", "Bege"],
+    sizes: { "?nico": 4, P: 6, M: 8, G: 5, GG: 3 },
+    midias: [
+      { id: 14, produto_id: 8, tipo: "imagem", url: "assets/produtos/camisa-social-feminina-1.jpg", titulo: "Imagem principal - Camisa Social Feminina", ordem: 1, principal: true },
+    ],
+  },
 ];
 
 const suppliers = [
@@ -182,6 +271,70 @@ const COLOR_SWATCHES = {
   Único: "#F80080",
 };
 
+function productMedia(p) {
+  return Array.isArray(p.midias)
+    ? [...p.midias].sort((a, b) => Number(b.principal) - Number(a.principal) || (a.ordem || 0) - (b.ordem || 0) || a.id - b.id)
+    : [];
+}
+
+function mainProductImage(p) {
+  const midias = productMedia(p);
+  return midias.find(m => m.tipo === "imagem" && m.principal) || midias.find(m => m.tipo === "imagem") || null;
+}
+
+function productHasVideo(p) {
+  return productMedia(p).some(m => m.tipo === "video");
+}
+
+function mediaAlt(media, p) {
+  return media?.titulo || p.name;
+}
+
+function renderMediaStage(media, p, color) {
+  if (media?.tipo === "video") {
+    const poster = mainProductImage(p)?.url || "";
+    return `<video class="detail-media-main" controls preload="metadata" ${poster ? `poster="${poster}"` : ""}>
+      <source src="${media.url}" type="video/mp4" />
+      Seu navegador n?o suporta v?deo HTML5.
+    </video>`;
+  }
+
+  if (media?.tipo === "imagem") {
+    return `<img class="detail-media-main" src="${media.url}" alt="${mediaAlt(media, p)}" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
+      <div class="detail-visual detail-visual-fallback" style="background:${colorGradient(color)}"><span>${p.name.charAt(0)}</span><strong>${color}</strong></div>`;
+  }
+
+  return `<div class="detail-visual" style="background:${colorGradient(color)}"><span>${p.name.charAt(0)}</span><strong>${color}</strong></div>`;
+}
+
+function renderMediaThumb(media, index, active) {
+  const videoMark = media.tipo === "video" ? `<span class="media-play">Play</span>` : "";
+  const preview = media.tipo === "imagem"
+    ? `<img src="${media.url}" alt="${media.titulo || `Mídia ${index + 1}`}" onerror="this.hidden=true" />`
+    : `<span class="media-video-thumb">Vídeo</span>`;
+
+  return `<button class="detail-media-thumb ${active ? "active" : ""}" type="button" data-detail-media="${index}" aria-label="Ver mídia ${index + 1}">
+    ${preview}${videoMark}<small>${index + 1}</small>
+  </button>`;
+}
+
+function bindDetailGallery(p, color) {
+  const midias = productMedia(p);
+  const stage = $("#detailMediaStage");
+  if (!stage || !midias.length) return;
+
+  $('[data-detail-media]').forEach(btn => {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.detailMedia);
+      const media = midias[index];
+      if (!media) return;
+      stage.classList.remove("media-error");
+      stage.innerHTML = renderMediaStage(media, p, color);
+      $('[data-detail-media]').forEach(item => item.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
+}
 function colorHex(color) {
   return COLOR_SWATCHES[color] || "#F80080";
 }
@@ -231,6 +384,8 @@ function shopCard(p) {
     : `<span class="shop-price">${money(p.price)}</span>`;
   const disabled = selectedSize ? "" : "disabled";
   const btnLabel = selectedSize ? "Adicionar ao carrinho" : "Esgotado";
+  const mainImage = mainProductImage(p);
+  const mediaBadge = productHasVideo(p) ? '<span class="media-badge">Vídeo</span>' : "";
 
   return `
   <article class="shop-card" data-product-card="${p.id}" data-selected-color="${selectedColor}" data-selected-size="${selectedSize}">
@@ -238,6 +393,8 @@ function shopCard(p) {
       <span class="cat-pill">${p.category}</span>
       <span class="shop-tag ${status}">${statusLabel(status)}</span>
       ${promoTag}
+      ${mediaBadge}
+      ${mainImage ? `<img class="shop-thumb-img" src="${mainImage.url}" alt="${mediaAlt(mainImage, p)}" loading="lazy" onerror="this.hidden=true" />` : ""}
       <span class="thumb-letter">${p.name.charAt(0)}</span>
       <span class="thumb-color-label">${selectedColor}</span>
     </div>
@@ -366,13 +523,18 @@ function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
     const off = (sizes[s] || 0) === 0 ? "off" : "";
     return `<span class="detail-size-chip ${off}">${s}</span>`;
   }).join("");
+  const midias = productMedia(p);
+  const activeMedia = mainProductImage(p) || midias[0] || null;
+  const galleryThumbs = midias.map((media, index) => renderMediaThumb(media, index, media === activeMedia)).join("");
 
   $("#detailTitle").textContent = p.name;
   $("#detailBody").innerHTML = `
     <div class="detail-layout">
-      <div class="detail-visual" style="background:${colorGradient(color)}">
-        <span>${p.name.charAt(0)}</span>
-        <strong>${color}</strong>
+      <div class="detail-gallery">
+        <div class="detail-media-stage" id="detailMediaStage">
+          ${renderMediaStage(activeMedia, p, color)}
+        </div>
+        ${midias.length > 1 ? `<div class="detail-media-thumbs">${galleryThumbs}</div>` : ""}
       </div>
       <div class="detail-content">
         <span class="shop-cat">${p.category}</span>
@@ -413,6 +575,7 @@ function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
     </div>
   `;
 
+  bindDetailGallery(p, color);
   $("#detailCancel").addEventListener("click", closeProductDetailModal);
   $("#detailAdd").addEventListener("click", () => {
     addToCart(p.id, size, color);
