@@ -5,6 +5,7 @@
 
 /* ----------------- DADOS MOCKADOS ----------------- */
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
+const API_BASE_URL = "http://localhost:3001/api";
 
 // Gradientes por categoria (placeholder visual com CSS)
 const CATEGORY_GRADIENTS = {
@@ -23,7 +24,7 @@ let products = [
     price: 129.90,
     oldPrice: 169.90,
     colors: ["Rosa", "Verde", "Preto"],
-    sizes: { "?nico": 2, P: 4, M: 6, G: 3, GG: 0 },
+    sizes: { "Único": 2, P: 4, M: 6, G: 3, GG: 0 },
     midias: [
       { id: 1, produto_id: 1, tipo: "imagem", url: "assets/produtos/vestido-floral-midi-1.jpg", titulo: "Imagem principal - Vestido Floral Midi", ordem: 1, principal: true },
       { id: 2, produto_id: 1, tipo: "imagem", url: "assets/produtos/vestido-floral-midi-2.jpg", titulo: "Detalhe do tecido - Vestido Floral Midi", ordem: 2, principal: false },
@@ -36,7 +37,7 @@ let products = [
     category: "Blusas",
     price: 59.90,
     colors: ["Branco", "Rosa", "Bege"],
-    sizes: { "?nico": 5, P: 8, M: 10, G: 4, GG: 2 },
+    sizes: { "Único": 5, P: 8, M: 10, G: 4, GG: 2 },
     midias: [
       { id: 4, produto_id: 2, tipo: "imagem", url: "assets/produtos/blusa-canelada-1.jpg", titulo: "Imagem principal - Blusa Canelada", ordem: 1, principal: true },
       { id: 5, produto_id: 2, tipo: "video", url: "assets/produtos/blusa-canelada-video.mp4", titulo: "Vídeo demonstrativo - Blusa Canelada", ordem: 2, principal: false },
@@ -45,10 +46,10 @@ let products = [
   {
     id: 3,
     name: "Cal?a Pantalona",
-    category: "Cal?as",
+    category: "Calças",
     price: 149.90,
     colors: ["Preto", "Verde", "Caramelo"],
-    sizes: { "?nico": 1, P: 2, M: 3, G: 2, GG: 1 },
+    sizes: { "Único": 1, P: 2, M: 3, G: 2, GG: 1 },
     midias: [
       { id: 6, produto_id: 3, tipo: "imagem", url: "assets/produtos/calca-pantalona-1.jpg", titulo: "Imagem principal - Cal?a Pantalona", ordem: 1, principal: true },
       { id: 7, produto_id: 3, tipo: "imagem", url: "assets/produtos/calca-pantalona-2.jpg", titulo: "Detalhe do caimento - Cal?a Pantalona", ordem: 2, principal: false },
@@ -61,7 +62,7 @@ let products = [
     price: 89.90,
     oldPrice: 119.90,
     colors: ["Dourado", "Rosa", "Preto"],
-    sizes: { "?nico": 0, P: 1, M: 2, G: 0, GG: 0 },
+    sizes: { "Único": 0, P: 1, M: 2, G: 0, GG: 0 },
     midias: [
       { id: 8, produto_id: 4, tipo: "imagem", url: "assets/produtos/saia-plissada-1.jpg", titulo: "Imagem principal - Saia Plissada", ordem: 1, principal: true },
     ],
@@ -72,7 +73,7 @@ let products = [
     category: "Conjuntos",
     price: 219.90,
     colors: ["Verde", "Preto", "Off-white"],
-    sizes: { "?nico": 3, P: 5, M: 5, G: 4, GG: 2 },
+    sizes: { "Único": 3, P: 5, M: 5, G: 4, GG: 2 },
     midias: [
       { id: 9, produto_id: 5, tipo: "imagem", url: "assets/produtos/conjunto-alfaiataria-1.jpg", titulo: "Imagem principal - Conjunto Alfaiataria", ordem: 1, principal: true },
       { id: 10, produto_id: 5, tipo: "video", url: "assets/produtos/conjunto-alfaiataria-video.mp4", titulo: "Vídeo demonstrativo - Conjunto Alfaiataria", ordem: 2, principal: false },
@@ -84,7 +85,7 @@ let products = [
     category: "Blusas",
     price: 45.00,
     colors: ["Rosa", "Branco", "Preto"],
-    sizes: { "?nico": 6, P: 9, M: 7, G: 3, GG: 1 },
+    sizes: { "Único": 6, P: 9, M: 7, G: 3, GG: 1 },
     midias: [
       { id: 11, produto_id: 6, tipo: "imagem", url: "assets/produtos/cropped-basico-1.jpg", titulo: "Imagem principal - Cropped B?sico", ordem: 1, principal: true },
     ],
@@ -95,7 +96,7 @@ let products = [
     category: "Vestidos",
     price: 159.90,
     colors: ["Preto", "Vermelho", "Rosa"],
-    sizes: { "?nico": 2, P: 1, M: 1, G: 0, GG: 0 },
+    sizes: { "Único": 2, P: 1, M: 1, G: 0, GG: 0 },
     midias: [
       { id: 12, produto_id: 7, tipo: "imagem", url: "assets/produtos/vestido-tubinho-1.jpg", titulo: "Imagem principal - Vestido Tubinho", ordem: 1, principal: true },
       { id: 13, produto_id: 7, tipo: "video", url: "assets/produtos/vestido-tubinho-video.mp4", titulo: "Vídeo demonstrativo - Vestido Tubinho", ordem: 2, principal: false },
@@ -108,7 +109,7 @@ let products = [
     price: 99.90,
     oldPrice: 139.90,
     colors: ["Branco", "Azul", "Bege"],
-    sizes: { "?nico": 4, P: 6, M: 8, G: 5, GG: 3 },
+    sizes: { "Único": 4, P: 6, M: 8, G: 5, GG: 3 },
     midias: [
       { id: 14, produto_id: 8, tipo: "imagem", url: "assets/produtos/camisa-social-feminina-1.jpg", titulo: "Imagem principal - Camisa Social Feminina", ordem: 1, principal: true },
     ],
@@ -212,6 +213,95 @@ function showToast(msg) {
   t.classList.add("show");
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function normalizarTamanho(tamanho) {
+  const value = String(tamanho || "").trim();
+  const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (["unico", "nico", "Único", "Único"].includes(normalized)) return "Único";
+  return TAMANHOS.includes(value) ? value : value.toUpperCase();
+}
+
+function normalizarCategoria(categoria) {
+  const value = String(categoria || "").trim();
+  const key = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const map = {
+    vestidos: "Vestidos",
+    blusas: "Blusas",
+    calcas: "Calças",
+    saias: "Saias",
+    conjuntos: "Conjuntos",
+    promocoes: "Promoções",
+  };
+  return map[key] || value || "Outros";
+}
+
+function numeroApi(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function adaptarProdutoApi(produto) {
+  const variacoes = Array.isArray(produto.variacoes) ? produto.variacoes : [];
+  const sizes = TAMANHOS.reduce((acc, size) => {
+    acc[size] = 0;
+    return acc;
+  }, {});
+  const colors = [];
+
+  variacoes.forEach(variacao => {
+    const size = normalizarTamanho(variacao.tamanho);
+    const color = String(variacao.cor || "Único").trim() || "Único";
+    const quantity = numeroApi(variacao.quantidade_estoque);
+
+    if (!Object.prototype.hasOwnProperty.call(sizes, size)) sizes[size] = 0;
+    sizes[size] += quantity;
+    if (!colors.includes(color)) colors.push(color);
+  });
+
+  return {
+    id: Number(produto.id),
+    name: produto.nome || "Produto sem nome",
+    category: normalizarCategoria(produto.categoria),
+    price: numeroApi(produto.preco),
+    oldPrice: produto.preco_promocional ? numeroApi(produto.preco_promocional) : undefined,
+    description: produto.descricao || "",
+    colors: colors.length ? colors : ["Único"],
+    sizes,
+    midias: Array.isArray(produto.midias) ? produto.midias : [],
+    ativo: produto.ativo !== false,
+    apiVariacoes: variacoes,
+  };
+}
+
+function atualizarProdutosNaTela() {
+  nextProductId = products.reduce((max, p) => Math.max(max, Number(p.id) || 0), 0) + 1;
+  renderHome();
+  renderFilters();
+  renderCatalog();
+  renderPdv($("#pdvSearch")?.value || "");
+  renderCart();
+  updateCartBadge();
+  renderDashboard();
+  renderStockTable();
+}
+
+async function carregarProdutosDaApi() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/produtos`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error("Resposta inv?lida de produtos");
+
+    const produtosApi = data.map(adaptarProdutoApi).filter(p => p.id && p.ativo);
+    if (!produtosApi.length) throw new Error("Nenhum produto v?lido retornado pela API");
+
+    products = produtosApi;
+    atualizarProdutosNaTela();
+  } catch (error) {
+    console.info("API de produtos indispon?vel. Mantendo produtos mockados.", error);
+  }
 }
 
 /* ----------------- NAVEGAÇÃO ENTRE TELAS ----------------- */
@@ -810,6 +900,7 @@ function checkout() {
   renderMovements();
   renderSuppliers();
   renderHistory();
+  carregarProdutosDaApi();
   showToast("Venda finalizada com sucesso");
 }
 
