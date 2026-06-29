@@ -4,7 +4,7 @@
    ============================================================ */
 
 /* ----------------- DADOS MOCKADOS ----------------- */
-const TAMANHOS = ["PP", "P", "M", "G", "GG"];
+const TAMANHOS = ["Único", "P", "M", "G", "GG"];
 
 // Gradientes por categoria (placeholder visual com CSS)
 const CATEGORY_GRADIENTS = {
@@ -16,14 +16,14 @@ const CATEGORY_GRADIENTS = {
 };
 
 let products = [
-  { id: 1, name: "Vestido Floral Midi", category: "Vestidos", price: 129.90, oldPrice: 169.90, colors: ["Rosa", "Verde", "Preto"], sizes: { PP: 2, P: 4, M: 6, G: 3, GG: 0 } },
-  { id: 2, name: "Blusa Canelada", category: "Blusas", price: 59.90, colors: ["Branco", "Rosa", "Bege"], sizes: { PP: 5, P: 8, M: 10, G: 4, GG: 2 } },
-  { id: 3, name: "Calça Pantalona", category: "Calças", price: 149.90, colors: ["Preto", "Verde", "Caramelo"], sizes: { PP: 1, P: 2, M: 3, G: 2, GG: 1 } },
-  { id: 4, name: "Saia Plissada", category: "Saias", price: 89.90, oldPrice: 119.90, colors: ["Dourado", "Rosa", "Preto"], sizes: { PP: 0, P: 1, M: 2, G: 0, GG: 0 } },
-  { id: 5, name: "Conjunto Alfaiataria", category: "Conjuntos", price: 219.90, colors: ["Verde", "Preto", "Off-white"], sizes: { PP: 3, P: 5, M: 5, G: 4, GG: 2 } },
-  { id: 6, name: "Cropped Básico", category: "Blusas", price: 45.00, colors: ["Rosa", "Branco", "Preto"], sizes: { PP: 6, P: 9, M: 7, G: 3, GG: 1 } },
-  { id: 7, name: "Vestido Tubinho", category: "Vestidos", price: 159.90, colors: ["Preto", "Vermelho", "Rosa"], sizes: { PP: 2, P: 1, M: 1, G: 0, GG: 0 } },
-  { id: 8, name: "Camisa Social Feminina", category: "Blusas", price: 99.90, oldPrice: 139.90, colors: ["Branco", "Azul", "Bege"], sizes: { PP: 4, P: 6, M: 8, G: 5, GG: 3 } },
+  { id: 1, name: "Vestido Floral Midi", category: "Vestidos", price: 129.90, oldPrice: 169.90, colors: ["Rosa", "Verde", "Preto"], sizes: { Único: 2, P: 4, M: 6, G: 3, GG: 0 } },
+  { id: 2, name: "Blusa Canelada", category: "Blusas", price: 59.90, colors: ["Branco", "Rosa", "Bege"], sizes: { Único: 5, P: 8, M: 10, G: 4, GG: 2 } },
+  { id: 3, name: "Calça Pantalona", category: "Calças", price: 149.90, colors: ["Preto", "Verde", "Caramelo"], sizes: { Único: 1, P: 2, M: 3, G: 2, GG: 1 } },
+  { id: 4, name: "Saia Plissada", category: "Saias", price: 89.90, oldPrice: 119.90, colors: ["Dourado", "Rosa", "Preto"], sizes: { Único: 0, P: 1, M: 2, G: 0, GG: 0 } },
+  { id: 5, name: "Conjunto Alfaiataria", category: "Conjuntos", price: 219.90, colors: ["Verde", "Preto", "Off-white"], sizes: { Único: 3, P: 5, M: 5, G: 4, GG: 2 } },
+  { id: 6, name: "Cropped Básico", category: "Blusas", price: 45.00, colors: ["Rosa", "Branco", "Preto"], sizes: { Único: 6, P: 9, M: 7, G: 3, GG: 1 } },
+  { id: 7, name: "Vestido Tubinho", category: "Vestidos", price: 159.90, colors: ["Preto", "Vermelho", "Rosa"], sizes: { Único: 2, P: 1, M: 1, G: 0, GG: 0 } },
+  { id: 8, name: "Camisa Social Feminina", category: "Blusas", price: 99.90, oldPrice: 139.90, colors: ["Branco", "Azul", "Bege"], sizes: { Único: 4, P: 6, M: 8, G: 5, GG: 3 } },
 ];
 
 const suppliers = [
@@ -179,7 +179,7 @@ const COLOR_SWATCHES = {
   Vermelho: "#DC2626",
   Azul: "#2563EB",
   "Off-white": "#FFF7ED",
-  Unico: "#F80080",
+  Único: "#F80080",
 };
 
 function colorHex(color) {
@@ -210,7 +210,7 @@ function firstAvailableSize(sizes) {
 
 function shopCard(p) {
   const status = productStatus(p);
-  const selectedColor = p.colors[0] || "Unico";
+  const selectedColor = p.colors[0] || "Único";
   const availableByColor = colorSizes(p, selectedColor);
   const selectedSize = firstAvailableSize(availableByColor);
   const sizes = TAMANHOS.map(s => {
@@ -334,7 +334,7 @@ function fabricComposition(p) {
 
 function measurementRows() {
   const rows = [
-    { size: "PP", bust: 82, waist: 64, hip: 90, length: 88 },
+    { size: "Único", bust: 82, waist: 64, hip: 90, length: 88 },
     { size: "P", bust: 88, waist: 70, hip: 96, length: 90 },
     { size: "M", bust: 94, waist: 76, hip: 102, length: 92 },
     { size: "G", bust: 102, waist: 84, hip: 110, length: 94 },
@@ -354,7 +354,7 @@ function measurementRows() {
 function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
   const p = products.find(x => x.id === id);
   if (!p) return;
-  const color = selectedColor || p.colors[0] || "Unico";
+  const color = selectedColor || p.colors[0] || "Único";
   const sizes = colorSizes(p, color);
   const size = selectedSize || firstAvailableSize(sizes);
   const colorChips = p.colors.map(c => `
@@ -743,7 +743,7 @@ function renderStockTable() {
     <thead>
       <tr>
         <th>Produto</th><th>Categoria</th><th>Preço</th>
-        <th class="num">PP</th><th class="num">P</th><th class="num">M</th><th class="num">G</th><th class="num">GG</th>
+        <th class="num">Único</th><th class="num">P</th><th class="num">M</th><th class="num">G</th><th class="num">GG</th>
         <th class="num">Total</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>`;

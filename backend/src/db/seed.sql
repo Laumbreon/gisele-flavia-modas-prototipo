@@ -16,13 +16,13 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO produto_variacoes (produto_id, tamanho, cor, sku)
 VALUES
-  (1, 'P', 'Rosa', 'VEST-FLORAL-P-ROSA'),
+  (1, 'Único', 'Rosa', 'VEST-FLORAL-UNICO-ROSA'),
   (1, 'M', 'Rosa', 'VEST-FLORAL-M-ROSA'),
   (1, 'G', 'Verde', 'VEST-FLORAL-G-VERDE'),
-  (2, 'P', 'Branco', 'BLUSA-CANELADA-P-BRANCO'),
+  (2, 'Único', 'Branco', 'BLUSA-CANELADA-UNICO-BRANCO'),
   (2, 'M', 'Rosa', 'BLUSA-CANELADA-M-ROSA'),
   (2, 'G', 'Preto', 'BLUSA-CANELADA-G-PRETO'),
-  (3, 'P', 'Preto', 'CALCA-PANTALONA-P-PRETO'),
+  (3, 'Único', 'Preto', 'CALCA-PANTALONA-UNICO-PRETO'),
   (3, 'M', 'Verde', 'CALCA-PANTALONA-M-VERDE'),
   (3, 'G', 'Caramelo', 'CALCA-PANTALONA-G-CARAMELO')
 ON CONFLICT DO NOTHING;
@@ -30,7 +30,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO estoque (produto_variacao_id, quantidade, quantidade_minima)
 SELECT id,
   CASE
-    WHEN tamanho = 'P' THEN 4
+    WHEN tamanho = 'Único' THEN 4
     WHEN tamanho = 'M' THEN 6
     ELSE 3
   END,
