@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Gisele Flávia Modas — Boutique Feminina
    Estilos principais (HTML/CSS/JS puro)
    ============================================================ */
@@ -1801,6 +1801,54 @@ img { max-width: 100%; display: block; }
   }
 }
 
+
+@media (max-width: 560px) {
+  .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-pill { flex: 0 0 auto; }
+  .shop-colors,
+  .shop-sizes { gap: 7px; }
+  .color-dot { max-width: 100%; }
+  .cart-summary div,
+  .cart-total {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .cart-total strong { font-size: 22px; text-align: right; }
+  .buy-product { align-items: flex-start; }
+  .panel-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .panel-actions .btn,
+  .panel-actions .link-btn { width: 100%; }
+  .stock-actions {
+    flex-wrap: wrap;
+    min-width: 130px;
+  }
+  .history-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .history-value { font-size: 20px; }
+  .report-output { padding-inline: 16px; }
+  .report-paper { padding: 18px; }
+  .report-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .report-meta { text-align: left; }
+  .footer-socials,
+  .payment-list { max-width: 100%; }
+}
 @media (max-width: 380px) {
   .topbar-inner { padding-inline: 12px; }
   .brand { max-width: 100%; }
@@ -1844,3 +1892,4 @@ img { max-width: 100%; display: block; }
     border-bottom: 1px solid #ddd;
   }
 }
+
