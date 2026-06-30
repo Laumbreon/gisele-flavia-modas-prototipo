@@ -1,14 +1,23 @@
-﻿-- Schema inicial consolidado - Gisele Flavia Modas
+-- Schema inicial consolidado - Gisele Flavia Modas
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id SERIAL PRIMARY KEY,
   nome VARCHAR(120) NOT NULL,
   email VARCHAR(160) NOT NULL UNIQUE,
   senha_hash TEXT,
-  perfil VARCHAR(40) NOT NULL DEFAULT 'admin',
+  tipo VARCHAR(20) NOT NULL DEFAULT 'funcionario' CHECK (tipo IN ('dona', 'funcionario')),
   ativo BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS permissoes_usuario (
+  id SERIAL PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  permissao VARCHAR(80) NOT NULL,
+  permitido BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE (usuario_id, permissao)
 );
 
 CREATE TABLE IF NOT EXISTS clientes (
@@ -55,6 +64,20 @@ CREATE TABLE IF NOT EXISTS produtos (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS produto_midias (
+  id SERIAL PRIMARY KEY,
+  produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+  tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('imagem', 'video')),
+  url TEXT NOT NULL,
+  titulo VARCHAR(140),
+  ordem INTEGER NOT NULL DEFAULT 0,
+  principal BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_produto_midias_produto_id ON produto_midias(produto_id);
 
 CREATE TABLE IF NOT EXISTS produto_variacoes (
   id SERIAL PRIMARY KEY,

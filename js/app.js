@@ -219,8 +219,23 @@ function showToast(msg) {
 
 function normalizarTamanho(tamanho) {
   const value = String(tamanho || "").trim();
+  const raw = value.toLowerCase();
   const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  if (["unico", "nico", "Único", "Único"].includes(normalized)) return "Único";
+  const mojibakeUnico = String.fromCharCode(0x00e3, 0x0161) + "nico";
+  const seedCorrompidoUnico = String.fromCharCode(0x012f) + "snico";
+
+  if (
+    raw === "\u00fanico" ||
+    raw === "unico" ||
+    normalized === "unico" ||
+    normalized === "nico" ||
+    raw.includes(mojibakeUnico) ||
+    raw.includes(seedCorrompidoUnico) ||
+    raw.includes("?nico")
+  ) {
+    return "\u00DAnico";
+  }
+
   return TAMANHOS.includes(value) ? value : value.toUpperCase();
 }
 

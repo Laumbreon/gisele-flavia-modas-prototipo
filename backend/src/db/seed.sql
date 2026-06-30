@@ -1,4 +1,35 @@
-﻿-- Dados iniciais de exemplo - Gisele Flavia Modas
+-- Dados iniciais de exemplo - Gisele Flavia Modas
+
+INSERT INTO usuarios (nome, email, senha_hash, tipo, ativo)
+VALUES
+  ('Gisele Flavia', 'dona@giseleflavia.com.br', 'EXEMPLO_TROCAR_EM_PRODUCAO_NAO_USAR', 'dona', TRUE)
+ON CONFLICT (email) DO UPDATE
+SET nome = EXCLUDED.nome,
+    tipo = EXCLUDED.tipo,
+    ativo = EXCLUDED.ativo,
+    updated_at = NOW();
+
+INSERT INTO permissoes_usuario (usuario_id, permissao, permitido)
+SELECT u.id, p.permissao, TRUE
+FROM usuarios u
+CROSS JOIN (VALUES
+  ('vendas.criar'),
+  ('vendas.cancelar'),
+  ('produtos.criar'),
+  ('produtos.editar'),
+  ('produtos.excluir'),
+  ('estoque.ver'),
+  ('estoque.editar'),
+  ('fornecedores.ver'),
+  ('fornecedores.editar'),
+  ('relatorios.ver'),
+  ('configuracoes.editar'),
+  ('funcionarios.gerenciar'),
+  ('etiquetas.imprimir')
+) AS p(permissao)
+WHERE u.email = 'dona@giseleflavia.com.br'
+ON CONFLICT (usuario_id, permissao) DO UPDATE
+SET permitido = EXCLUDED.permitido;
 
 INSERT INTO fornecedores (nome, categoria_fornecida, contato, whatsapp, email, cidade, estado, ultima_compra, status)
 VALUES
@@ -12,6 +43,17 @@ VALUES
   (1, 'Vestido Floral Midi', 'Vestidos', 'Vestido midi feminino com estampa floral e acabamento leve.', 129.90, 109.90, 'ativo'),
   (2, 'Blusa Canelada', 'Blusas', 'Blusa canelada versatil para looks casuais e elegantes.', 59.90, NULL, 'ativo'),
   (3, 'Calca Pantalona', 'Calcas', 'Calca pantalona de alfaiataria com caimento fluido.', 149.90, NULL, 'ativo')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO produto_midias (produto_id, tipo, url, titulo, ordem, principal)
+VALUES
+  (1, 'imagem', 'assets/produtos/vestido-floral-midi-1.jpg', 'Imagem principal - Vestido Floral Midi', 1, TRUE),
+  (1, 'imagem', 'assets/produtos/vestido-floral-midi-2.jpg', 'Detalhe do tecido - Vestido Floral Midi', 2, FALSE),
+  (1, 'video', 'assets/produtos/vestido-floral-midi-video.mp4', 'Video demonstrativo - Vestido Floral Midi', 3, FALSE),
+  (2, 'imagem', 'assets/produtos/blusa-canelada-1.jpg', 'Imagem principal - Blusa Canelada', 1, TRUE),
+  (2, 'video', 'assets/produtos/blusa-canelada-video.mp4', 'Video demonstrativo - Blusa Canelada', 2, FALSE),
+  (3, 'imagem', 'assets/produtos/calca-pantalona-1.jpg', 'Imagem principal - Calca Pantalona', 1, TRUE),
+  (3, 'imagem', 'assets/produtos/calca-pantalona-2.jpg', 'Detalhe do caimento - Calca Pantalona', 2, FALSE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO produto_variacoes (produto_id, tamanho, cor, sku)

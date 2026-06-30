@@ -1,4 +1,4 @@
-﻿-- Schema inicial consolidado - Gisele Flavia Modas
+-- Schema inicial consolidado - Gisele Flavia Modas
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id SERIAL PRIMARY KEY,
