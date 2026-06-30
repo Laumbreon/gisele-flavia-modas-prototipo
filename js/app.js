@@ -6,6 +6,8 @@
 /* ----------------- DADOS MOCKADOS ----------------- */
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
 const API_BASE_URL = "http://localhost:3001/api";
+const AUTH_STORAGE_KEY = "gfm_admin_auth";
+const ADMIN_SCREENS = new Set(["gestao", "movimentacoes", "fornecedores", "historico"]);
 
 // Gradientes por categoria (placeholder visual com CSS)
 const CATEGORY_GRADIENTS = {
@@ -123,6 +125,7 @@ const suppliers = [
   { id: 4, name: "Verde Chic Confecções", segment: "Calças e alfaiataria", city: "Goiânia, GO", contact: "Paula Reis", phone: "(62) 95555-8100", status: "Ativo", delivery: "4 a 6 dias", lastOrder: "Alfaiataria casual", rating: "Premium" },
 ];
 
+let clientesApiRows = null;
 let estoqueApiRows = null;
 
 let stockMovements = [
@@ -138,6 +141,8 @@ let activeCategory = "Todos";
 let nextProductId = 9;
 let nextSaleId = 1;
 let nextMovementId = 5;
+let adminSession = carregarSessaoAdmin();
+let pendingAdminAction = null;
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -184,6 +189,143 @@ const NAV_ITEMS = [
 /* ----------------- HELPERS ----------------- */
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
+
+function carregarSessaoAdmin() {
+  try {
+    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!saved) return null;
+    const session = JSON.parse(saved);
+    return session?.token && session?.usuario ? session : null;
+  } catch (error) {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    return null;
+  }
+}
+
+function salvarSessaoAdmin(session) {
+  adminSession = session;
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  atualizarAuthUi();
+}
+
+function usuarioLogado() {
+  return Boolean(adminSession?.token && adminSession?.usuario);
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+  return {
+    ...extraHeaders,
+    ...(adminSession?.token ? { Authorization: `Bearer ${adminSession.token}` } : {}),
+  };
+}
+
+async function fetchAdmin(path, options = {}) {
+  if (!usuarioLogado()) return null;
+
+  const response = await fetch(API_BASE_URL + path, {
+    ...options,
+    headers: getAuthHeaders(options.headers || {}),
+  });
+
+  if (response.status === 401) {
+    tratarNaoAutorizado();
+    return null;
+  }
+
+  return response;
+}
+
+function limparLogin() {
+  adminSession = null;
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  atualizarAuthUi();
+}
+
+function atualizarAuthUi() {
+  const logoutBtn = $("#btnLogout");
+  if (logoutBtn) logoutBtn.hidden = !usuarioLogado();
+}
+
+function abrirLoginAdmin(callback = null) {
+  pendingAdminAction = typeof callback === "function" ? callback : null;
+  const error = $("#loginError");
+  if (error) error.textContent = "";
+  const form = $("#loginForm");
+  if (form) form.reset();
+  openModal("#loginModal");
+  setTimeout(() => $("#loginEmail")?.focus(), 60);
+}
+
+function fecharLoginAdmin() {
+  closeModal("#loginModal");
+}
+
+function cancelarLoginAdmin() {
+  pendingAdminAction = null;
+  fecharLoginAdmin();
+}
+
+function logoutAdmin() {
+  limparLogin();
+  showToast("Sessao administrativa encerrada");
+  if (ADMIN_SCREENS.has($(".screen.active")?.id?.replace("screen-", ""))) {
+    navigate("home");
+  }
+}
+
+function tratarNaoAutorizado() {
+  limparLogin();
+  showToast("Entre novamente para acessar a area administrativa");
+  abrirLoginAdmin();
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const email = $("#loginEmail").value.trim();
+  const senha = $("#loginSenha").value;
+  const error = $("#loginError");
+  const submit = $("#loginSubmit");
+
+  if (error) error.textContent = "";
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "Entrando...";
+  }
+
+  try {
+    const response = await fetch(API_BASE_URL + "/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, senha }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || "Nao foi possivel entrar");
+
+    salvarSessaoAdmin({
+      token: data.token,
+      usuario: data.usuario,
+      permissoes: data.permissoes || [],
+    });
+    fecharLoginAdmin();
+    showToast("Login realizado com sucesso");
+    await Promise.allSettled([
+      carregarEstoqueDaApi(),
+      carregarMovimentacoesDaApi(),
+      carregarFornecedoresDaApi(),
+      carregarClientesDaApi(),
+    ]);
+    const action = pendingAdminAction;
+    pendingAdminAction = null;
+    if (action) action();
+  } catch (err) {
+    if (error) error.textContent = err.message || "Falha ao fazer login";
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = "Entrar";
+    }
+  }
+}
 
 function money(v) {
   return "R$ " + v.toFixed(2).replace(".", ",");
@@ -304,18 +446,30 @@ function atualizarProdutosNaTela() {
 }
 
 async function carregarProdutosDaApi() {
+  const endpoints = ["/public/produtos", "/produtos"];
+  let ultimoErro = null;
+
   try {
-    const response = await fetch(`${API_BASE_URL}/produtos`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    const data = await response.json();
-    if (!Array.isArray(data)) throw new Error("Resposta inv?lida de produtos");
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error("Resposta inv?lida de produtos");
 
-    const produtosApi = data.map(adaptarProdutoApi).filter(p => p.id && p.ativo);
-    if (!produtosApi.length) throw new Error("Nenhum produto v?lido retornado pela API");
+        const produtosApi = data.map(adaptarProdutoApi).filter(p => p.id && p.ativo);
+        if (!produtosApi.length) throw new Error("Nenhum produto v?lido retornado pela API");
 
-    products = produtosApi;
-    atualizarProdutosNaTela();
+        products = produtosApi;
+        atualizarProdutosNaTela();
+        return;
+      } catch (error) {
+        ultimoErro = error;
+      }
+    }
+
+    throw ultimoErro || new Error("API de produtos indispon?vel");
   } catch (error) {
     console.info("API de produtos indispon?vel. Mantendo produtos mockados.", error);
   }
@@ -357,8 +511,11 @@ function estoqueParaGestao() {
 }
 
 async function carregarEstoqueDaApi() {
+  if (!usuarioLogado()) return;
+
   try {
-    const response = await fetch(API_BASE_URL + "/estoque");
+    const response = await fetchAdmin("/estoque");
+    if (!response) return;
     if (!response.ok) throw new Error("HTTP " + response.status);
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error("Resposta invalida de estoque");
@@ -383,8 +540,11 @@ function adaptarMovimentacaoApi(movimentacao) {
 }
 
 async function carregarMovimentacoesDaApi() {
+  if (!usuarioLogado()) return;
+
   try {
-    const response = await fetch(API_BASE_URL + "/movimentacoes");
+    const response = await fetchAdmin("/movimentacoes");
+    if (!response) return;
     if (!response.ok) throw new Error("HTTP " + response.status);
     const data = await response.json();
     if (!Array.isArray(data)) throw new Error("Resposta invalida de movimentacoes");
@@ -392,6 +552,58 @@ async function carregarMovimentacoesDaApi() {
     renderMovements();
   } catch (error) {
     console.info("API de movimentacoes indisponivel. Mantendo movimentacoes mockadas.", error);
+  }
+}
+
+function adaptarFornecedorApi(fornecedor) {
+  const cidadeEstado = [fornecedor.cidade, fornecedor.estado].filter(Boolean).join(", ");
+  const ativo = String(fornecedor.status || "").toLowerCase() !== "inativo";
+
+  return {
+    id: Number(fornecedor.id) || 0,
+    name: fornecedor.nome || "Fornecedor sem nome",
+    segment: fornecedor.categoria_fornecida || "Categoria nao informada",
+    city: cidadeEstado || "Cidade nao informada",
+    contact: fornecedor.contato || fornecedor.email || "Contato nao informado",
+    phone: fornecedor.whatsapp || "WhatsApp nao informado",
+    status: ativo ? "Ativo" : "Inativo",
+    delivery: "Sob consulta",
+    lastOrder: fornecedor.ultima_compra || "Sem compra registrada",
+    rating: ativo ? "Ativo" : "Inativo",
+  };
+}
+
+async function carregarFornecedoresDaApi() {
+  if (!usuarioLogado()) return;
+
+  try {
+    const response = await fetchAdmin("/fornecedores");
+    if (!response) return;
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error("Resposta invalida de fornecedores");
+    const fornecedoresApi = data.map(adaptarFornecedorApi).filter(s => s.id && s.name);
+    if (!fornecedoresApi.length) return;
+    suppliers.splice(0, suppliers.length, ...fornecedoresApi);
+    renderSuppliers();
+  } catch (error) {
+    console.info("API de fornecedores indisponivel. Mantendo fornecedores mockados.", error);
+  }
+}
+
+async function carregarClientesDaApi() {
+  if (!usuarioLogado()) return;
+
+  try {
+    const response = await fetchAdmin("/clientes");
+    if (!response) return;
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error("Resposta invalida de clientes");
+    clientesApiRows = data;
+  } catch (error) {
+    clientesApiRows = null;
+    console.info("API de clientes indisponivel. Mantendo fluxo sem clientes reais.", error);
   }
 }
 
@@ -412,6 +624,11 @@ function buildStoryNav() {
 }
 
 function navigate(screen, category = "Todos") {
+  if (ADMIN_SCREENS.has(screen) && !usuarioLogado()) {
+    abrirLoginAdmin(() => navigate(screen, category));
+    return;
+  }
+
   $$(".screen").forEach(s => s.classList.remove("active"));
   const target = $(`#screen-${screen}`);
   if (target) target.classList.add("active");
@@ -503,14 +720,14 @@ function bindDetailGallery(p, color) {
   const stage = $("#detailMediaStage");
   if (!stage || !midias.length) return;
 
-  $('[data-detail-media]').forEach(btn => {
+  $$('[data-detail-media]').forEach(btn => {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.detailMedia);
       const media = midias[index];
       if (!media) return;
       stage.classList.remove("media-error");
       stage.innerHTML = renderMediaStage(media, p, color);
-      $('[data-detail-media]').forEach(item => item.classList.remove("active"));
+      $$('[data-detail-media]').forEach(item => item.classList.remove("active"));
       btn.classList.add("active");
     });
   });
@@ -955,11 +1172,12 @@ function montarPayloadVendaApi(shipping) {
 }
 
 async function enviarVendaParaApi(venda) {
-  const response = await fetch(API_BASE_URL + "/vendas", {
+  const response = await fetchAdmin("/vendas", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(venda),
   });
+  if (!response) throw new Error("Login administrativo necessario para finalizar venda");
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -1063,6 +1281,11 @@ async function checkout() {
 
   const shipping = getShippingData();
   const payload = montarPayloadVendaApi(shipping);
+
+  if (payload && !usuarioLogado()) {
+    abrirLoginAdmin(() => checkout());
+    return;
+  }
 
   if (payload) {
     try {
@@ -1621,9 +1844,12 @@ function init() {
   renderMovements();
   renderSuppliers();
   renderHistory();
+  atualizarAuthUi();
   carregarProdutosDaApi();
   carregarEstoqueDaApi();
   carregarMovimentacoesDaApi();
+  carregarFornecedoresDaApi();
+  carregarClientesDaApi();
 
   // navegação (topbar, banner, links)
   $$("[data-nav]").forEach(b => {
@@ -1632,6 +1858,15 @@ function init() {
 
   // carrinho -> abre PDV
   $("#cartButton").addEventListener("click", () => navigate("pdv"));
+  $("#btnLogout").addEventListener("click", logoutAdmin);
+
+  // login administrativo
+  $("#loginForm").addEventListener("submit", handleLoginSubmit);
+  $("#loginClose").addEventListener("click", cancelarLoginAdmin);
+  $("#loginCancel").addEventListener("click", cancelarLoginAdmin);
+  $("#loginModal").addEventListener("click", (e) => {
+    if (e.target.id === "loginModal") cancelarLoginAdmin();
+  });
 
   // CRUD de produto
   $("#btnAddProduct").addEventListener("click", () => openProductModal());

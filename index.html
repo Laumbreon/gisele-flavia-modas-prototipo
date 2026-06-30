@@ -33,6 +33,7 @@
       </nav>
 
       <div class="topbar-actions">
+        <button class="btn btn-ghost btn-logout" id="btnLogout" type="button" hidden>Sair</button>
         <a class="btn btn-instagram" href="https://www.instagram.com/gisele_flavia_modas?igsh=MWppZWkycTRsMW1naQ==" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
           <span class="hide-sm">Instagram</span>
@@ -414,6 +415,32 @@
   </div>
 
   <!-- ===================== MODAL RELATÓRIOS ===================== -->
+  <!-- ===================== MODAL LOGIN ADMIN ===================== -->
+  <div class="modal-overlay" id="loginModal" aria-hidden="true">
+    <div class="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <div class="modal-head">
+        <h3 id="loginTitle">Acesso administrativo</h3>
+        <button class="modal-close" id="loginClose" type="button" aria-label="Fechar">&times;</button>
+      </div>
+      <form id="loginForm" class="modal-body">
+        <p class="login-sub">Entre para acessar gestao, estoque, movimentacoes, vendas e fornecedores.</p>
+        <div class="form-row">
+          <label for="loginEmail">E-mail</label>
+          <input type="email" id="loginEmail" required autocomplete="username" placeholder="dona@giseleflavia.com.br" />
+        </div>
+        <div class="form-row">
+          <label for="loginSenha">Senha</label>
+          <input type="password" id="loginSenha" required autocomplete="current-password" placeholder="Digite sua senha" />
+        </div>
+        <p class="login-error" id="loginError" role="alert"></p>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" id="loginCancel">Cancelar</button>
+          <button type="submit" class="btn btn-pink" id="loginSubmit">Entrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="productDetailModal" aria-hidden="true">
     <div class="modal product-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
       <div class="modal-head">

@@ -147,6 +147,12 @@ img { max-width: 100%; display: block; }
 }
 
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
+.btn-logout {
+  padding-inline: 14px;
+  border: 1px solid rgba(248, 0, 128, 0.18);
+  color: var(--pink-brand);
+  font-weight: 700;
+}
 
 /* botão carrinho */
 .cart-btn {
@@ -1541,6 +1547,25 @@ video.detail-media-main { object-fit: contain; }
 .size-input span { font-size: 13px; font-weight: 600; color: var(--green-brand); }
 .size-input input { width: 100%; text-align: center; padding: 8px 4px; }
 .modal-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+
+.login-modal { max-width: 460px; }
+.login-sub {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+.login-error {
+  min-height: 20px;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  margin: -4px 0 12px;
+}
+.login-modal .btn-pink:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  transform: none;
+}
 
 /* ===================== RELATÓRIOS ===================== */
 .hero-text .btn { margin-top: 16px; }
