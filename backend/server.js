@@ -24,7 +24,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/public/produtos", publicProdutosRoutes);
-app.use("/api/produtos", produtosRoutes);
+app.use("/api/produtos", authMiddleware, produtosRoutes);
 app.use("/api/clientes", authMiddleware, clientesRoutes);
 app.use("/api/vendas", authMiddleware, vendasRoutes);
 app.use("/api/estoque", authMiddleware, estoqueRoutes);

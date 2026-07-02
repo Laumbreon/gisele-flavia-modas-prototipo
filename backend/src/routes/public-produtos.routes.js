@@ -3,7 +3,7 @@ const produtosController = require("../controllers/produtos.controller");
 
 const router = express.Router();
 
-router.get("/", produtosController.listarProdutos);
-router.get("/:id", produtosController.obterProduto);
+router.get("/", produtosController.listarProdutosPublicos);
+router.get("/:id", produtosController.obterProdutoPublico);
 
 module.exports = router;

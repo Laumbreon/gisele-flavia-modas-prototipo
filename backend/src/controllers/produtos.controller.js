@@ -75,6 +75,18 @@ async function listarProdutos(req, res) {
   }
 }
 
+async function listarProdutosPublicos(req, res) {
+  try {
+    const result = await query(produtosSql("WHERE p.status = 'ativo'"));
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erro ao listar produtos públicos:", error);
+    res.status(500).json({
+      message: "Não foi possível buscar os produtos no momento.",
+    });
+  }
+}
+
 async function obterProduto(req, res) {
   const id = Number(req.params.id);
 
@@ -99,7 +111,33 @@ async function obterProduto(req, res) {
   }
 }
 
+async function obterProdutoPublico(req, res) {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ message: "Produto inválido." });
+  }
+
+  try {
+    const result = await query(produtosSql("WHERE p.id = $1 AND p.status = 'ativo'"), [id]);
+    const produto = result.rows[0];
+
+    if (!produto) {
+      return res.status(404).json({ message: "Produto não encontrado." });
+    }
+
+    res.json(produto);
+  } catch (error) {
+    console.error("Erro ao buscar produto público:", error);
+    res.status(500).json({
+      message: "Não foi possível buscar o produto no momento.",
+    });
+  }
+}
+
 module.exports = {
   listarProdutos,
+  listarProdutosPublicos,
   obterProduto,
+  obterProdutoPublico,
 };
