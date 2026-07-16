@@ -11,6 +11,19 @@ function validationError(message) {
   return error;
 }
 
+function normalizeOptional(value) {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function normalizeDate(value) {
+  const text = normalizeOptional(value);
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 async function listarVendas(req, res) {
   try {
     const result = await pool.query(`
@@ -46,6 +59,12 @@ async function criarVenda(req, res) {
   const desconto = toNumber(req.body.desconto);
   const frete = toNumber(req.body.frete);
   const observacoes = req.body.observacoes || null;
+  const canalVenda = normalizeOptional(req.body.canal_venda) || "loja_fisica";
+  const origemVenda = normalizeOptional(req.body.origem_venda);
+  const temEntrega = req.body.tem_entrega === true;
+  const entrega = req.body.entrega && typeof req.body.entrega === "object" ? req.body.entrega : null;
+  const statusPagamento = normalizeOptional(req.body.status_pagamento) || "pago";
+  const statusEntrega = temEntrega ? normalizeOptional(entrega?.status_entrega) || "pendente" : "sem_entrega";
 
   if (!itens.length) {
     return res.status(400).json({ message: "Informe pelo menos um item para a venda." });
@@ -53,6 +72,10 @@ async function criarVenda(req, res) {
 
   if (desconto < 0 || frete < 0) {
     return res.status(400).json({ message: "Desconto e frete não podem ser negativos." });
+  }
+
+  if (temEntrega && !entrega) {
+    return res.status(400).json({ message: "Informe os dados da entrega." });
   }
 
   const client = await pool.connect();
@@ -132,14 +155,113 @@ async function criarVenda(req, res) {
 
     const vendaResult = await client.query(
       `
-        INSERT INTO vendas (cliente_id, subtotal, desconto, frete_valor, total, forma_pagamento, status, observacoes)
-        VALUES ($1, $2, $3, $4, $5, $6, 'finalizada', $7)
-        RETURNING id, cliente_id, subtotal, desconto, frete_valor, total, forma_pagamento, status, observacoes, created_at;
+        INSERT INTO vendas (
+          cliente_id,
+          subtotal,
+          desconto,
+          frete_valor,
+          total,
+          forma_pagamento,
+          canal_venda,
+          origem_venda,
+          tem_entrega,
+          status_pagamento,
+          status_entrega,
+          status,
+          observacoes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'finalizada', $12)
+        RETURNING
+          id,
+          cliente_id,
+          subtotal,
+          desconto,
+          frete_valor,
+          total,
+          forma_pagamento,
+          canal_venda,
+          origem_venda,
+          tem_entrega,
+          status_pagamento,
+          status_entrega,
+          status,
+          observacoes,
+          created_at;
       `,
-      [clienteId, subtotal, desconto, frete, total, formaPagamento, observacoes]
+      [
+        clienteId,
+        subtotal,
+        desconto,
+        frete,
+        total,
+        formaPagamento,
+        canalVenda,
+        origemVenda,
+        temEntrega,
+        statusPagamento,
+        statusEntrega,
+        observacoes,
+      ]
     );
 
     const venda = vendaResult.rows[0];
+    let entregaCriada = null;
+
+    if (temEntrega && entrega) {
+      const entregaResult = await client.query(
+        `
+          INSERT INTO venda_entregas (
+            venda_id,
+            tipo_entrega,
+            status_entrega,
+            valor_frete,
+            destinatario_nome,
+            destinatario_telefone,
+            cep,
+            estado,
+            cidade,
+            bairro,
+            endereco,
+            numero,
+            complemento,
+            referencia,
+            transportadora,
+            codigo_rastreio,
+            motoboy_nome,
+            data_prevista,
+            data_entrega,
+            observacoes
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          RETURNING *;
+        `,
+        [
+          venda.id,
+          normalizeOptional(entrega.tipo_entrega) || "entrega_local",
+          statusEntrega,
+          toNumber(entrega.valor_frete, frete),
+          normalizeOptional(entrega.destinatario_nome),
+          normalizeOptional(entrega.destinatario_telefone),
+          normalizeOptional(entrega.cep),
+          normalizeOptional(entrega.estado),
+          normalizeOptional(entrega.cidade),
+          normalizeOptional(entrega.bairro),
+          normalizeOptional(entrega.endereco),
+          normalizeOptional(entrega.numero),
+          normalizeOptional(entrega.complemento),
+          normalizeOptional(entrega.referencia),
+          normalizeOptional(entrega.transportadora),
+          normalizeOptional(entrega.codigo_rastreio),
+          normalizeOptional(entrega.motoboy_nome),
+          normalizeDate(entrega.data_prevista),
+          normalizeDate(entrega.data_entrega),
+          normalizeOptional(entrega.observacoes),
+        ]
+      );
+
+      entregaCriada = entregaResult.rows[0];
+    }
+
     const itensCriados = [];
 
     for (const item of itensProcessados) {
@@ -210,6 +332,7 @@ async function criarVenda(req, res) {
 
     res.status(201).json({
       ...venda,
+      entrega: entregaCriada,
       itens: itensCriados,
     });
   } catch (error) {

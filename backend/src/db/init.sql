@@ -112,11 +112,46 @@ CREATE TABLE IF NOT EXISTS vendas (
   cep_entrega VARCHAR(12),
   total NUMERIC(10,2) NOT NULL DEFAULT 0,
   forma_pagamento VARCHAR(60),
+  canal_venda VARCHAR(30) NOT NULL DEFAULT 'loja_fisica',
+  origem_venda VARCHAR(30),
+  tem_entrega BOOLEAN NOT NULL DEFAULT FALSE,
+  status_pagamento VARCHAR(30) DEFAULT 'pago',
+  status_entrega VARCHAR(30) DEFAULT 'sem_entrega',
+  caixa_id INTEGER,
+  maquininha_id INTEGER,
   status VARCHAR(30) NOT NULL DEFAULT 'finalizada',
   observacoes TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS venda_entregas (
+  id SERIAL PRIMARY KEY,
+  venda_id INTEGER NOT NULL REFERENCES vendas(id) ON DELETE CASCADE,
+  tipo_entrega VARCHAR(30) NOT NULL,
+  status_entrega VARCHAR(30) NOT NULL DEFAULT 'pendente',
+  valor_frete NUMERIC(10,2) NOT NULL DEFAULT 0,
+  destinatario_nome VARCHAR(120),
+  destinatario_telefone VARCHAR(30),
+  cep VARCHAR(12),
+  estado VARCHAR(2),
+  cidade VARCHAR(100),
+  bairro VARCHAR(100),
+  endereco TEXT,
+  numero VARCHAR(20),
+  complemento VARCHAR(120),
+  referencia TEXT,
+  transportadora VARCHAR(60),
+  codigo_rastreio VARCHAR(80),
+  motoboy_nome VARCHAR(120),
+  data_prevista TIMESTAMP,
+  data_entrega TIMESTAMP,
+  observacoes TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_venda_entregas_venda_id ON venda_entregas(venda_id);
 
 CREATE TABLE IF NOT EXISTS itens_venda (
   id SERIAL PRIMARY KEY,
