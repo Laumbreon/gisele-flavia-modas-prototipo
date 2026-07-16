@@ -185,6 +185,22 @@ CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS fretes_bairro (
+  id SERIAL PRIMARY KEY,
+  bairro VARCHAR(100) NOT NULL,
+  cidade VARCHAR(100) NOT NULL,
+  estado VARCHAR(2) NOT NULL DEFAULT 'SP',
+  valor NUMERIC(10,2) NOT NULL DEFAULT 0,
+  prazo_estimado VARCHAR(80),
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  observacoes TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fretes_bairro_busca
+  ON fretes_bairro (LOWER(bairro), LOWER(cidade), LOWER(estado));
+
 CREATE TABLE IF NOT EXISTS configuracoes_loja (
   id SERIAL PRIMARY KEY,
   chave VARCHAR(100) NOT NULL UNIQUE,

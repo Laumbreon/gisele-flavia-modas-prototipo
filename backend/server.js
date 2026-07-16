@@ -14,6 +14,7 @@ const vendasRoutes = require("./src/routes/vendas.routes");
 const estoqueRoutes = require("./src/routes/estoque.routes");
 const movimentacoesRoutes = require("./src/routes/movimentacoes.routes");
 const fornecedoresRoutes = require("./src/routes/fornecedores.routes");
+const fretesBairroRoutes = require("./src/routes/fretes-bairro.routes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -24,12 +25,14 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/public/produtos", publicProdutosRoutes);
+app.use("/api/public/frete-bairro", fretesBairroRoutes.publicRouter);
 app.use("/api/produtos", authMiddleware, produtosRoutes);
 app.use("/api/clientes", authMiddleware, clientesRoutes);
 app.use("/api/vendas", authMiddleware, vendasRoutes);
 app.use("/api/estoque", authMiddleware, estoqueRoutes);
 app.use("/api/movimentacoes", authMiddleware, movimentacoesRoutes);
 app.use("/api/fornecedores", authMiddleware, fornecedoresRoutes);
+app.use("/api/fretes-bairro", authMiddleware, fretesBairroRoutes.router);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Rota não encontrada" });
