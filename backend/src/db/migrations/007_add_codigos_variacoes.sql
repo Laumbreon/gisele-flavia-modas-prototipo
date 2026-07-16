@@ -1,0 +1,5 @@
+ALTER TABLE produto_variacoes
+  ADD COLUMN IF NOT EXISTS codigo_barras VARCHAR(80) UNIQUE,
+  ADD COLUMN IF NOT EXISTS codigo_interno VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS preco_venda NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS preco_promocional NUMERIC(10,2);

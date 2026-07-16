@@ -13,6 +13,10 @@ function produtosSql(whereClause = "") {
               'cor', pv.cor,
               'tamanho', pv.tamanho,
               'sku', pv.sku,
+              'codigo_barras', pv.codigo_barras,
+              'codigo_interno', pv.codigo_interno,
+              'preco_venda', pv.preco_venda,
+              'preco_promocional', pv.preco_promocional,
               'quantidade_estoque', COALESCE(e.quantidade, 0)
             )
             ORDER BY pv.cor, pv.tamanho
