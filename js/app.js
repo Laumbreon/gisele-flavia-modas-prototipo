@@ -143,6 +143,7 @@ let nextSaleId = 1;
 let nextMovementId = 5;
 let adminSession = carregarSessaoAdmin();
 let pendingAdminAction = null;
+let localShippingQuote = null;
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -1077,16 +1078,105 @@ function cartSubtotal() {
   return cart.reduce((sum, i) => sum + i.price * i.qty, 0);
 }
 
+function localShippingKey() {
+  const bairro = $("#customerDistrict")?.value.trim() || "";
+  const cidade = $("#customerCity")?.value.trim() || "";
+  const estado = ($("#customerState")?.value.trim() || "SP").toUpperCase();
+  return `${bairro.toLowerCase()}|${cidade.toLowerCase()}|${estado}`;
+}
+
+function setShippingStatus(message = "", type = "") {
+  const status = $("#shippingStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.remove("ok", "warn");
+  if (type) status.classList.add(type);
+}
+
+function resetLocalShippingQuote() {
+  localShippingQuote = null;
+  setShippingStatus("");
+  updateCartTotals();
+}
+
+async function calcularFreteBairro() {
+  const bairro = $("#customerDistrict")?.value.trim() || "";
+  const cidade = $("#customerCity")?.value.trim() || "";
+  const estado = ($("#customerState")?.value.trim() || "SP").toUpperCase();
+
+  if (!bairro || !cidade) {
+    localShippingQuote = { status: "missing", key: localShippingKey(), value: 0 };
+    setShippingStatus("Informe cidade e bairro para calcular a entrega local.", "warn");
+    updateCartTotals();
+    return;
+  }
+
+  setShippingStatus("Calculando frete local...");
+
+  const params = new URLSearchParams({ bairro, cidade, estado });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/public/frete-bairro?${params.toString()}`);
+    const data = await response.json().catch(() => ({}));
+
+    if (response.status === 404) {
+      localShippingQuote = { status: "not_found", key: localShippingKey(), value: 0 };
+      setShippingStatus("Ainda não atendemos esse bairro com entrega local. Consulte a loja pelo WhatsApp.", "warn");
+      updateCartTotals();
+      return;
+    }
+
+    if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+
+    const value = Number(data.valor);
+    if (!Number.isFinite(value) || value < 0) throw new Error("Valor de frete inválido");
+
+    localShippingQuote = {
+      status: "found",
+      key: localShippingKey(),
+      value,
+      prazo: data.prazo_estimado || "",
+      bairro: data.bairro || bairro,
+      cidade: data.cidade || cidade,
+      estado: data.estado || estado,
+    };
+
+    setShippingStatus(`Entrega local: ${money(value)}${localShippingQuote.prazo ? ` · ${localShippingQuote.prazo}` : ""}`, "ok");
+    updateCartTotals();
+  } catch (error) {
+    localShippingQuote = { status: "error", key: localShippingKey(), value: 0 };
+    setShippingStatus("Não foi possível calcular o frete agora. O carrinho continua funcionando normalmente.", "warn");
+    updateCartTotals();
+    console.info("API de frete por bairro indisponível.", error);
+  }
+}
+
 function getShippingData() {
   const deliveryType = $("#deliveryType")?.value || "retirada";
   const option = DELIVERY_OPTIONS[deliveryType] || DELIVERY_OPTIONS.retirada;
   const customValue = parseFloat($("#customShippingValue")?.value || "0") || 0;
-  const shippingValue = deliveryType === "personalizado" ? Math.max(0, customValue) : option.price;
+  const localKey = localShippingKey();
+  const hasLocalAddress = Boolean($("#customerDistrict")?.value.trim() || $("#customerCity")?.value.trim());
+  const localQuoteIsCurrent = localShippingQuote?.key === localKey;
+  let shippingValue = deliveryType === "personalizado" ? Math.max(0, customValue) : option.price;
+
+  if (deliveryType === "local") {
+    if (localQuoteIsCurrent && localShippingQuote.status === "found") {
+      shippingValue = localShippingQuote.value;
+    } else if (hasLocalAddress || localQuoteIsCurrent) {
+      shippingValue = 0;
+    }
+  }
+
   return {
     cep: $("#customerCep")?.value.trim() || "",
+    city: $("#customerCity")?.value.trim() || "",
+    state: ($("#customerState")?.value.trim() || "SP").toUpperCase(),
+    district: $("#customerDistrict")?.value.trim() || "",
     deliveryType,
     deliveryLabel: option.label,
     shippingValue,
+    shippingDeadline: localQuoteIsCurrent ? localShippingQuote?.prazo || "" : "",
   };
 }
 
@@ -1098,6 +1188,7 @@ function updateCartTotals() {
   $("#cartShipping").textContent = money(shippingValue);
   $("#cartTotal").textContent = money(subtotal + shippingValue);
   $("#customShippingWrap").classList.toggle("show", shipping.deliveryType === "personalizado");
+  $("#localShippingWrap").classList.toggle("show", shipping.deliveryType === "local");
 }
 
 function addToCart(id, size, color) {
@@ -1906,9 +1997,19 @@ function init() {
 
   // PDV
   $("#pdvSearch").addEventListener("input", (e) => renderPdv(e.target.value));
-  $("#deliveryType").addEventListener("change", updateCartTotals);
+  $("#deliveryType").addEventListener("change", () => {
+    if ($("#deliveryType").value !== "local") setShippingStatus("");
+    updateCartTotals();
+  });
   $("#customShippingValue").addEventListener("input", updateCartTotals);
   $("#customerCep").addEventListener("input", updateCartTotals);
+  $("#customerCity").addEventListener("input", resetLocalShippingQuote);
+  $("#customerDistrict").addEventListener("input", resetLocalShippingQuote);
+  $("#customerState").addEventListener("input", (event) => {
+    event.target.value = event.target.value.toUpperCase();
+    resetLocalShippingQuote();
+  });
+  $("#btnCalculateShipping").addEventListener("click", calcularFreteBairro);
   $("#btnCheckout").addEventListener("click", checkout);
 
   // marca "Início" como ativo

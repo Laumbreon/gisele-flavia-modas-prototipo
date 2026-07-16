@@ -869,6 +869,26 @@ img { max-width: 100%; display: block; }
 }
 .shipping-custom { display: none; }
 .shipping-custom.show { display: flex; }
+.shipping-local { display: none; }
+.shipping-local.show { display: block; }
+.shipping-address-grid {
+  grid-template-columns: minmax(0, 1fr) 72px;
+  gap: 8px;
+}
+.btn-shipping-calc {
+  margin-top: 2px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+.shipping-status {
+  min-height: 18px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.shipping-status.ok { color: var(--green-brand); font-weight: 700; }
+.shipping-status.warn { color: var(--pink-deep); font-weight: 700; }
 .cart-summary {
   display: grid;
   gap: 8px;
