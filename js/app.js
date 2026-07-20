@@ -144,6 +144,9 @@ let nextMovementId = 5;
 let adminSession = carregarSessaoAdmin();
 let pendingAdminAction = null;
 let localShippingQuote = null;
+let fretesBairro = [];
+let freightStatusFilter = "todos";
+let freightDeactivateConfirmId = null;
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -314,6 +317,7 @@ async function handleLoginSubmit(event) {
       carregarMovimentacoesDaApi(),
       carregarFornecedoresDaApi(),
       carregarClientesDaApi(),
+      carregarFretesBairro(),
     ]);
     const action = pendingAdminAction;
     pendingAdminAction = null;
@@ -608,6 +612,196 @@ async function carregarClientesDaApi() {
   }
 }
 
+function freightNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function filteredFretesBairro() {
+  const term = ($("#freightSearch")?.value || "").trim().toLowerCase();
+  return fretesBairro.filter(frete => {
+    const ativo = frete.ativo !== false;
+    const statusOk = freightStatusFilter === "todos"
+      || (freightStatusFilter === "ativos" && ativo)
+      || (freightStatusFilter === "inativos" && !ativo);
+    const text = `${frete.bairro || ""} ${frete.cidade || ""}`.toLowerCase();
+    return statusOk && (!term || text.includes(term));
+  });
+}
+
+function renderFreightSummary() {
+  const total = fretesBairro.length;
+  const ativos = fretesBairro.filter(frete => frete.ativo !== false).length;
+  const valores = fretesBairro.map(frete => freightNumber(frete.valor)).filter(valor => valor >= 0);
+  const menor = valores.length ? Math.min(...valores) : 0;
+  const maior = valores.length ? Math.max(...valores) : 0;
+  const items = [
+    { label: "Bairros cadastrados", value: total },
+    { label: "Bairros ativos", value: ativos },
+    { label: "Menor frete", value: money(menor) },
+    { label: "Maior frete", value: money(maior) },
+  ];
+
+  $("#freightSummary").innerHTML = items.map(item => `
+    <div class="freight-stat">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </div>
+  `).join("");
+}
+
+function renderFretesBairro() {
+  const table = $("#freightTable");
+  if (!table) return;
+
+  renderFreightSummary();
+  const rows = filteredFretesBairro();
+
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Bairro</th><th>Cidade</th><th>Estado</th><th>Valor</th><th>Prazo</th><th>Status</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.length ? rows.map(frete => `
+        <tr>
+          <td>${frete.bairro || "-"}</td>
+          <td>${frete.cidade || "-"}</td>
+          <td>${frete.estado || "SP"}</td>
+          <td>${money(freightNumber(frete.valor))}</td>
+          <td>${frete.prazo_estimado || "-"}</td>
+          <td><span class="freight-status ${frete.ativo !== false ? "active" : "inactive"}">${frete.ativo !== false ? "Ativo" : "Inativo"}</span></td>
+          <td>
+            <div class="stock-actions">
+              <button class="icon-btn edit" data-freight-edit="${frete.id}" type="button">Editar</button>
+              <button class="icon-btn remove" data-freight-disable="${frete.id}" type="button">${freightDeactivateConfirmId === frete.id ? "Confirmar" : "Desativar"}</button>
+            </div>
+          </td>
+        </tr>
+      `).join("") : `<tr><td colspan="7">Nenhum frete encontrado.</td></tr>`}
+    </tbody>
+  `;
+
+  $$("[data-freight-edit]", table).forEach(btn => {
+    btn.addEventListener("click", () => editarFreteBairro(Number(btn.dataset.freightEdit)));
+  });
+  $$("[data-freight-disable]", table).forEach(btn => {
+    btn.addEventListener("click", () => desativarFreteBairro(Number(btn.dataset.freightDisable)));
+  });
+}
+
+async function carregarFretesBairro() {
+  if (!usuarioLogado()) return;
+
+  try {
+    const response = await fetchAdmin("/fretes-bairro");
+    if (!response) return;
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error("Resposta invalida de fretes por bairro");
+    fretesBairro = data;
+    freightDeactivateConfirmId = null;
+    renderFretesBairro();
+  } catch (error) {
+    console.info("API de fretes por bairro indisponivel.", error);
+    showToast("Não foi possível carregar os fretes por bairro agora");
+  }
+}
+
+function openFreightModal(frete = null) {
+  $("#freightTitle").textContent = frete ? "Editar frete" : "Cadastrar frete";
+  $("#freightId").value = frete?.id || "";
+  $("#freightDistrict").value = frete?.bairro || "";
+  $("#freightCity").value = frete?.cidade || "";
+  $("#freightState").value = (frete?.estado || "SP").toUpperCase();
+  $("#freightValue").value = frete ? freightNumber(frete.valor).toFixed(2) : "";
+  $("#freightDeadline").value = frete?.prazo_estimado || "";
+  $("#freightNotes").value = frete?.observacoes || "";
+  $("#freightActive").checked = frete ? frete.ativo !== false : true;
+  $("#freightError").textContent = "";
+  openModal("#freightModal");
+}
+
+function closeFreightModal() {
+  closeModal("#freightModal");
+}
+
+function freightFormPayload() {
+  return {
+    bairro: $("#freightDistrict").value.trim(),
+    cidade: $("#freightCity").value.trim(),
+    estado: ($("#freightState").value.trim() || "SP").toUpperCase(),
+    valor: Number($("#freightValue").value),
+    prazo_estimado: $("#freightDeadline").value.trim(),
+    observacoes: $("#freightNotes").value.trim(),
+    ativo: $("#freightActive").checked,
+  };
+}
+
+async function salvarFreteBairro(event) {
+  event.preventDefault();
+  if (!usuarioLogado()) {
+    abrirLoginAdmin(() => openFreightModal());
+    return;
+  }
+
+  const id = $("#freightId").value;
+  const payload = freightFormPayload();
+  const error = $("#freightError");
+  error.textContent = "";
+
+  if (!payload.bairro || !payload.cidade || !Number.isFinite(payload.valor) || payload.valor < 0) {
+    error.textContent = "Informe bairro, cidade e valor válido.";
+    return;
+  }
+
+  try {
+    const response = await fetchAdmin(id ? `/fretes-bairro/${id}` : "/fretes-bairro", {
+      method: id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response) return;
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || "Não foi possível salvar o frete.");
+    closeFreightModal();
+    showToast(id ? "Frete atualizado com sucesso" : "Frete cadastrado com sucesso");
+    await carregarFretesBairro();
+  } catch (err) {
+    error.textContent = err.message || "Não foi possível salvar o frete.";
+  }
+}
+
+function editarFreteBairro(id) {
+  const frete = fretesBairro.find(item => Number(item.id) === Number(id));
+  if (!frete) {
+    showToast("Frete não encontrado");
+    return;
+  }
+  openFreightModal(frete);
+}
+
+async function desativarFreteBairro(id) {
+  if (freightDeactivateConfirmId !== id) {
+    freightDeactivateConfirmId = id;
+    renderFretesBairro();
+    showToast("Clique em Confirmar para desativar o frete");
+    return;
+  }
+
+  try {
+    const response = await fetchAdmin(`/fretes-bairro/${id}`, { method: "DELETE" });
+    if (!response) return;
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || "Não foi possível desativar o frete.");
+    showToast("Frete desativado com sucesso");
+    await carregarFretesBairro();
+  } catch (err) {
+    showToast(err.message || "Não foi possível desativar o frete");
+  }
+}
+
 function buildStoryNav() {
   const track = $("#storyTrack");
   track.innerHTML = NAV_ITEMS.map(item => `
@@ -646,7 +840,11 @@ function navigate(screen, category = "Todos") {
     renderFilters();
     renderCatalog();
   }
-  if (screen === "gestao") renderStockTable();
+  if (screen === "gestao") {
+    renderStockTable();
+    renderFretesBairro();
+    carregarFretesBairro();
+  }
   if (screen === "pdv") renderPdv($("#pdvSearch").value);
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
@@ -1327,6 +1525,7 @@ function finalizarVendaMockada(shipping, apiVenda = null, options = {}) {
   renderPdv($("#pdvSearch").value);
   renderDashboard();
   renderStockTable();
+  renderFretesBairro();
   renderMovements();
   renderSuppliers();
   renderHistory();
@@ -1932,6 +2131,7 @@ function init() {
   updateCartBadge();
   renderDashboard();
   renderStockTable();
+  renderFretesBairro();
   renderMovements();
   renderSuppliers();
   renderHistory();
@@ -1941,6 +2141,7 @@ function init() {
   carregarMovimentacoesDaApi();
   carregarFornecedoresDaApi();
   carregarClientesDaApi();
+  carregarFretesBairro();
 
   // navegação (topbar, banner, links)
   $$("[data-nav]").forEach(b => {
@@ -1969,6 +2170,32 @@ function init() {
   });
 
   // relatórios
+  $("#btnAddFreight").addEventListener("click", () => {
+    if (!usuarioLogado()) {
+      abrirLoginAdmin(() => openFreightModal());
+      return;
+    }
+    openFreightModal();
+  });
+  $("#freightForm").addEventListener("submit", salvarFreteBairro);
+  $("#freightClose").addEventListener("click", closeFreightModal);
+  $("#freightCancel").addEventListener("click", closeFreightModal);
+  $("#freightModal").addEventListener("click", (e) => {
+    if (e.target.id === "freightModal") closeFreightModal();
+  });
+  $("#freightSearch").addEventListener("input", () => {
+    freightDeactivateConfirmId = null;
+    renderFretesBairro();
+  });
+  $("#freightStatusFilter").addEventListener("change", (e) => {
+    freightStatusFilter = e.target.value;
+    freightDeactivateConfirmId = null;
+    renderFretesBairro();
+  });
+  $("#freightState").addEventListener("input", (e) => {
+    e.target.value = e.target.value.toUpperCase();
+  });
+
   $("#btnOpenReport").addEventListener("click", openReportModal);
   $("#reportClose").addEventListener("click", () => closeModal("#reportModal"));
   $("#reportModal").addEventListener("click", (e) => {

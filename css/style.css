@@ -1260,6 +1260,67 @@ img { max-width: 100%; display: block; }
 }
 .supplier-action.primary:hover { background: var(--pink-dark); color: var(--white); }
 
+/* ===================== FRETES POR BAIRRO ===================== */
+.freight-admin-panel { margin-top: 24px; }
+.freight-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.freight-stat {
+  background: var(--pink-soft);
+  border: 1px solid rgba(248, 0, 128, 0.14);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.freight-stat span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.freight-stat strong {
+  color: var(--pink-brand);
+  font-size: 22px;
+  font-family: 'Playfair Display', serif;
+}
+.freight-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 160px;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.freight-search { margin-bottom: 0; }
+.freight-filter {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--text-dark);
+  font-family: inherit;
+  padding: 11px 14px;
+}
+.freight-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+}
+.freight-status.active { background: #D1FAE5; color: var(--green-brand); }
+.freight-status.inactive { background: var(--pink-light); color: var(--pink-deep); }
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dark);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.form-check input { accent-color: var(--pink-brand); }
+
 /* ===================== HISTÓRICO ===================== */
 .history-list { display: flex; flex-direction: column; gap: 18px; }
 .history-card {
@@ -2001,6 +2062,8 @@ video.detail-media-main { object-fit: contain; }
   }
   .panel-actions .btn,
   .panel-actions .link-btn { width: 100%; }
+  .freight-toolbar { grid-template-columns: 1fr; }
+  .freight-filter { width: 100%; }
   .stock-actions {
     flex-wrap: wrap;
     min-width: 130px;
