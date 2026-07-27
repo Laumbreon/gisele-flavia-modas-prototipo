@@ -5,6 +5,7 @@ const permissaoMiddleware = require("../middlewares/permissao.middleware");
 const router = express.Router();
 
 router.get("/", permissaoMiddleware("relatorios.ver"), vendasController.listarVendas);
+router.get("/:id", permissaoMiddleware("relatorios.ver"), vendasController.detalharVenda);
 router.post("/", permissaoMiddleware("vendas.criar"), vendasController.criarVenda);
 
 module.exports = router;

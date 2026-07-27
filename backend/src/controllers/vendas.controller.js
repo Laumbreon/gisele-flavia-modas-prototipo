@@ -1,8 +1,14 @@
-﻿const { pool } = require("../config/db");
+const { pool } = require("../config/db");
+
+const FORMAS_PAGAMENTO = ["dinheiro", "pix", "debito", "credito"];
 
 function toNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function roundMoney(value) {
+  return Math.round(toNumber(value) * 100) / 100;
 }
 
 function validationError(message) {
@@ -17,11 +23,96 @@ function normalizeOptional(value) {
   return text || null;
 }
 
+function normalizeLower(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function normalizeDate(value) {
   const text = normalizeOptional(value);
   if (!text) return null;
   const date = new Date(text);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function usuarioId(req) {
+  return req.usuario?.id || null;
+}
+
+function buildPagamentos(reqBody, totalVenda) {
+  if (Array.isArray(reqBody.pagamentos) && reqBody.pagamentos.length) {
+    return reqBody.pagamentos.map((pagamento) => ({
+      forma_pagamento: normalizeLower(pagamento.forma_pagamento),
+      valor: roundMoney(pagamento.valor),
+      maquininha_id: pagamento.maquininha_id ? Number(pagamento.maquininha_id) : null,
+      observacoes: normalizeOptional(pagamento.observacoes),
+    }));
+  }
+
+  return [
+    {
+      forma_pagamento: normalizeLower(reqBody.forma_pagamento || "dinheiro"),
+      valor: roundMoney(totalVenda),
+      maquininha_id: reqBody.maquininha_id ? Number(reqBody.maquininha_id) : null,
+      observacoes: normalizeOptional(reqBody.observacoes),
+      legacy: true,
+    },
+  ];
+}
+
+function validarPagamentos(pagamentos, totalVenda) {
+  if (!pagamentos.length) {
+    throw validationError("Informe ao menos um pagamento.");
+  }
+
+  pagamentos.forEach((pagamento) => {
+    if (!FORMAS_PAGAMENTO.includes(pagamento.forma_pagamento)) {
+      throw validationError("Forma de pagamento inválida.");
+    }
+
+    if (!Number.isFinite(pagamento.valor) || pagamento.valor <= 0) {
+      throw validationError("Valor do pagamento deve ser maior que zero.");
+    }
+
+    if (
+      pagamento.maquininha_id !== null
+      && (!Number.isInteger(pagamento.maquininha_id) || pagamento.maquininha_id <= 0)
+    ) {
+      throw validationError("Maquininha inválida.");
+    }
+  });
+
+  const totalPago = roundMoney(pagamentos.reduce((sum, pagamento) => sum + pagamento.valor, 0));
+  const troco = roundMoney(Math.max(totalPago - totalVenda, 0));
+  const valorFaltante = roundMoney(Math.max(totalVenda - totalPago, 0));
+  const temDinheiro = pagamentos.some((pagamento) => pagamento.forma_pagamento === "dinheiro");
+
+  if (troco > 0 && !temDinheiro) {
+    throw validationError("Troco só pode ser calculado quando há pagamento em dinheiro.");
+  }
+
+  return {
+    totalPago,
+    troco,
+    valorFaltante,
+    statusPagamento: valorFaltante > 0 ? "pendente" : "pago",
+  };
+}
+
+async function validarCaixa(client, caixaId) {
+  if (!caixaId) return;
+
+  const caixaResult = await client.query(
+    "SELECT id, status FROM caixas WHERE id = $1 FOR UPDATE;",
+    [caixaId]
+  );
+
+  if (!caixaResult.rows.length) {
+    throw validationError("Caixa não encontrado.");
+  }
+
+  if (caixaResult.rows[0].status !== "aberto") {
+    throw validationError("A venda só pode ser vinculada a um caixa aberto.");
+  }
 }
 
 async function listarVendas(req, res) {
@@ -30,14 +121,34 @@ async function listarVendas(req, res) {
       SELECT
         v.id,
         v.total,
+        v.total_pago,
+        v.troco,
+        v.valor_faltante,
         v.forma_pagamento,
+        v.status_pagamento,
+        v.caixa_id,
+        v.maquininha_id,
         v.status,
         v.created_at,
         c.nome AS cliente,
-        COALESCE(SUM(iv.quantidade), 0)::int AS quantidade_itens
+        COALESCE(SUM(iv.quantidade), 0)::int AS quantidade_itens,
+        COALESCE(
+          json_agg(
+            DISTINCT jsonb_build_object(
+              'id', pv.id,
+              'forma_pagamento', pv.forma_pagamento,
+              'valor', pv.valor,
+              'status', pv.status,
+              'caixa_id', pv.caixa_id,
+              'maquininha_id', pv.maquininha_id
+            )
+          ) FILTER (WHERE pv.id IS NOT NULL),
+          '[]'
+        ) AS pagamentos
       FROM vendas v
       LEFT JOIN clientes c ON c.id = v.cliente_id
       LEFT JOIN itens_venda iv ON iv.venda_id = v.id
+      LEFT JOIN pagamentos_venda pv ON pv.venda_id = v.id
       GROUP BY v.id, c.nome
       ORDER BY v.created_at DESC
       LIMIT 50;
@@ -52,19 +163,76 @@ async function listarVendas(req, res) {
   }
 }
 
+async function detalharVenda(req, res) {
+  const vendaId = Number(req.params.id);
+
+  if (!Number.isInteger(vendaId) || vendaId <= 0) {
+    return res.status(400).json({ message: "Venda inválida." });
+  }
+
+  try {
+    const vendaResult = await pool.query(
+      `
+        SELECT
+          v.*,
+          c.nome AS cliente
+        FROM vendas v
+        LEFT JOIN clientes c ON c.id = v.cliente_id
+        WHERE v.id = $1
+        LIMIT 1;
+      `,
+      [vendaId]
+    );
+
+    if (!vendaResult.rows.length) {
+      return res.status(404).json({ message: "Venda não encontrada." });
+    }
+
+    const itensResult = await pool.query(
+      `
+        SELECT *
+        FROM itens_venda
+        WHERE venda_id = $1
+        ORDER BY id ASC;
+      `,
+      [vendaId]
+    );
+
+    const pagamentosResult = await pool.query(
+      `
+        SELECT
+          pv.*,
+          m.nome AS maquininha
+        FROM pagamentos_venda pv
+        LEFT JOIN maquininhas m ON m.id = pv.maquininha_id
+        WHERE pv.venda_id = $1
+        ORDER BY pv.id ASC;
+      `,
+      [vendaId]
+    );
+
+    res.json({
+      ...vendaResult.rows[0],
+      itens: itensResult.rows,
+      pagamentos: pagamentosResult.rows,
+    });
+  } catch (error) {
+    console.error("Erro ao detalhar venda:", error);
+    res.status(500).json({ message: "Não foi possível detalhar a venda." });
+  }
+}
+
 async function criarVenda(req, res) {
   const clienteId = req.body.cliente_id ?? null;
   const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
-  const formaPagamento = req.body.forma_pagamento || null;
-  const desconto = toNumber(req.body.desconto);
-  const frete = toNumber(req.body.frete);
-  const observacoes = req.body.observacoes || null;
+  const desconto = roundMoney(req.body.desconto);
+  const frete = roundMoney(req.body.frete);
+  const observacoes = normalizeOptional(req.body.observacoes);
   const canalVenda = normalizeOptional(req.body.canal_venda) || "loja_fisica";
   const origemVenda = normalizeOptional(req.body.origem_venda);
   const temEntrega = req.body.tem_entrega === true;
   const entrega = req.body.entrega && typeof req.body.entrega === "object" ? req.body.entrega : null;
-  const statusPagamento = normalizeOptional(req.body.status_pagamento) || "pago";
-  const statusEntrega = temEntrega ? normalizeOptional(entrega?.status_entrega) || "pendente" : "sem_entrega";
+  const caixaId = req.body.caixa_id ? Number(req.body.caixa_id) : null;
 
   if (!itens.length) {
     return res.status(400).json({ message: "Informe pelo menos um item para a venda." });
@@ -72,6 +240,10 @@ async function criarVenda(req, res) {
 
   if (desconto < 0 || frete < 0) {
     return res.status(400).json({ message: "Desconto e frete não podem ser negativos." });
+  }
+
+  if (caixaId !== null && (!Number.isInteger(caixaId) || caixaId <= 0)) {
+    return res.status(400).json({ message: "Caixa inválido." });
   }
 
   if (temEntrega && !entrega) {
@@ -83,6 +255,8 @@ async function criarVenda(req, res) {
   try {
     await client.query("BEGIN");
 
+    await validarCaixa(client, caixaId);
+
     let subtotal = 0;
     const itensProcessados = [];
 
@@ -90,7 +264,7 @@ async function criarVenda(req, res) {
       const produtoId = Number(item.produto_id);
       const variacaoId = Number(item.variacao_id);
       const quantidade = Number(item.quantidade);
-      const precoUnitario = toNumber(item.preco_unitario);
+      const precoUnitario = roundMoney(item.preco_unitario);
 
       if (!produtoId || !variacaoId) {
         throw validationError("Produto e variação são obrigatórios para todos os itens.");
@@ -132,8 +306,8 @@ async function criarVenda(req, res) {
         throw validationError(`Estoque insuficiente para ${estoque.produto_nome} (${estoque.tamanho}/${estoque.cor}).`);
       }
 
-      const itemSubtotal = quantidade * precoUnitario;
-      subtotal += itemSubtotal;
+      const itemSubtotal = roundMoney(quantidade * precoUnitario);
+      subtotal = roundMoney(subtotal + itemSubtotal);
 
       itensProcessados.push({
         produto_id: estoque.produto_id,
@@ -147,59 +321,87 @@ async function criarVenda(req, res) {
       });
     }
 
-    const total = subtotal - desconto + frete;
+    const total = roundMoney(subtotal - desconto + frete);
 
     if (total < 0) {
       throw validationError("O total da venda não pode ser negativo.");
     }
 
+    const pagamentos = buildPagamentos(req.body, total);
+    const financeiro = validarPagamentos(pagamentos, total);
+    const formaPagamentoPrincipal = pagamentos.length === 1
+      ? pagamentos[0].forma_pagamento
+      : "misto";
+    const maquininhaVendaId = pagamentos.length === 1
+      ? pagamentos[0].maquininha_id
+      : req.body.maquininha_id ? Number(req.body.maquininha_id) : null;
+    const statusEntrega = temEntrega ? normalizeOptional(entrega?.status_entrega) || "pendente" : "sem_entrega";
+
     const vendaResult = await client.query(
       `
         INSERT INTO vendas (
           cliente_id,
+          usuario_id,
           subtotal,
           desconto,
           frete_valor,
           total,
+          total_pago,
+          troco,
+          valor_faltante,
           forma_pagamento,
           canal_venda,
           origem_venda,
           tem_entrega,
           status_pagamento,
           status_entrega,
+          caixa_id,
+          maquininha_id,
           status,
           observacoes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'finalizada', $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'finalizada', $18)
         RETURNING
           id,
           cliente_id,
+          usuario_id,
           subtotal,
           desconto,
           frete_valor,
           total,
+          total_pago,
+          troco,
+          valor_faltante,
           forma_pagamento,
           canal_venda,
           origem_venda,
           tem_entrega,
           status_pagamento,
           status_entrega,
+          caixa_id,
+          maquininha_id,
           status,
           observacoes,
           created_at;
       `,
       [
         clienteId,
+        usuarioId(req),
         subtotal,
         desconto,
         frete,
         total,
-        formaPagamento,
+        financeiro.totalPago,
+        financeiro.troco,
+        financeiro.valorFaltante,
+        formaPagamentoPrincipal,
         canalVenda,
         origemVenda,
         temEntrega,
-        statusPagamento,
+        financeiro.statusPagamento,
         statusEntrega,
+        caixaId,
+        maquininhaVendaId,
         observacoes,
       ]
     );
@@ -260,6 +462,86 @@ async function criarVenda(req, res) {
       );
 
       entregaCriada = entregaResult.rows[0];
+    }
+
+    const pagamentosCriados = [];
+
+    for (const pagamento of pagamentos) {
+      const pagamentoResult = await client.query(
+        `
+          INSERT INTO pagamentos_venda (
+            venda_id,
+            caixa_id,
+            maquininha_id,
+            forma_pagamento,
+            valor,
+            status,
+            observacoes
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *;
+        `,
+        [
+          venda.id,
+          caixaId,
+          pagamento.maquininha_id,
+          pagamento.forma_pagamento,
+          pagamento.valor,
+          financeiro.statusPagamento,
+          pagamento.observacoes,
+        ]
+      );
+
+      pagamentosCriados.push(pagamentoResult.rows[0]);
+
+      if (caixaId) {
+        await client.query(
+          `
+            INSERT INTO caixa_movimentacoes (
+              caixa_id,
+              usuario_id,
+              tipo,
+              forma_pagamento,
+              valor,
+              descricao,
+              venda_id
+            )
+            VALUES ($1, $2, 'venda', $3, $4, $5, $6);
+          `,
+          [
+            caixaId,
+            usuarioId(req),
+            pagamento.forma_pagamento,
+            pagamento.valor,
+            `Venda #${venda.id}`,
+            venda.id,
+          ]
+        );
+      }
+    }
+
+    if (caixaId && financeiro.troco > 0) {
+      await client.query(
+        `
+          INSERT INTO caixa_movimentacoes (
+            caixa_id,
+            usuario_id,
+            tipo,
+            forma_pagamento,
+            valor,
+            descricao,
+            venda_id
+          )
+          VALUES ($1, $2, 'saida', 'dinheiro', $3, $4, $5);
+        `,
+        [
+          caixaId,
+          usuarioId(req),
+          financeiro.troco,
+          `Troco da venda #${venda.id}`,
+          venda.id,
+        ]
+      );
     }
 
     const itensCriados = [];
@@ -334,6 +616,7 @@ async function criarVenda(req, res) {
       ...venda,
       entrega: entregaCriada,
       itens: itensCriados,
+      pagamentos: pagamentosCriados,
     });
   } catch (error) {
     await client.query("ROLLBACK");
@@ -353,5 +636,6 @@ async function criarVenda(req, res) {
 
 module.exports = {
   listarVendas,
+  detalharVenda,
   criarVenda,
 };

@@ -26,10 +26,11 @@
       <nav class="main-nav" aria-label="Navegação principal">
         <button class="nav-link" data-nav="home" type="button">Início</button>
         <button class="nav-link" data-nav="catalogo" type="button">Catálogo</button>
-        <button class="nav-link" data-nav="pdv" type="button">PDV</button>
-        <button class="nav-link" data-nav="gestao" type="button">Gestão</button>
-        <button class="nav-link" data-nav="movimentacoes" type="button">Movimentações</button>
-        <button class="nav-link" data-nav="fornecedores" type="button">Fornecedores</button>
+        <button class="nav-link admin-only" data-nav="pdv" type="button" hidden>PDV</button>
+        <button class="nav-link admin-only" data-nav="gestao" type="button" hidden>Gestão</button>
+        <button class="nav-link admin-only" data-nav="movimentacoes" type="button" hidden>Movimentações</button>
+        <button class="nav-link admin-only" data-nav="fornecedores" type="button" hidden>Fornecedores</button>
+        <button class="nav-link admin-only" data-nav="maquininhas" type="button" hidden>Maquininhas</button>
       </nav>
 
       <div class="topbar-actions">
@@ -314,6 +315,19 @@
       <div class="history-list" id="historyList"></div>
     </section>
 
+    <section class="screen" id="screen-maquininhas">
+      <div class="section-head">
+        <div><h2 class="section-title">Maquininhas</h2><p class="section-sub">Terminais, vínculos com PDVs e referências de integração.</p></div>
+        <button class="btn btn-pink" id="btnAddMachine" type="button">Cadastrar maquininha</button>
+      </div>
+      <div class="machine-summary cards-grid" id="machineSummary"></div>
+      <div class="mp-notice"><strong>Integração Mercado Pago</strong><p>Integração Mercado Pago será ativada em etapa futura. Não insira tokens reais aqui.</p></div>
+      <div class="panel">
+        <div class="machine-toolbar"><input id="machineSearch" type="search" placeholder="Pesquisar nome, tipo ou PDV..." /><select id="machineStatus"><option value="todos">Todas</option><option value="ativas">Ativas</option><option value="inativas">Inativas</option></select></div>
+        <div class="stock-table-wrap"><table class="stock-table" id="machineTable"></table></div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ===================== RODAPÉ ===================== -->
@@ -389,6 +403,7 @@
     </div>
     <div class="footer-bottom">
       <p>© 2026 Gisele Flávia Modas. Todos os direitos reservados.</p>
+      <button class="footer-admin-link" id="btnAdminAccess" type="button">Área administrativa</button>
     </div>
   </footer>
 
@@ -529,6 +544,10 @@
       </form>
     </div>
   </div>
+
+  <div class="modal-overlay" id="pinModal" aria-hidden="true"><div class="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle"><div class="modal-head"><h3 id="pinTitle">PIN administrativo</h3><button class="modal-close" id="pinClose" type="button">&times;</button></div><form id="pinForm" class="modal-body"><p class="login-sub">Confirme o PIN para continuar nesta área sensível.</p><div class="form-row"><label for="adminPin">PIN</label><input type="password" id="adminPin" required autocomplete="off" /></div><p class="login-error" id="pinError"></p><div class="modal-foot"><button type="button" class="btn btn-ghost" id="pinCancel">Cancelar</button><button class="btn btn-pink" type="submit">Validar</button></div></form></div></div>
+
+  <div class="modal-overlay" id="machineModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3 id="machineModalTitle">Cadastrar maquininha</h3><button class="modal-close" id="machineClose" type="button">&times;</button></div><form id="machineForm" class="modal-body"><input id="machineId" type="hidden" /><div class="form-grid"><div class="form-row"><label for="machineName">Nome</label><input id="machineName" required /></div><div class="form-row"><label for="machineType">Tipo</label><select id="machineType"><option value="loja">Loja</option><option value="motoboy">Motoboy</option></select></div><div class="form-row"><label for="machineProvider">Provedor</label><select id="machineProvider"><option value="manual">Manual</option><option value="mercado_pago">Mercado Pago</option></select></div><div class="form-row"><label for="machinePdv">PDV</label><select id="machinePdv"><option value="">Sem vínculo</option><option value="site">Site</option><option value="pdv_loja_1">PDV Loja 1</option><option value="pdv_loja_2">PDV Loja 2</option><option value="motoboy">Motoboy</option></select></div><div class="form-row"><label for="machinePos">POS ID</label><input id="machinePos" /></div><div class="form-row"><label for="machineStore">Store ID</label><input id="machineStore" /></div></div><div class="form-row"><label for="machineNotes">Observações</label><input id="machineNotes" /></div><label class="form-check"><input id="machineActive" type="checkbox" checked /> Ativa</label><p class="login-error" id="machineError"></p><div class="modal-foot"><button class="btn btn-ghost" id="machineCancel" type="button">Cancelar</button><button class="btn btn-pink" type="submit">Salvar</button></div></form></div></div>
 
   <div class="modal-overlay" id="productDetailModal" aria-hidden="true">
     <div class="modal product-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">

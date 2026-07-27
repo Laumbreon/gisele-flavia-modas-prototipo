@@ -7,7 +7,8 @@
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
 const API_BASE_URL = "http://localhost:3001/api";
 const AUTH_STORAGE_KEY = "gfm_admin_auth";
-const ADMIN_SCREENS = new Set(["gestao", "movimentacoes", "fornecedores", "historico"]);
+const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas"]);
+const ADMIN_PIN_SESSION_KEY = "adminPinOk";
 
 // Gradientes por categoria (placeholder visual com CSS)
 const CATEGORY_GRADIENTS = {
@@ -147,6 +148,9 @@ let localShippingQuote = null;
 let fretesBairro = [];
 let freightStatusFilter = "todos";
 let freightDeactivateConfirmId = null;
+let maquininhas = [];
+let adminPinValue = "";
+let pendingPinAction = null;
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -216,6 +220,10 @@ function usuarioLogado() {
   return Boolean(adminSession?.token && adminSession?.usuario);
 }
 
+function usuarioAdministrador() {
+  return usuarioLogado() && ["dona", "super_admin"].includes(adminSession.usuario.tipo);
+}
+
 function getAuthHeaders(extraHeaders = {}) {
   return {
     ...extraHeaders,
@@ -241,6 +249,8 @@ async function fetchAdmin(path, options = {}) {
 
 function limparLogin() {
   adminSession = null;
+  adminPinValue = "";
+  sessionStorage.removeItem(ADMIN_PIN_SESSION_KEY);
   localStorage.removeItem(AUTH_STORAGE_KEY);
   atualizarAuthUi();
 }
@@ -248,6 +258,36 @@ function limparLogin() {
 function atualizarAuthUi() {
   const logoutBtn = $("#btnLogout");
   if (logoutBtn) logoutBtn.hidden = !usuarioLogado();
+  $$(".admin-only").forEach(element => { element.hidden = !usuarioAdministrador(); });
+  if ($("#storyTrack")) buildStoryNav();
+}
+
+function solicitarPin(callback) {
+  pendingPinAction = callback;
+  $("#pinError").textContent = "";
+  $("#pinForm").reset();
+  openModal("#pinModal");
+  setTimeout(() => $("#adminPin")?.focus(), 50);
+}
+
+async function validarPin(event) {
+  event.preventDefault();
+  const pin = $("#adminPin").value;
+  const response = await fetchAdmin("/admin/validar-pin", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin })
+  });
+  const data = await response?.json().catch(() => ({}));
+  if (!response?.ok) { $("#pinError").textContent = data.message || "PIN inválido."; return; }
+  adminPinValue = pin;
+  sessionStorage.setItem(ADMIN_PIN_SESSION_KEY, "true");
+  closeModal("#pinModal");
+  const action = pendingPinAction; pendingPinAction = null;
+  if (action) action();
+}
+
+function comPin(callback) {
+  if (adminPinValue && sessionStorage.getItem(ADMIN_PIN_SESSION_KEY) === "true") callback(adminPinValue);
+  else solicitarPin(() => callback(adminPinValue));
 }
 
 function abrirLoginAdmin(callback = null) {
@@ -310,6 +350,10 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
+    if (!usuarioAdministrador()) {
+      limparLogin();
+      throw new Error("Esta área aceita somente dona ou super admin.");
+    }
     fecharLoginAdmin();
     showToast("Login realizado com sucesso");
     await Promise.allSettled([
@@ -804,7 +848,7 @@ async function desativarFreteBairro(id) {
 
 function buildStoryNav() {
   const track = $("#storyTrack");
-  track.innerHTML = NAV_ITEMS.map(item => `
+  track.innerHTML = NAV_ITEMS.filter(item => !ADMIN_SCREENS.has(item.screen) || usuarioAdministrador()).map(item => `
     <button class="story-item" type="button" data-key="${item.key}" data-screen="${item.screen}" ${item.category ? `data-category="${item.category}"` : ""}>
       <span class="story-ring"><span class="story-inner">${ICONS[item.icon]}</span></span>
       <span class="story-label">${item.label}</span>
@@ -819,8 +863,12 @@ function buildStoryNav() {
 }
 
 function navigate(screen, category = "Todos") {
-  if (ADMIN_SCREENS.has(screen) && !usuarioLogado()) {
+  if (ADMIN_SCREENS.has(screen) && !usuarioAdministrador()) {
     abrirLoginAdmin(() => navigate(screen, category));
+    return;
+  }
+  if (screen === "maquininhas" && (!adminPinValue || sessionStorage.getItem(ADMIN_PIN_SESSION_KEY) !== "true")) {
+    solicitarPin(() => navigate(screen, category));
     return;
   }
 
@@ -845,6 +893,7 @@ function navigate(screen, category = "Todos") {
     renderFretesBairro();
     carregarFretesBairro();
   }
+  if (screen === "maquininhas") carregarMaquininhas();
   if (screen === "pdv") renderPdv($("#pdvSearch").value);
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
@@ -2108,6 +2157,67 @@ function openReportModal() {
   openModal("#reportModal");
 }
 
+async function carregarMaquininhas() {
+  const response = await fetchAdmin("/maquininhas");
+  if (!response) return;
+  const data = await response.json().catch(() => []);
+  if (!response.ok) return showToast(data.message || "Não foi possível carregar as maquininhas");
+  maquininhas = data;
+  renderMaquininhas();
+}
+
+function renderMaquininhas() {
+  const busca = ($("#machineSearch")?.value || "").toLowerCase();
+  const status = $("#machineStatus")?.value || "todos";
+  const rows = maquininhas.filter(m => {
+    const texto = `${m.nome} ${m.tipo} ${m.pdv_codigo || ""}`.toLowerCase();
+    return texto.includes(busca) && (status === "todos" || (status === "ativas") === m.ativo);
+  });
+  $("#machineSummary").innerHTML = [
+    ["Total cadastradas", maquininhas.length], ["Ativas", maquininhas.filter(m => m.ativo).length],
+    ["Integradas Mercado Pago", maquininhas.filter(m => m.mercado_pago_integrada).length],
+    ["Vinculadas a PDV", maquininhas.filter(m => m.pdv_codigo).length]
+  ].map(([label,value]) => `<div class="stat-card"><span>${label}</span><strong>${value}</strong></div>`).join("");
+  $("#machineTable").innerHTML = `<thead><tr><th>Nome</th><th>Tipo</th><th>Provedor</th><th>PDV</th><th>Mercado Pago</th><th>Status</th><th>Ações</th></tr></thead><tbody>${rows.map(m => `<tr><td>${m.nome}</td><td>${m.tipo}</td><td>${m.provedor_pagamento}</td><td>${m.pdv_codigo || "—"}</td><td>${m.mercado_pago_integrada ? "Integrada" : "Preparação"}</td><td>${m.ativo ? "Ativa" : "Inativa"}</td><td><button class="link-btn machine-edit" data-id="${m.id}">Editar</button>${m.ativo ? `<button class="link-btn machine-disable" data-id="${m.id}">Desativar</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7">Nenhuma maquininha encontrada.</td></tr>`}</tbody>`;
+  $$(".machine-edit").forEach(b => b.addEventListener("click", () => abrirMaquininha(maquininhas.find(m => m.id === Number(b.dataset.id)))));
+  $$(".machine-disable").forEach(b => b.addEventListener("click", () => desativarMaquininha(Number(b.dataset.id))));
+}
+
+function abrirMaquininha(machine = null) {
+  $("#machineForm").reset();
+  $("#machineId").value = machine?.id || ""; $("#machineName").value = machine?.nome || "";
+  $("#machineType").value = machine?.tipo || "loja"; $("#machineProvider").value = machine?.provedor_pagamento || "manual";
+  $("#machinePdv").value = machine?.pdv_codigo || ""; $("#machinePos").value = machine?.mercado_pago_pos_id || "";
+  $("#machineStore").value = machine?.mercado_pago_store_id || ""; $("#machineNotes").value = machine?.observacoes || "";
+  $("#machineActive").checked = machine?.ativo !== false; $("#machineModalTitle").textContent = machine ? "Editar maquininha" : "Cadastrar maquininha";
+  openModal("#machineModal");
+}
+
+async function salvarMaquininha(event) {
+  event.preventDefault();
+  comPin(async pin => {
+    const id = $("#machineId").value;
+    const body = { nome: $("#machineName").value, tipo: $("#machineType").value, provedor_pagamento: $("#machineProvider").value,
+      pdv_codigo: $("#machinePdv").value || null, mercado_pago_pos_id: $("#machinePos").value || null,
+      mercado_pago_store_id: $("#machineStore").value || null, observacoes: $("#machineNotes").value || null,
+      ativo: $("#machineActive").checked, terminal_tipo: $("#machineType").value };
+    const response = await fetchAdmin(`/maquininhas${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json", "X-Admin-Pin": pin }, body: JSON.stringify(body) });
+    const data = await response?.json().catch(() => ({}));
+    if (!response?.ok) return showToast(data.message || "Não foi possível salvar");
+    closeModal("#machineModal"); showToast("Maquininha salva com sucesso"); carregarMaquininhas();
+  });
+}
+
+function desativarMaquininha(id) {
+  if (!confirm("Deseja desativar esta maquininha?")) return;
+  comPin(async pin => {
+    const response = await fetchAdmin(`/maquininhas/${id}`, { method: "DELETE", headers: { "X-Admin-Pin": pin } });
+    const data = await response?.json().catch(() => ({}));
+    if (!response?.ok) return showToast(data.message || "Não foi possível desativar");
+    showToast("Maquininha desativada"); carregarMaquininhas();
+  });
+}
+
 /* ----------------- MODAIS (helpers) ----------------- */
 function openModal(sel) {
   const m = $(sel);
@@ -2151,6 +2261,7 @@ function init() {
   // carrinho -> abre PDV
   $("#cartButton").addEventListener("click", () => navigate("pdv"));
   $("#btnLogout").addEventListener("click", logoutAdmin);
+  $("#btnAdminAccess").addEventListener("click", () => usuarioAdministrador() ? navigate("gestao") : abrirLoginAdmin(() => navigate("gestao")));
 
   // login administrativo
   $("#loginForm").addEventListener("submit", handleLoginSubmit);
@@ -2159,6 +2270,15 @@ function init() {
   $("#loginModal").addEventListener("click", (e) => {
     if (e.target.id === "loginModal") cancelarLoginAdmin();
   });
+  $("#pinForm").addEventListener("submit", validarPin);
+  $("#pinClose").addEventListener("click", () => closeModal("#pinModal"));
+  $("#pinCancel").addEventListener("click", () => closeModal("#pinModal"));
+  $("#btnAddMachine").addEventListener("click", () => abrirMaquininha());
+  $("#machineForm").addEventListener("submit", salvarMaquininha);
+  $("#machineClose").addEventListener("click", () => closeModal("#machineModal"));
+  $("#machineCancel").addEventListener("click", () => closeModal("#machineModal"));
+  $("#machineSearch").addEventListener("input", renderMaquininhas);
+  $("#machineStatus").addEventListener("change", renderMaquininhas);
 
   // CRUD de produto
   $("#btnAddProduct").addEventListener("click", () => openProductModal());

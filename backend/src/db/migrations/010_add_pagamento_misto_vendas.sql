@@ -1,0 +1,5 @@
+-- Suporte a pagamento misto, troco e valor faltante em vendas
+
+ALTER TABLE vendas ADD COLUMN IF NOT EXISTS total_pago NUMERIC(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE vendas ADD COLUMN IF NOT EXISTS troco NUMERIC(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE vendas ADD COLUMN IF NOT EXISTS valor_faltante NUMERIC(10,2) NOT NULL DEFAULT 0;

@@ -1874,6 +1874,14 @@ video.detail-media-main { object-fit: contain; }
   text-align: center;
 }
 .footer-bottom p { color: #9CA3AF; font-size: 12px; }
+.footer-admin-link { margin-top: 8px; border: 0; background: transparent; color: #9CA3AF; cursor: pointer; font: inherit; font-size: 11px; text-decoration: underline; }
+.machine-summary { margin-bottom: 20px; }
+.machine-toolbar { display: grid; grid-template-columns: 1fr 180px; gap: 12px; margin-bottom: 18px; }
+.machine-toolbar input, .machine-toolbar select { padding: 11px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; }
+.mp-notice { border-left: 4px solid var(--gold); background: var(--gold-soft); border-radius: var(--radius-sm); margin-bottom: 20px; padding: 16px; }
+.mp-notice strong { color: var(--green-brand); }
+.mp-notice p { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+.form-check { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
 
 /* ===================== TOAST ===================== */
 .toast {

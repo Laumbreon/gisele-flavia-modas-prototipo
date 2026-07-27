@@ -25,7 +25,11 @@ CROSS JOIN (VALUES
   ('relatorios.ver'),
   ('configuracoes.editar'),
   ('funcionarios.gerenciar'),
-  ('etiquetas.imprimir')
+  ('etiquetas.imprimir'),
+  ('admin.sensivel'),
+  ('maquininhas.ver'),
+  ('maquininhas.gerenciar'),
+  ('mercado_pago.configurar')
 ) AS p(permissao)
 WHERE u.email = 'dona@giseleflavia.com.br'
 ON CONFLICT (usuario_id, permissao) DO UPDATE
@@ -37,6 +41,18 @@ VALUES
   ('Flor de Linho', 'Blusas e camisas', 'Helena Moura', '(85) 97777-4300', 'contato@flordelinho.com.br', 'Fortaleza', 'CE', '2026-06-08', 'ativo'),
   ('Verde Chic Confeccoes', 'Calcas e alfaiataria', 'Paula Reis', '(62) 95555-8100', 'paula@verdechic.com.br', 'Goiania', 'GO', '2026-06-12', 'ativo')
 ON CONFLICT DO NOTHING;
+
+INSERT INTO maquininhas (nome, tipo, ativo, observacoes, pdv_codigo, terminal_tipo)
+SELECT 'Maquininha Loja 1', 'loja', TRUE, 'Seed inicial', 'pdv_loja_1', 'loja'
+WHERE NOT EXISTS (SELECT 1 FROM maquininhas WHERE nome = 'Maquininha Loja 1');
+
+INSERT INTO maquininhas (nome, tipo, ativo, observacoes, pdv_codigo, terminal_tipo)
+SELECT 'Maquininha Loja 2', 'loja', TRUE, 'Seed inicial', 'pdv_loja_2', 'loja'
+WHERE NOT EXISTS (SELECT 1 FROM maquininhas WHERE nome = 'Maquininha Loja 2');
+
+INSERT INTO maquininhas (nome, tipo, ativo, observacoes, pdv_codigo, terminal_tipo)
+SELECT 'Maquininha Motoboy', 'motoboy', TRUE, 'Seed inicial', 'motoboy', 'motoboy'
+WHERE NOT EXISTS (SELECT 1 FROM maquininhas WHERE nome = 'Maquininha Motoboy');
 
 INSERT INTO produtos (fornecedor_id, nome, categoria, descricao, preco, preco_promocional, status)
 VALUES

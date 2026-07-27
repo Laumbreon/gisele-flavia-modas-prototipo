@@ -6,6 +6,7 @@ const cors = require("cors");
 const authMiddleware = require("./src/middlewares/auth.middleware");
 
 const authRoutes = require("./src/routes/auth.routes");
+const adminRoutes = require("./src/routes/admin.routes");
 const healthRoutes = require("./src/routes/health.routes");
 const publicProdutosRoutes = require("./src/routes/public-produtos.routes");
 const produtosRoutes = require("./src/routes/produtos.routes");
@@ -15,6 +16,8 @@ const estoqueRoutes = require("./src/routes/estoque.routes");
 const movimentacoesRoutes = require("./src/routes/movimentacoes.routes");
 const fornecedoresRoutes = require("./src/routes/fornecedores.routes");
 const fretesBairroRoutes = require("./src/routes/fretes-bairro.routes");
+const caixasRoutes = require("./src/routes/caixas.routes");
+const maquininhasRoutes = require("./src/routes/maquininhas.routes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -23,6 +26,7 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/public/produtos", publicProdutosRoutes);
 app.use("/api/public/frete-bairro", fretesBairroRoutes.publicRouter);
@@ -33,6 +37,8 @@ app.use("/api/estoque", authMiddleware, estoqueRoutes);
 app.use("/api/movimentacoes", authMiddleware, movimentacoesRoutes);
 app.use("/api/fornecedores", authMiddleware, fornecedoresRoutes);
 app.use("/api/fretes-bairro", authMiddleware, fretesBairroRoutes.router);
+app.use("/api/caixas", authMiddleware, caixasRoutes);
+app.use("/api/maquininhas", authMiddleware, maquininhasRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Rota não encontrada" });
