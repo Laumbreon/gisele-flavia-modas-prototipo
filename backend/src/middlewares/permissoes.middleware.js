@@ -4,7 +4,7 @@ function permissoesMiddleware(permissoes) {
   const aceitas = Array.isArray(permissoes) ? permissoes : [permissoes];
   return async (req, res, next) => {
     if (!req.usuario?.id) return res.status(401).json({ message: "Usuário não autenticado." });
-    if (req.usuario.tipo === "super_admin") return next();
+    if (["dona", "super_admin"].includes(req.usuario.tipo)) return next();
 
     try {
       const result = await query(

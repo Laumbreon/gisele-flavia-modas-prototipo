@@ -156,6 +156,7 @@ let pdvCaixa = null;
 let pdvMaquininhas = [];
 let pdvFrete = null;
 let pdvProdutosPublicos = [];
+let ultimaVendaPdv = null;
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -234,7 +235,7 @@ function temPermissao(nome) {
 }
 
 function podeAcessarPdv() {
-  return usuarioLogado() && (usuarioAdministrador() || temPermissao("vendas.criar"));
+  return usuarioLogado() && (usuarioAdministrador() || temPermissao("pdv.acessar") || temPermissao("vendas.criar"));
 }
 
 function getAuthHeaders(extraHeaders = {}) {
@@ -328,6 +329,8 @@ function logoutAdmin() {
   pdvCaixa = null;
   pdvMaquininhas = [];
   pdvFrete = null;
+  ultimaVendaPdv = null;
+  if ($("#receiptPrintArea")) $("#receiptPrintArea").innerHTML = "";
   limparLogin();
   showToast("Sessao administrativa encerrada");
   if (ADMIN_SCREENS.has($(".screen.active")?.id?.replace("screen-", ""))) {
@@ -337,7 +340,7 @@ function logoutAdmin() {
 
 function tratarNaoAutorizado() {
   limparLogin();
-  showToast("Entre novamente para acessar a area administrativa");
+  showToast("Sessão expirada ou token inválido. Entre novamente.");
   abrirLoginAdmin();
 }
 
@@ -368,19 +371,18 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
-    if (!usuarioAdministrador() && !temPermissao("vendas.criar")) {
+    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar")) {
       limparLogin();
       throw new Error("Usuário sem permissão para acessar o PDV.");
     }
     fecharLoginAdmin();
     showToast("Login realizado com sucesso");
-    await Promise.allSettled([
-      carregarEstoqueDaApi(),
-      carregarMovimentacoesDaApi(),
-      carregarFornecedoresDaApi(),
-      carregarClientesDaApi(),
-      carregarFretesBairro(),
-    ]);
+    if (usuarioAdministrador()) {
+      await Promise.allSettled([
+        carregarEstoqueDaApi(), carregarMovimentacoesDaApi(), carregarFornecedoresDaApi(),
+        carregarClientesDaApi(), carregarFretesBairro(),
+      ]);
+    }
     const action = pendingAdminAction;
     pendingAdminAction = null;
     if (action) action();
@@ -882,6 +884,10 @@ function buildStoryNav() {
 
 function navigate(screen, category = "Todos") {
   if (screen === "pdv" && !podeAcessarPdv()) {
+    if (usuarioLogado()) {
+      showToast("Você não tem permissão para acessar o PDV.");
+      return;
+    }
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
@@ -913,6 +919,7 @@ function navigate(screen, category = "Todos") {
   if (screen === "gestao") {
     renderStockTable();
     renderFretesBairro();
+    carregarUsuariosAdmin();
     carregarFretesBairro();
   }
   if (screen === "maquininhas") carregarMaquininhas();
@@ -2199,8 +2206,12 @@ async function carregarCaixaAberto() {
   pdvCaixa = data || null;
   $("#pdvCashBadge").textContent = pdvCaixa ? "Aberto" : "Fechado";
   $("#pdvCashBadge").className = `status-badge ${pdvCaixa ? "open" : "closed"}`;
-  $("#pdvOpenCashForm").hidden = Boolean(pdvCaixa); $("#pdvCashActions").hidden = !pdvCaixa;
-  $("#pdvCashStatus").innerHTML = pdvCaixa ? `<dl class="cash-status-list"><div><dt>ID</dt><dd>#${pdvCaixa.id}</dd></div><div><dt>Valor inicial</dt><dd>${money(Number(pdvCaixa.valor_inicial))}</dd></div><div><dt>Abertura</dt><dd>${new Date(pdvCaixa.data_abertura).toLocaleString("pt-BR")}</dd></div></dl>` : `<p class="empty-note">Nenhum caixa aberto. Abra um caixa para iniciar as vendas.</p>`;
+  const podeAbrir = usuarioAdministrador() || temPermissao("caixa.abrir");
+  const podeMovimentar = usuarioAdministrador() || temPermissao("caixa.movimentar");
+  const podeFechar = usuarioAdministrador() || temPermissao("caixa.fechar");
+  $("#pdvOpenCashForm").hidden = Boolean(pdvCaixa) || !podeAbrir; $("#pdvCashActions").hidden = !pdvCaixa || !podeMovimentar;
+  $(".cash-close").hidden = !pdvCaixa || !podeFechar;
+  $("#pdvCashStatus").innerHTML = pdvCaixa ? `<dl class="cash-status-list"><div><dt>ID</dt><dd>#${pdvCaixa.id}</dd></div><div><dt>Valor inicial</dt><dd>${money(Number(pdvCaixa.valor_inicial))}</dd></div><div><dt>Abertura</dt><dd>${new Date(pdvCaixa.data_abertura).toLocaleString("pt-BR")}</dd></div></dl>` : `<p class="empty-note">Nenhum caixa aberto.${podeAbrir ? " Abra um caixa para iniciar as vendas." : " Aguarde uma responsável abrir o caixa."}</p>`;
   $("#pdvFinalize").disabled = !pdvCaixa;
 }
 
@@ -2305,12 +2316,76 @@ async function finalizarVendaPdv() {
   const entrega=local?{tipo_entrega:"entrega_local",destinatario_nome:$("#pdvRecipient").value.trim(),destinatario_telefone:$("#pdvPhone").value.trim(),cidade:$("#pdvCity").value.trim(),estado:$("#pdvState").value.trim(),bairro:$("#pdvDistrict").value.trim(),endereco:$("#pdvAddress").value.trim(),numero:$("#pdvNumber").value.trim(),complemento:$("#pdvComplement").value.trim(),prazo_estimado:pdvFrete?.prazo||null}:undefined;
   const payload={cliente_id:null,itens:pdvCart.map(i=>({produto_id:i.produto_id,variacao_id:i.variacao_id,quantidade:i.quantidade,preco_unitario:i.preco})),desconto:valorPdv("#pdvDiscount"),frete:Number(pdvFrete?.valor||0),canal_venda:"loja_fisica",origem_venda:"pdv",caixa_id:pdvCaixa.id,pagamentos,tem_entrega:local,observacoes:$("#pdvSaleNotes").value.trim()||null}; if(entrega)payload.entrega=entrega;
   const response=await fetchAdmin("/vendas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const data=await response?.json().catch(()=>({})); if(!response?.ok)return showToast(data.message||"Não foi possível finalizar a venda.");
-  $("#pdvSaleResult").innerHTML=`<strong>Venda #${data.id} finalizada</strong><span>Total: ${money(Number(data.total))} · Pago: ${money(Number(data.total_pago))} · Troco: ${money(Number(data.troco))}</span>`; pdvCart=[];pdvFrete=null;["#payCash","#payPix","#payDebit","#payCredit","#pdvDiscount","#pdvSaleNotes"].forEach(id=>{$(id).value="";}); atualizarCarrinhoPdv(); await Promise.allSettled([carregarCaixaAberto(),carregarProdutosPdv()]);
+  ultimaVendaPdv=data;
+  $("#pdvSaleResult").innerHTML=`<strong>Venda #${data.id} finalizada</strong><span>Total: ${money(Number(data.total))} · Pago: ${money(Number(data.total_pago))} · Troco: ${money(Number(data.troco))}</span><div class="sale-result-actions"><button class="btn btn-pink btn-sm" id="printLastReceipt" type="button">Imprimir comprovante</button><button class="btn btn-ghost btn-sm" id="startNewSale" type="button">Nova venda</button></div>`;
+  $("#printLastReceipt").addEventListener("click",()=>abrirPreviewComprovante(ultimaVendaPdv));
+  $("#startNewSale").addEventListener("click",iniciarNovaVendaPdv);
+  pdvCart=[];pdvFrete=null;["#payCash","#payPix","#payDebit","#payCredit","#pdvDiscount","#pdvSaleNotes"].forEach(id=>{$(id).value="";}); atualizarCarrinhoPdv(); await Promise.allSettled([carregarCaixaAberto(),carregarProdutosPdv()]);
+}
+
+function formatarMoeda(valor) { return money(Number(valor || 0)); }
+function escaparHtml(valor) { return String(valor ?? "").replace(/[&<>"']/g, caractere => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"})[caractere]); }
+
+function montarHtmlComprovanteVenda(venda) {
+  const itens = Array.isArray(venda?.itens) ? venda.itens : [];
+  const pagamentos = Array.isArray(venda?.pagamentos) ? venda.pagamentos : [];
+  const entrega = venda?.entrega || null;
+  const dataVenda = venda?.created_at || venda?.data || new Date().toISOString();
+  const rotulosPagamento = { dinheiro: "Dinheiro", pix: "Pix", debito: "Débito", credito: "Crédito" };
+  const itensHtml = itens.length ? itens.map(item => {
+    const nome = item.produto_nome || item.nome || "Produto";
+    const quantidade = Number(item.quantidade || 0);
+    const preco = Number(item.preco_unitario || item.preco || 0);
+    const subtotal = Number(item.subtotal ?? quantidade * preco);
+    return `<div class="receipt-item"><strong>${escaparHtml(nome)}</strong><small>${escaparHtml([item.tamanho, item.cor].filter(Boolean).join(" / ") || "Sem variação")}</small><div><span>${quantidade} x ${formatarMoeda(preco)}</span><b>${formatarMoeda(subtotal)}</b></div></div>`;
+  }).join("") : `<p class="receipt-empty">Itens não disponíveis.</p>`;
+  const pagamentosHtml = pagamentos.length ? pagamentos.map(p => `<div><span>${escaparHtml(rotulosPagamento[p.forma_pagamento] || p.forma_pagamento || "Pagamento")}</span><strong>${formatarMoeda(p.valor)}</strong></div>`).join("") : `<div><span>${escaparHtml(venda?.forma_pagamento || "Pagamento")}</span><strong>${formatarMoeda(venda?.total_pago)}</strong></div>`;
+  const entregaHtml = entrega ? `<section class="receipt-delivery"><h4>ENTREGA</h4><p>${escaparHtml(entrega.destinatario_nome || "")}${entrega.destinatario_telefone ? ` · ${escaparHtml(entrega.destinatario_telefone)}` : ""}</p><p>${escaparHtml([entrega.bairro, entrega.cidade].filter(Boolean).join(" / "))}</p><p>${escaparHtml([entrega.endereco, entrega.numero].filter(Boolean).join(", "))}</p></section>` : "";
+  return `<header class="receipt-header"><h2>Gisele Flávia Modas</h2><p>Boutique Feminina</p></header><div class="receipt-separator"></div><section class="receipt-meta"><p>${new Date(dataVenda).toLocaleString("pt-BR")}</p><p><strong>Venda #${escaparHtml(venda?.id || "—")}</strong>${venda?.caixa_id ? ` · Caixa #${escaparHtml(venda.caixa_id)}` : ""}</p>${venda?.atendente || venda?.usuario || venda?.usuario_nome ? `<p>Atendente: ${escaparHtml(venda.atendente || venda.usuario || venda.usuario_nome)}</p>` : ""}</section><div class="receipt-separator"></div><section>${itensHtml}</section><div class="receipt-separator"></div><section class="receipt-values"><div><span>Subtotal</span><strong>${formatarMoeda(venda?.subtotal)}</strong></div><div><span>Desconto</span><strong>-${formatarMoeda(venda?.desconto)}</strong></div><div><span>Frete</span><strong>${formatarMoeda(venda?.frete_valor ?? venda?.frete)}</strong></div><div class="receipt-total"><span>TOTAL</span><strong>${formatarMoeda(venda?.total)}</strong></div><div><span>Total pago</span><strong>${formatarMoeda(venda?.total_pago)}</strong></div><div><span>Troco</span><strong>${formatarMoeda(venda?.troco)}</strong></div>${Number(venda?.valor_faltante || 0) > 0 ? `<div><span>Valor faltante</span><strong>${formatarMoeda(venda.valor_faltante)}</strong></div>` : ""}</section><div class="receipt-separator"></div><section class="receipt-payments"><h4>PAGAMENTOS</h4>${pagamentosHtml}</section>${entregaHtml}<div class="receipt-separator"></div><footer class="receipt-footer"><strong>Obrigado pela preferência!</strong><p>@gisele_flavia_modas</p><p>Comprovante não fiscal</p></footer>`;
+}
+
+function abrirPreviewComprovante(venda) {
+  if (!venda) return showToast("Nenhuma venda disponível para impressão.");
+  ultimaVendaPdv = venda;
+  const html = montarHtmlComprovanteVenda(venda);
+  $("#receiptPreview").innerHTML = html; $("#receiptPrintArea").innerHTML = html;
+  openModal("#receiptModal");
+}
+
+function imprimirComprovanteVenda(venda) {
+  if (venda) { ultimaVendaPdv = venda; $("#receiptPrintArea").innerHTML = montarHtmlComprovanteVenda(venda); }
+  if (!ultimaVendaPdv) return showToast("Nenhuma venda disponível para impressão.");
+  window.print();
+}
+
+async function buscarVendaParaReimpressao(event) {
+  event?.preventDefault();
+  if (!usuarioLogado()) return abrirLoginAdmin(() => buscarVendaParaReimpressao());
+  const id = Number($("#receiptSaleId").value);
+  if (!Number.isInteger(id) || id <= 0) return $("#receiptSearchStatus").textContent = "Informe um ID de venda válido.";
+  $("#receiptSearchStatus").textContent = "Buscando venda...";
+  try {
+    const response = await fetchAdmin(`/vendas/${id}`); const data = await response?.json().catch(() => ({}));
+    if (!response?.ok) { $("#receiptSearchStatus").textContent = response?.status === 404 ? "Venda não encontrada." : data.message || "Não foi possível buscar a venda."; return; }
+    $("#receiptSearchStatus").textContent = `Venda #${id} encontrada.`; abrirPreviewComprovante(data);
+  } catch (error) { $("#receiptSearchStatus").textContent = "Backend indisponível. Tente novamente em instantes."; }
+}
+
+function iniciarNovaVendaPdv() {
+  $("#pdvSaleResult").innerHTML = ""; $("#pdvStoreSearch").value = ""; $("#pdvSearchResults").innerHTML = ""; $("#pdvSearchStatus").textContent = ""; $("#pdvStoreSearch").focus();
 }
 
 function abrirModalMovimentacaoCaixa(tipo) { if(!pdvCaixa)return showToast("Não há caixa aberto."); $("#cashMoveForm").reset(); $("#cashMoveType").value=tipo; $("#cashMoveTitle").textContent=tipo==="reforco"?"Reforço de caixa":"Sangria de caixa"; openModal("#cashMoveModal"); }
 async function salvarMovimentacaoCaixa(event) { event.preventDefault(); const valor=valorPdv("#cashMoveValue"); if(valor<=0)return $("#cashMoveError").textContent="Informe um valor positivo."; const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/movimentacoes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:$("#cashMoveType").value,valor,forma_pagamento:$("#cashMovePayment").value,descricao:$("#cashMoveDescription").value.trim()})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return $("#cashMoveError").textContent=data.message||"Não foi possível registrar.";closeModal("#cashMoveModal");showToast("Movimentação registrada");await carregarCaixaAberto();}
 async function fecharCaixaPdv(event) { event.preventDefault();if(!pdvCaixa)return showToast("Não há caixa aberto.");if(!confirm(`Confirma o fechamento do caixa #${pdvCaixa.id}?`))return;const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/fechar`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dinheiro:valorPdv("#closeCash"),pix:valorPdv("#closePix"),debito:valorPdv("#closeDebit"),credito:valorPdv("#closeCredit"),observacoes:$("#closeNotes").value.trim()||null})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(data.message||"Não foi possível fechar o caixa.");$("#pdvCloseResult").innerHTML=`<div class="sale-success"><strong>Caixa fechado</strong><span>Sistema: ${money(Number(data.total_sistema))} · Informado: ${money(Number(data.total_informado))} · Divergência: ${money(Number(data.divergencia))}</span></div>`;pdvCaixa=null;await carregarCaixaAberto();}
+
+async function carregarUsuariosAdmin() {
+  if (!usuarioAdministrador()) return;
+  const response = await fetchAdmin("/usuarios");
+  const data = await response?.json().catch(() => []);
+  if (!response?.ok) { $("#usersTable").innerHTML = `<tbody><tr><td>${data.message || "Não foi possível carregar os usuários."}</td></tr></tbody>`; return; }
+  $("#usersTable").innerHTML = `<thead><tr><th>Nome</th><th>E-mail</th><th>Tipo</th><th>Status</th><th>Permissões</th></tr></thead><tbody>${data.map(usuario => `<tr><td>${usuario.nome}</td><td>${usuario.email}</td><td>${usuario.tipo}</td><td>${usuario.ativo ? "Ativo" : "Inativo"}</td><td><div class="permission-list">${(usuario.permissoes || []).map(item => `<span>${item.permissao}</span>`).join("") || "—"}</div></td></tr>`).join("")}</tbody>`;
+}
 
 async function carregarMaquininhas() {
   const response = await fetchAdmin("/maquininhas");
@@ -2402,11 +2477,13 @@ function init() {
   renderHistory();
   atualizarAuthUi();
   carregarProdutosDaApi();
-  carregarEstoqueDaApi();
-  carregarMovimentacoesDaApi();
-  carregarFornecedoresDaApi();
-  carregarClientesDaApi();
-  carregarFretesBairro();
+  if (usuarioAdministrador()) {
+    carregarEstoqueDaApi();
+    carregarMovimentacoesDaApi();
+    carregarFornecedoresDaApi();
+    carregarClientesDaApi();
+    carregarFretesBairro();
+  }
 
   // navegação (topbar, banner, links)
   $$("[data-nav]").forEach(b => {
@@ -2511,6 +2588,11 @@ function init() {
   $("#cashMoveClose").addEventListener("click", () => closeModal("#cashMoveModal"));
   $("#cashMoveCancel").addEventListener("click", () => closeModal("#cashMoveModal"));
   $("#pdvCloseCashForm").addEventListener("submit", fecharCaixaPdv);
+  $("#receiptSearchForm").addEventListener("submit", buscarVendaParaReimpressao);
+  $("#receiptPrint").addEventListener("click", () => imprimirComprovanteVenda(ultimaVendaPdv));
+  $("#receiptClose").addEventListener("click", () => closeModal("#receiptModal"));
+  $("#receiptCancel").addEventListener("click", () => closeModal("#receiptModal"));
+  $("#receiptModal").addEventListener("click", event => { if (event.target.id === "receiptModal") closeModal("#receiptModal"); });
 
   // marca "Início" como ativo
   const homeNav = $('.nav-link[data-nav="home"]');

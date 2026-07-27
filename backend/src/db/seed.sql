@@ -29,7 +29,12 @@ CROSS JOIN (VALUES
   ('admin.sensivel'),
   ('maquininhas.ver'),
   ('maquininhas.gerenciar'),
-  ('mercado_pago.configurar')
+  ('mercado_pago.configurar'),
+  ('pdv.acessar'),
+  ('caixa.ver'),
+  ('caixa.abrir'),
+  ('caixa.movimentar'),
+  ('caixa.fechar')
 ) AS p(permissao)
 WHERE u.email = 'dona@giseleflavia.com.br'
 ON CONFLICT (usuario_id, permissao) DO UPDATE

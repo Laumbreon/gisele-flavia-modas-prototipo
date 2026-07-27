@@ -6,7 +6,8 @@ const TODAS_PERMISSOES = [
   "estoque.ver", "estoque.movimentar", "clientes.ver", "clientes.editar",
   "fornecedores.ver", "fornecedores.editar", "relatorios.ver", "configuracoes.editar",
   "funcionarios.gerenciar", "etiquetas.imprimir", "admin.sensivel", "maquininhas.ver",
-  "maquininhas.gerenciar", "mercado_pago.configurar"
+  "maquininhas.gerenciar", "mercado_pago.configurar", "pdv.acessar", "caixa.ver",
+  "caixa.abrir", "caixa.movimentar", "caixa.fechar"
 ];
 
 async function main() {
