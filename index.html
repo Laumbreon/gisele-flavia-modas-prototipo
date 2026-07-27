@@ -26,7 +26,7 @@
       <nav class="main-nav" aria-label="Navegação principal">
         <button class="nav-link" data-nav="home" type="button">Início</button>
         <button class="nav-link" data-nav="catalogo" type="button">Catálogo</button>
-        <button class="nav-link admin-only" data-nav="pdv" type="button" hidden>PDV</button>
+        <button class="nav-link pdv-only" data-nav="pdv" type="button" hidden>PDV Loja</button>
         <button class="nav-link admin-only" data-nav="gestao" type="button" hidden>Gestão</button>
         <button class="nav-link admin-only" data-nav="movimentacoes" type="button" hidden>Movimentações</button>
         <button class="nav-link admin-only" data-nav="fornecedores" type="button" hidden>Fornecedores</button>
@@ -113,79 +113,19 @@
       <div class="shop-grid" id="catalogGrid"></div>
     </section>
 
-    <!-- ===================== PDV / VENDAS ===================== -->
+    <!-- ===================== PDV LOJA FÍSICA ===================== -->
     <section class="screen" id="screen-pdv">
-      <div class="section-head">
-        <div>
-          <h2 class="section-title">PDV — Ponto de Venda</h2>
-          <p class="section-sub">Monte a venda e finalize com baixa automática no estoque.</p>
+      <div class="pdv-store-head"><div><span class="hero-badge">Venda presencial</span><h2 class="section-title">PDV Loja Física</h2><p class="section-sub">Atendimento rápido, caixa e pagamento em uma única tela.</p></div><div class="form-row compact"><label for="pdvTerminal">Terminal</label><select id="pdvTerminal"><option value="pdv_loja_1">PDV Loja 1</option><option value="pdv_loja_2">PDV Loja 2</option></select></div></div>
+      <div class="pdv-store-layout">
+        <div class="pdv-store-main">
+          <div class="panel"><div class="panel-head"><h3>Buscar produto</h3></div><form class="pdv-search-line" id="pdvSearchForm"><input id="pdvStoreSearch" placeholder="Nome, SKU ou código de barras" /><button class="btn btn-pink" type="submit">Buscar</button></form><p class="shipping-status" id="pdvSearchStatus"></p><div class="pdv-result-grid" id="pdvSearchResults"></div></div>
+          <div class="panel"><div class="panel-head"><h3>Carrinho PDV</h3><span class="chip" id="pdvCartCount">0 itens</span></div><div id="pdvStoreCart"></div><div class="pdv-totals"><label>Desconto <input id="pdvDiscount" type="number" min="0" step="0.01" value="0" /></label><div><span>Subtotal</span><strong id="pdvSubtotal">R$ 0,00</strong></div><div><span>Frete</span><strong id="pdvFreightTotal">R$ 0,00</strong></div><div class="total"><span>Total final</span><strong id="pdvGrandTotal">R$ 0,00</strong></div></div></div>
+          <div class="panel"><div class="panel-head"><h3>Entrega</h3></div><select id="pdvDeliveryType"><option value="retirada">Retirada / sem entrega</option><option value="local">Entrega local</option></select><div class="pdv-delivery-fields" id="pdvDeliveryFields"><div class="form-grid"><div class="form-row"><label>Destinatário</label><input id="pdvRecipient" /></div><div class="form-row"><label>Telefone</label><input id="pdvPhone" /></div><div class="form-row"><label>Cidade</label><input id="pdvCity" /></div><div class="form-row"><label>Estado</label><input id="pdvState" maxlength="2" value="SP" /></div><div class="form-row"><label>Bairro</label><input id="pdvDistrict" /></div><div class="form-row"><label>Endereço</label><input id="pdvAddress" /></div><div class="form-row"><label>Número</label><input id="pdvNumber" /></div><div class="form-row"><label>Complemento</label><input id="pdvComplement" /></div></div><button class="btn btn-ghost" id="pdvCalculateFreight" type="button">Calcular frete local</button><p class="shipping-status" id="pdvFreightStatus"></p></div></div>
         </div>
-      </div>
-
-      <div class="pdv-layout">
-        <div class="pdv-products">
-          <div class="search-box">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="pdvSearch" placeholder="Buscar produto..." />
-          </div>
-          <div class="pdv-grid" id="pdvGrid"></div>
-        </div>
-
-        <aside class="pdv-cart" id="pdvCart">
-          <h3 class="cart-title">Carrinho</h3>
-          <div class="cart-items" id="cartItems">
-            <p class="cart-empty">Nenhum item adicionado ainda.</p>
-          </div>
-          <div class="cart-footer">
-            <div class="shipping-box">
-              <h4>Frete</h4>
-              <div class="form-row compact">
-                <label for="customerCep">CEP do cliente</label>
-                <input type="text" id="customerCep" placeholder="00000-000" />
-              </div>
-              <div class="form-row compact">
-                <label for="deliveryType">Tipo de entrega</label>
-                <select id="deliveryType">
-                  <option value="retirada">Retirada na loja - R$ 0,00</option>
-                  <option value="local">Entrega local - R$ 10,00</option>
-                  <option value="pac">PAC simulado - R$ 25,00</option>
-                  <option value="sedex">Sedex simulado - R$ 38,00</option>
-                  <option value="personalizado">Frete personalizado</option>
-                </select>
-              </div>
-              <div class="shipping-local" id="localShippingWrap">
-                <div class="form-grid shipping-address-grid">
-                  <div class="form-row compact">
-                    <label for="customerCity">Cidade</label>
-                    <input type="text" id="customerCity" placeholder="São Paulo" />
-                  </div>
-                  <div class="form-row compact">
-                    <label for="customerState">Estado</label>
-                    <input type="text" id="customerState" maxlength="2" value="SP" />
-                  </div>
-                </div>
-                <div class="form-row compact">
-                  <label for="customerDistrict">Bairro</label>
-                  <input type="text" id="customerDistrict" placeholder="Centro" />
-                </div>
-                <button class="btn btn-ghost btn-block btn-shipping-calc" id="btnCalculateShipping" type="button">Calcular frete local</button>
-                <p class="shipping-status" id="shippingStatus" aria-live="polite"></p>
-              </div>
-              <div class="form-row compact shipping-custom" id="customShippingWrap">
-                <label for="customShippingValue">Valor personalizado (R$)</label>
-                <input type="number" id="customShippingValue" min="0" step="0.01" placeholder="0,00" />
-              </div>
-            </div>
-            <div class="cart-summary">
-              <div><span>Subtotal dos produtos</span><strong id="cartSubtotal">R$ 0,00</strong></div>
-              <div><span>Frete</span><strong id="cartShipping">R$ 0,00</strong></div>
-            </div>
-            <div class="cart-total">
-              <span>Total final</span>
-              <strong id="cartTotal">R$ 0,00</strong>
-            </div>
-            <button class="btn btn-pink btn-block" id="btnCheckout" type="button">Finalizar venda</button>
-          </div>
+        <aside class="pdv-store-side">
+          <div class="panel" id="pdvCashPanel"><div class="panel-head"><h3>Caixa</h3><span class="status-badge" id="pdvCashBadge">Consultando...</span></div><div id="pdvCashStatus"></div><form id="pdvOpenCashForm" hidden><div class="form-row"><label>Valor inicial</label><input id="pdvOpeningValue" type="number" min="0" step="0.01" value="0" /></div><div class="form-row"><label>Observações</label><input id="pdvOpeningNotes" /></div><button class="btn btn-pink btn-block" type="submit">Abrir caixa</button></form><div class="cash-actions" id="pdvCashActions" hidden><button class="btn btn-ghost" data-cash-move="reforco" type="button">Reforço</button><button class="btn btn-ghost" data-cash-move="sangria" type="button">Sangria</button></div></div>
+          <div class="panel"><div class="panel-head"><h3>Pagamento</h3></div><div class="payment-total"><span>Total da venda</span><strong id="pdvPaymentTotal">R$ 0,00</strong></div><div class="payment-grid"><label>Dinheiro recebido<input id="payCash" type="number" min="0" step="0.01" /></label><label>Pix<input id="payPix" type="number" min="0" step="0.01" /></label><label>Débito<input id="payDebit" type="number" min="0" step="0.01" /><select id="machineDebit"><option value="">Selecione a maquininha</option></select></label><label>Crédito<input id="payCredit" type="number" min="0" step="0.01" /><select id="machineCredit"><option value="">Selecione a maquininha</option></select></label></div><div class="payment-balance" id="pdvPaymentBalance"></div><div class="form-row"><label>Observações da venda</label><input id="pdvSaleNotes" /></div><button class="btn btn-pink btn-block" id="pdvFinalize" type="button">Finalizar venda</button><div class="sale-success" id="pdvSaleResult"></div></div>
+          <details class="panel cash-close"><summary>Fechar caixa</summary><form id="pdvCloseCashForm"><div class="form-grid"><div class="form-row"><label>Dinheiro contado</label><input id="closeCash" type="number" min="0" step="0.01" value="0" /></div><div class="form-row"><label>Pix conferido</label><input id="closePix" type="number" min="0" step="0.01" value="0" /></div><div class="form-row"><label>Débito conferido</label><input id="closeDebit" type="number" min="0" step="0.01" value="0" /></div><div class="form-row"><label>Crédito conferido</label><input id="closeCredit" type="number" min="0" step="0.01" value="0" /></div></div><div class="form-row"><label>Observações</label><input id="closeNotes" /></div><button class="btn btn-ghost btn-block" type="submit">Fechar caixa</button></form><div id="pdvCloseResult"></div></details>
         </aside>
       </div>
     </section>
@@ -548,6 +488,8 @@
   <div class="modal-overlay" id="pinModal" aria-hidden="true"><div class="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle"><div class="modal-head"><h3 id="pinTitle">PIN administrativo</h3><button class="modal-close" id="pinClose" type="button">&times;</button></div><form id="pinForm" class="modal-body"><p class="login-sub">Confirme o PIN para continuar nesta área sensível.</p><div class="form-row"><label for="adminPin">PIN</label><input type="password" id="adminPin" required autocomplete="off" /></div><p class="login-error" id="pinError"></p><div class="modal-foot"><button type="button" class="btn btn-ghost" id="pinCancel">Cancelar</button><button class="btn btn-pink" type="submit">Validar</button></div></form></div></div>
 
   <div class="modal-overlay" id="machineModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3 id="machineModalTitle">Cadastrar maquininha</h3><button class="modal-close" id="machineClose" type="button">&times;</button></div><form id="machineForm" class="modal-body"><input id="machineId" type="hidden" /><div class="form-grid"><div class="form-row"><label for="machineName">Nome</label><input id="machineName" required /></div><div class="form-row"><label for="machineType">Tipo</label><select id="machineType"><option value="loja">Loja</option><option value="motoboy">Motoboy</option></select></div><div class="form-row"><label for="machineProvider">Provedor</label><select id="machineProvider"><option value="manual">Manual</option><option value="mercado_pago">Mercado Pago</option></select></div><div class="form-row"><label for="machinePdv">PDV</label><select id="machinePdv"><option value="">Sem vínculo</option><option value="site">Site</option><option value="pdv_loja_1">PDV Loja 1</option><option value="pdv_loja_2">PDV Loja 2</option><option value="motoboy">Motoboy</option></select></div><div class="form-row"><label for="machinePos">POS ID</label><input id="machinePos" /></div><div class="form-row"><label for="machineStore">Store ID</label><input id="machineStore" /></div></div><div class="form-row"><label for="machineNotes">Observações</label><input id="machineNotes" /></div><label class="form-check"><input id="machineActive" type="checkbox" checked /> Ativa</label><p class="login-error" id="machineError"></p><div class="modal-foot"><button class="btn btn-ghost" id="machineCancel" type="button">Cancelar</button><button class="btn btn-pink" type="submit">Salvar</button></div></form></div></div>
+
+  <div class="modal-overlay" id="cashMoveModal" aria-hidden="true"><div class="modal login-modal" role="dialog" aria-modal="true"><div class="modal-head"><h3 id="cashMoveTitle">Movimentação do caixa</h3><button class="modal-close" id="cashMoveClose" type="button">&times;</button></div><form id="cashMoveForm" class="modal-body"><input id="cashMoveType" type="hidden" /><div class="form-row"><label>Valor</label><input id="cashMoveValue" type="number" min="0.01" step="0.01" required /></div><div class="form-row"><label>Forma de pagamento</label><select id="cashMovePayment"><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></div><div class="form-row"><label>Descrição</label><input id="cashMoveDescription" required /></div><p class="login-error" id="cashMoveError"></p><div class="modal-foot"><button class="btn btn-ghost" id="cashMoveCancel" type="button">Cancelar</button><button class="btn btn-pink" type="submit">Registrar</button></div></form></div></div>
 
   <div class="modal-overlay" id="productDetailModal" aria-hidden="true">
     <div class="modal product-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">

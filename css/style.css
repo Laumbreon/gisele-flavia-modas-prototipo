@@ -746,6 +746,36 @@ img { max-width: 100%; display: block; }
 .icon-btn.remove:hover { background: #FEE2E2; }
 
 /* ===================== PDV ===================== */
+.pdv-store-head { display:flex; justify-content:space-between; align-items:end; gap:24px; margin-bottom:24px; }
+.pdv-store-head .form-row { min-width:190px; margin:0; }
+.pdv-store-layout { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(340px,.75fr); gap:22px; align-items:start; }
+.pdv-store-main,.pdv-store-side { display:grid; gap:18px; }
+.pdv-store-side { position:sticky; top:92px; }
+.pdv-search-line { display:grid; grid-template-columns:1fr auto; gap:10px; }
+.pdv-search-line input,.pdv-store-head select,#pdvDeliveryType { width:100%; padding:11px 14px; border:1px solid var(--border); border-radius:var(--radius-sm); font:inherit; }
+.pdv-result-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:14px; }
+.pdv-result-card { display:grid; gap:8px; padding:14px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--pink-soft); }
+.pdv-result-card small { color:var(--text-muted); }
+.pdv-result-card select { min-width:0; padding:8px; border:1px solid var(--border); border-radius:9px; background:white; }
+.pdv-cart-line { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); }
+.pdv-cart-line small { display:block; color:var(--text-muted); margin-top:3px; }
+.qty-control { display:flex; align-items:center; border:1px solid var(--border); border-radius:999px; overflow:hidden; }
+.qty-control button { width:30px; height:30px; border:0; background:var(--pink-soft); color:var(--pink-brand); cursor:pointer; font-size:18px; }
+.qty-control span { min-width:28px; text-align:center; font-weight:700; }
+.pdv-totals { display:grid; gap:9px; margin-top:18px; padding-top:15px; border-top:2px dashed var(--border); }
+.pdv-totals>div,.payment-total { display:flex; justify-content:space-between; align-items:center; }
+.pdv-totals label { display:flex; justify-content:space-between; align-items:center; color:var(--text-muted); }
+.pdv-totals input { width:120px; padding:8px; border:1px solid var(--border); border-radius:9px; }
+.pdv-totals .total { font-size:19px; color:var(--pink-brand); }
+.pdv-delivery-fields { display:none; margin-top:16px; }.pdv-delivery-fields.show { display:block; }
+.status-badge { border-radius:999px; padding:5px 10px; font-size:12px; font-weight:700; background:#eee; }.status-badge.open { background:#DCFCE7;color:#166534; }.status-badge.closed { background:#FEE2E2;color:#991B1B; }
+.cash-status-list { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }.cash-status-list div { background:var(--pink-soft); border-radius:10px; padding:10px; }.cash-status-list dt { color:var(--text-muted);font-size:11px; }.cash-status-list dd { margin:3px 0 0;font-weight:700;color:var(--green-brand);font-size:13px; }
+.cash-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.payment-total { padding:12px; margin-bottom:14px; border-radius:12px; background:var(--pink-soft); }.payment-total strong { color:var(--pink-brand);font-size:22px; }
+.payment-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }.payment-grid label { display:grid; gap:5px; color:var(--text-muted);font-size:12px;font-weight:600; }.payment-grid input,.payment-grid select { min-width:0;width:100%;padding:9px;border:1px solid var(--border);border-radius:9px;background:white; }
+.payment-balance { margin:14px 0;padding:11px;border-radius:10px;font-weight:700;text-align:center; }.payment-balance.ok { background:#DCFCE7;color:#166534; }.payment-balance.warn { background:#FEF3C7;color:#92400E; }.payment-balance.error { background:#FEE2E2;color:#991B1B; }
+.sale-success { display:grid; gap:3px; margin-top:12px; padding:12px; border-radius:10px; background:#DCFCE7;color:#166534; }.sale-success:empty { display:none; }
+.cash-close summary { color:var(--green-brand);font-weight:700;cursor:pointer; }.cash-close form { margin-top:16px; }
 .pdv-layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; }
 .search-box {
   display: flex;
@@ -1905,6 +1935,7 @@ video.detail-media-main { object-fit: contain; }
 
 /* ===================== RESPONSIVO ===================== */
 @media (max-width: 900px) {
+  .pdv-store-layout { grid-template-columns:1fr; }.pdv-store-side { position:static; }
   .main-nav { order: 3; width: 100%; justify-content: center; }
   .dash-bottom { grid-template-columns: 1fr; }
   .pdv-layout { grid-template-columns: 1fr; }
@@ -2045,6 +2076,7 @@ video.detail-media-main { object-fit: contain; }
 
 
 @media (max-width: 560px) {
+  .pdv-store-head { align-items:stretch;flex-direction:column; }.pdv-store-head .form-row { min-width:0; }.pdv-search-line { grid-template-columns:1fr; }.pdv-result-grid,.payment-grid { grid-template-columns:1fr; }.pdv-cart-line { grid-template-columns:1fr auto; }.pdv-cart-line>.qty-control { grid-row:2; }.cash-status-list { grid-template-columns:1fr; }
   .filter-bar {
     flex-wrap: nowrap;
     overflow-x: auto;

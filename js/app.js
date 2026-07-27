@@ -151,6 +151,11 @@ let freightDeactivateConfirmId = null;
 let maquininhas = [];
 let adminPinValue = "";
 let pendingPinAction = null;
+let pdvCart = [];
+let pdvCaixa = null;
+let pdvMaquininhas = [];
+let pdvFrete = null;
+let pdvProdutosPublicos = [];
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -224,6 +229,14 @@ function usuarioAdministrador() {
   return usuarioLogado() && ["dona", "super_admin"].includes(adminSession.usuario.tipo);
 }
 
+function temPermissao(nome) {
+  return (adminSession?.permissoes || []).some(item => item.permissao === nome && item.permitido !== false);
+}
+
+function podeAcessarPdv() {
+  return usuarioLogado() && (usuarioAdministrador() || temPermissao("vendas.criar"));
+}
+
 function getAuthHeaders(extraHeaders = {}) {
   return {
     ...extraHeaders,
@@ -259,6 +272,7 @@ function atualizarAuthUi() {
   const logoutBtn = $("#btnLogout");
   if (logoutBtn) logoutBtn.hidden = !usuarioLogado();
   $$(".admin-only").forEach(element => { element.hidden = !usuarioAdministrador(); });
+  $$(".pdv-only").forEach(element => { element.hidden = !podeAcessarPdv(); });
   if ($("#storyTrack")) buildStoryNav();
 }
 
@@ -310,6 +324,10 @@ function cancelarLoginAdmin() {
 }
 
 function logoutAdmin() {
+  pdvCart = [];
+  pdvCaixa = null;
+  pdvMaquininhas = [];
+  pdvFrete = null;
   limparLogin();
   showToast("Sessao administrativa encerrada");
   if (ADMIN_SCREENS.has($(".screen.active")?.id?.replace("screen-", ""))) {
@@ -350,9 +368,9 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
-    if (!usuarioAdministrador()) {
+    if (!usuarioAdministrador() && !temPermissao("vendas.criar")) {
       limparLogin();
-      throw new Error("Esta área aceita somente dona ou super admin.");
+      throw new Error("Usuário sem permissão para acessar o PDV.");
     }
     fecharLoginAdmin();
     showToast("Login realizado com sucesso");
@@ -863,7 +881,11 @@ function buildStoryNav() {
 }
 
 function navigate(screen, category = "Todos") {
-  if (ADMIN_SCREENS.has(screen) && !usuarioAdministrador()) {
+  if (screen === "pdv" && !podeAcessarPdv()) {
+    abrirLoginAdmin(() => navigate(screen, category));
+    return;
+  }
+  if (ADMIN_SCREENS.has(screen) && screen !== "pdv" && !usuarioAdministrador()) {
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
@@ -894,7 +916,7 @@ function navigate(screen, category = "Todos") {
     carregarFretesBairro();
   }
   if (screen === "maquininhas") carregarMaquininhas();
-  if (screen === "pdv") renderPdv($("#pdvSearch").value);
+  if (screen === "pdv") iniciarPdvLoja();
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
 
@@ -1428,6 +1450,7 @@ function getShippingData() {
 }
 
 function updateCartTotals() {
+  if (!$("#cartSubtotal")) return;
   const subtotal = cartSubtotal();
   const shipping = getShippingData();
   const shippingValue = cart.length ? shipping.shippingValue : 0;
@@ -1582,6 +1605,7 @@ function finalizarVendaMockada(shipping, apiVenda = null, options = {}) {
 
 function renderCart() {
   const box = $("#cartItems");
+  if (!box) return;
   if (!cart.length) {
     box.innerHTML = `<p class="cart-empty">Nenhum item adicionado ainda.</p>`;
     updateCartTotals();
@@ -1653,6 +1677,7 @@ function renderPdv(filter = "") {
   const term = filter.toLowerCase();
   const list = products.filter(p => p.name.toLowerCase().includes(term) && totalStock(p) > 0);
   const grid = $("#pdvGrid");
+  if (!grid) return;
 
   if (!list.length) {
     grid.innerHTML = `<p class="empty-note">Nenhum produto disponível para venda.</p>`;
@@ -2157,6 +2182,136 @@ function openReportModal() {
   openModal("#reportModal");
 }
 
+function valorPdv(id) { return Math.max(0, Number($(id)?.value || 0) || 0); }
+function totalCarrinhoPdv() { return pdvCart.reduce((sum, item) => sum + item.preco * item.quantidade, 0); }
+function totalVendaPdv() { return Math.max(0, totalCarrinhoPdv() - valorPdv("#pdvDiscount") + Number(pdvFrete?.valor || 0)); }
+
+async function iniciarPdvLoja() {
+  $("#pdvTerminal").value = localStorage.getItem("pdvSelecionado") || "pdv_loja_1";
+  atualizarCarrinhoPdv();
+  await Promise.allSettled([carregarCaixaAberto(), carregarMaquininhasPdv(), carregarProdutosPdv()]);
+}
+
+async function carregarCaixaAberto() {
+  const response = await fetchAdmin("/caixas/aberto");
+  const data = await response?.json().catch(() => ({}));
+  if (!response?.ok) { pdvCaixa = null; $("#pdvCashStatus").innerHTML = `<p class="login-error">${data.message || "Não foi possível consultar o caixa."}</p>`; return; }
+  pdvCaixa = data || null;
+  $("#pdvCashBadge").textContent = pdvCaixa ? "Aberto" : "Fechado";
+  $("#pdvCashBadge").className = `status-badge ${pdvCaixa ? "open" : "closed"}`;
+  $("#pdvOpenCashForm").hidden = Boolean(pdvCaixa); $("#pdvCashActions").hidden = !pdvCaixa;
+  $("#pdvCashStatus").innerHTML = pdvCaixa ? `<dl class="cash-status-list"><div><dt>ID</dt><dd>#${pdvCaixa.id}</dd></div><div><dt>Valor inicial</dt><dd>${money(Number(pdvCaixa.valor_inicial))}</dd></div><div><dt>Abertura</dt><dd>${new Date(pdvCaixa.data_abertura).toLocaleString("pt-BR")}</dd></div></dl>` : `<p class="empty-note">Nenhum caixa aberto. Abra um caixa para iniciar as vendas.</p>`;
+  $("#pdvFinalize").disabled = !pdvCaixa;
+}
+
+async function abrirCaixaPdv(event) {
+  event.preventDefault();
+  const response = await fetchAdmin("/caixas/abrir", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valor_inicial: valorPdv("#pdvOpeningValue"), observacoes_abertura: $("#pdvOpeningNotes").value.trim() || null }) });
+  const data = await response?.json().catch(() => ({}));
+  if (!response?.ok) return showToast(data.message || "Não foi possível abrir o caixa.");
+  showToast(`Caixa #${data.id} aberto`); $("#pdvOpenCashForm").reset(); await carregarCaixaAberto();
+}
+
+async function carregarMaquininhasPdv() {
+  const response = await fetchAdmin("/maquininhas");
+  const data = await response?.json().catch(() => []);
+  pdvMaquininhas = response?.ok && Array.isArray(data) ? data.filter(item => item.ativo) : [];
+  renderMaquininhasPdv();
+}
+
+function selecionarTerminalPdv() { localStorage.setItem("pdvSelecionado", $("#pdvTerminal").value); renderMaquininhasPdv(); }
+function renderMaquininhasPdv() {
+  const terminal = $("#pdvTerminal").value;
+  const ordenadas = [...pdvMaquininhas].sort((a,b) => Number(b.pdv_codigo === terminal) - Number(a.pdv_codigo === terminal));
+  const options = `<option value="">Selecione a maquininha</option>` + ordenadas.map(m => `<option value="${m.id}">${m.nome}${m.pdv_codigo === terminal ? " · sugerida" : ""}</option>`).join("");
+  $("#machineDebit").innerHTML = options; $("#machineCredit").innerHTML = options;
+}
+
+async function carregarProdutosPdv() {
+  try { const response = await fetch(`${API_BASE_URL}/public/produtos`); const data = await response.json(); pdvProdutosPublicos = Array.isArray(data) ? data : []; }
+  catch { pdvProdutosPublicos = []; }
+}
+
+function produtoCodigoParaPdv(data) {
+  return { id: Number(data.produto.id), nome: data.produto.nome, categoria: data.produto.categoria, variacoes: [{ ...data.variacao, quantidade_estoque: Number(data.estoque?.quantidade || 0), preco_venda: data.preco, preco_promocional: data.preco_promocional }] };
+}
+
+async function buscarProdutoPdv(event) {
+  event?.preventDefault();
+  const termo = $("#pdvStoreSearch").value.trim();
+  if (!termo) return renderResultadosPdv(pdvProdutosPublicos.slice(0, 12));
+  $("#pdvSearchStatus").textContent = "Buscando...";
+  let encontrados = [];
+  if (/^[\w.-]{3,}$/.test(termo)) {
+    const response = await fetchAdmin(`/produtos/codigo/${encodeURIComponent(termo)}`);
+    if (response?.ok) encontrados = [produtoCodigoParaPdv(await response.json())];
+  }
+  if (!encontrados.length) {
+    if (!pdvProdutosPublicos.length) await carregarProdutosPdv();
+    const busca = termo.toLowerCase();
+    encontrados = pdvProdutosPublicos.filter(p => `${p.nome} ${p.categoria} ${(p.variacoes || []).map(v => `${v.sku} ${v.codigo_barras} ${v.codigo_interno}`).join(" ")}`.toLowerCase().includes(busca));
+  }
+  $("#pdvSearchStatus").textContent = encontrados.length ? `${encontrados.length} produto(s) encontrado(s).` : "Nenhum produto encontrado.";
+  renderResultadosPdv(encontrados);
+}
+
+function renderResultadosPdv(lista) {
+  $("#pdvSearchResults").innerHTML = lista.map((p, index) => {
+    const variacoes = (p.variacoes || []).filter(v => v.ativo !== false && Number(v.quantidade_estoque ?? v.estoque?.quantidade ?? 0) > 0);
+    return `<article class="pdv-result-card"><strong>${p.nome}</strong><small>${p.categoria || ""}</small><select data-pdv-variation="${index}">${variacoes.map(v => `<option value="${v.id}" data-stock="${Number(v.quantidade_estoque ?? v.estoque?.quantidade ?? 0)}" data-price="${Number(v.preco_promocional || v.preco_venda || p.preco_promocional || p.preco || 0)}">${v.tamanho} · ${v.cor} · estoque ${Number(v.quantidade_estoque ?? v.estoque?.quantidade ?? 0)}</option>`).join("")}</select><button class="btn btn-pink btn-sm" data-pdv-add="${index}" ${variacoes.length ? "" : "disabled"}>Adicionar</button></article>`;
+  }).join("") || `<p class="empty-note">Nenhum resultado para exibir.</p>`;
+  $$('[data-pdv-add]').forEach(button => button.addEventListener("click", () => adicionarProdutoPdv(lista[Number(button.dataset.pdvAdd)], Number(button.dataset.pdvAdd))));
+}
+
+function adicionarProdutoPdv(produto, index) {
+  const select = $(`[data-pdv-variation="${index}"]`); const variacao = (produto.variacoes || []).find(v => Number(v.id) === Number(select.value));
+  if (!variacao) return showToast("Selecione uma variação disponível.");
+  const estoque = Number(select.selectedOptions[0].dataset.stock); const preco = Number(select.selectedOptions[0].dataset.price);
+  const existente = pdvCart.find(item => item.variacao_id === Number(variacao.id));
+  if (existente && existente.quantidade >= estoque) return showToast("Estoque insuficiente.");
+  if (existente) existente.quantidade += 1; else pdvCart.push({ produto_id: Number(produto.id), variacao_id: Number(variacao.id), nome: produto.nome, tamanho: variacao.tamanho, cor: variacao.cor, preco, estoque, quantidade: 1 });
+  atualizarCarrinhoPdv(); showToast(`${produto.nome} adicionado`);
+}
+
+function alterarQuantidadePdv(index, delta) { const item = pdvCart[index]; if (!item) return; item.quantidade = Math.min(item.estoque, item.quantidade + delta); if (item.quantidade <= 0) pdvCart.splice(index, 1); atualizarCarrinhoPdv(); }
+function atualizarCarrinhoPdv() {
+  $("#pdvCartCount").textContent = `${pdvCart.reduce((s,i) => s + i.quantidade, 0)} itens`;
+  $("#pdvStoreCart").innerHTML = pdvCart.map((i,index) => `<div class="pdv-cart-line"><div><strong>${i.nome}</strong><small>${i.tamanho} · ${i.cor} · ${money(i.preco)}</small></div><div class="qty-control"><button data-pdv-minus="${index}">−</button><span>${i.quantidade}</span><button data-pdv-plus="${index}">+</button></div><strong>${money(i.preco*i.quantidade)}</strong><button class="cart-remove" data-pdv-remove="${index}">×</button></div>`).join("") || `<p class="empty-note">Carrinho vazio.</p>`;
+  $$('[data-pdv-minus]').forEach(b => b.onclick=()=>alterarQuantidadePdv(Number(b.dataset.pdvMinus),-1)); $$('[data-pdv-plus]').forEach(b => b.onclick=()=>alterarQuantidadePdv(Number(b.dataset.pdvPlus),1)); $$('[data-pdv-remove]').forEach(b => b.onclick=()=>{pdvCart.splice(Number(b.dataset.pdvRemove),1);atualizarCarrinhoPdv();});
+  $("#pdvSubtotal").textContent = money(totalCarrinhoPdv()); $("#pdvFreightTotal").textContent = money(Number(pdvFrete?.valor || 0)); $("#pdvGrandTotal").textContent = money(totalVendaPdv()); $("#pdvPaymentTotal").textContent = money(totalVendaPdv()); calcularPagamentosPdv();
+}
+
+function calcularPagamentosPdv() {
+  const totalPago = ["#payCash","#payPix","#payDebit","#payCredit"].reduce((s,id)=>s+valorPdv(id),0); const total=totalVendaPdv(); const diferenca=Math.round((totalPago-total)*100)/100; const temDinheiro=valorPdv("#payCash")>0;
+  let cls="warn", texto=`Falta pagar: ${money(Math.max(-diferenca,0))}`;
+  if (Math.abs(diferenca)<0.01){cls="ok";texto="Pagamento completo";} else if(diferenca>0&&temDinheiro){cls="ok";texto=`Troco: ${money(diferenca)}`;} else if(diferenca>0){cls="error";texto="Troco só pode ser gerado quando há pagamento em dinheiro.";}
+  $("#pdvPaymentBalance").className=`payment-balance ${cls}`; $("#pdvPaymentBalance").textContent=texto; return {totalPago,diferenca,temDinheiro};
+}
+
+async function calcularFretePdv() {
+  const bairro=$("#pdvDistrict").value.trim(), cidade=$("#pdvCity").value.trim(), estado=$("#pdvState").value.trim().toUpperCase()||"SP";
+  if(!bairro||!cidade){$("#pdvFreightStatus").textContent="Informe cidade e bairro.";return;}
+  const response=await fetch(`${API_BASE_URL}/public/frete-bairro?${new URLSearchParams({bairro,cidade,estado})}`); const data=await response.json().catch(()=>({}));
+  if(!response.ok){pdvFrete=null;$("#pdvFreightStatus").textContent=response.status===404?"Este bairro ainda não é atendido.":data.message||"Não foi possível calcular o frete.";atualizarCarrinhoPdv();return;}
+  pdvFrete={valor:Number(data.valor),prazo:data.prazo_estimado||""}; $("#pdvFreightStatus").textContent=`Frete ${money(pdvFrete.valor)}${pdvFrete.prazo?` · ${pdvFrete.prazo}`:""}`; atualizarCarrinhoPdv();
+}
+
+async function finalizarVendaPdv() {
+  if(!pdvCaixa)return showToast("Abra o caixa antes de vender."); if(!pdvCart.length)return showToast("Adicione produtos ao carrinho.");
+  const calculo=calcularPagamentosPdv(); if(calculo.diferenca < -0.009)return showToast("O pagamento está incompleto."); if(calculo.diferenca>0&&!calculo.temDinheiro)return showToast("Troco exige pagamento em dinheiro.");
+  const pagamentos=[{forma_pagamento:"dinheiro",valor:valorPdv("#payCash")},{forma_pagamento:"pix",valor:valorPdv("#payPix")},{forma_pagamento:"debito",valor:valorPdv("#payDebit"),maquininha_id:Number($("#machineDebit").value)||null},{forma_pagamento:"credito",valor:valorPdv("#payCredit"),maquininha_id:Number($("#machineCredit").value)||null}].filter(p=>p.valor>0);
+  if(!pagamentos.length)return showToast("Informe ao menos um pagamento."); if(pagamentos.some(p=>["debito","credito"].includes(p.forma_pagamento)&&!p.maquininha_id))return showToast("Selecione a maquininha para cartão.");
+  const local=$("#pdvDeliveryType").value==="local"; if(local&&!pdvFrete)return showToast("Calcule o frete local antes de finalizar.");
+  const entrega=local?{tipo_entrega:"entrega_local",destinatario_nome:$("#pdvRecipient").value.trim(),destinatario_telefone:$("#pdvPhone").value.trim(),cidade:$("#pdvCity").value.trim(),estado:$("#pdvState").value.trim(),bairro:$("#pdvDistrict").value.trim(),endereco:$("#pdvAddress").value.trim(),numero:$("#pdvNumber").value.trim(),complemento:$("#pdvComplement").value.trim(),prazo_estimado:pdvFrete?.prazo||null}:undefined;
+  const payload={cliente_id:null,itens:pdvCart.map(i=>({produto_id:i.produto_id,variacao_id:i.variacao_id,quantidade:i.quantidade,preco_unitario:i.preco})),desconto:valorPdv("#pdvDiscount"),frete:Number(pdvFrete?.valor||0),canal_venda:"loja_fisica",origem_venda:"pdv",caixa_id:pdvCaixa.id,pagamentos,tem_entrega:local,observacoes:$("#pdvSaleNotes").value.trim()||null}; if(entrega)payload.entrega=entrega;
+  const response=await fetchAdmin("/vendas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const data=await response?.json().catch(()=>({})); if(!response?.ok)return showToast(data.message||"Não foi possível finalizar a venda.");
+  $("#pdvSaleResult").innerHTML=`<strong>Venda #${data.id} finalizada</strong><span>Total: ${money(Number(data.total))} · Pago: ${money(Number(data.total_pago))} · Troco: ${money(Number(data.troco))}</span>`; pdvCart=[];pdvFrete=null;["#payCash","#payPix","#payDebit","#payCredit","#pdvDiscount","#pdvSaleNotes"].forEach(id=>{$(id).value="";}); atualizarCarrinhoPdv(); await Promise.allSettled([carregarCaixaAberto(),carregarProdutosPdv()]);
+}
+
+function abrirModalMovimentacaoCaixa(tipo) { if(!pdvCaixa)return showToast("Não há caixa aberto."); $("#cashMoveForm").reset(); $("#cashMoveType").value=tipo; $("#cashMoveTitle").textContent=tipo==="reforco"?"Reforço de caixa":"Sangria de caixa"; openModal("#cashMoveModal"); }
+async function salvarMovimentacaoCaixa(event) { event.preventDefault(); const valor=valorPdv("#cashMoveValue"); if(valor<=0)return $("#cashMoveError").textContent="Informe um valor positivo."; const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/movimentacoes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:$("#cashMoveType").value,valor,forma_pagamento:$("#cashMovePayment").value,descricao:$("#cashMoveDescription").value.trim()})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return $("#cashMoveError").textContent=data.message||"Não foi possível registrar.";closeModal("#cashMoveModal");showToast("Movimentação registrada");await carregarCaixaAberto();}
+async function fecharCaixaPdv(event) { event.preventDefault();if(!pdvCaixa)return showToast("Não há caixa aberto.");if(!confirm(`Confirma o fechamento do caixa #${pdvCaixa.id}?`))return;const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/fechar`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dinheiro:valorPdv("#closeCash"),pix:valorPdv("#closePix"),debito:valorPdv("#closeDebit"),credito:valorPdv("#closeCredit"),observacoes:$("#closeNotes").value.trim()||null})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(data.message||"Não foi possível fechar o caixa.");$("#pdvCloseResult").innerHTML=`<div class="sale-success"><strong>Caixa fechado</strong><span>Sistema: ${money(Number(data.total_sistema))} · Informado: ${money(Number(data.total_informado))} · Divergência: ${money(Number(data.divergencia))}</span></div>`;pdvCaixa=null;await carregarCaixaAberto();}
+
 async function carregarMaquininhas() {
   const response = await fetchAdmin("/maquininhas");
   if (!response) return;
@@ -2342,22 +2497,20 @@ function init() {
     if (e.target.id === "productDetailModal") closeProductDetailModal();
   });
 
-  // PDV
-  $("#pdvSearch").addEventListener("input", (e) => renderPdv(e.target.value));
-  $("#deliveryType").addEventListener("change", () => {
-    if ($("#deliveryType").value !== "local") setShippingStatus("");
-    updateCartTotals();
-  });
-  $("#customShippingValue").addEventListener("input", updateCartTotals);
-  $("#customerCep").addEventListener("input", updateCartTotals);
-  $("#customerCity").addEventListener("input", resetLocalShippingQuote);
-  $("#customerDistrict").addEventListener("input", resetLocalShippingQuote);
-  $("#customerState").addEventListener("input", (event) => {
-    event.target.value = event.target.value.toUpperCase();
-    resetLocalShippingQuote();
-  });
-  $("#btnCalculateShipping").addEventListener("click", calcularFreteBairro);
-  $("#btnCheckout").addEventListener("click", checkout);
+  // PDV Loja Física
+  $("#pdvTerminal").addEventListener("change", selecionarTerminalPdv);
+  $("#pdvSearchForm").addEventListener("submit", buscarProdutoPdv);
+  $("#pdvOpenCashForm").addEventListener("submit", abrirCaixaPdv);
+  $("#pdvDiscount").addEventListener("input", atualizarCarrinhoPdv);
+  ["#payCash", "#payPix", "#payDebit", "#payCredit"].forEach(id => $(id).addEventListener("input", calcularPagamentosPdv));
+  $("#pdvDeliveryType").addEventListener("change", () => { const local=$("#pdvDeliveryType").value==="local"; $("#pdvDeliveryFields").classList.toggle("show",local); if(!local){pdvFrete=null;atualizarCarrinhoPdv();} });
+  $("#pdvCalculateFreight").addEventListener("click", calcularFretePdv);
+  $("#pdvFinalize").addEventListener("click", finalizarVendaPdv);
+  $$('[data-cash-move]').forEach(button => button.addEventListener("click", () => abrirModalMovimentacaoCaixa(button.dataset.cashMove)));
+  $("#cashMoveForm").addEventListener("submit", salvarMovimentacaoCaixa);
+  $("#cashMoveClose").addEventListener("click", () => closeModal("#cashMoveModal"));
+  $("#cashMoveCancel").addEventListener("click", () => closeModal("#cashMoveModal"));
+  $("#pdvCloseCashForm").addEventListener("submit", fecharCaixaPdv);
 
   // marca "Início" como ativo
   const homeNav = $('.nav-link[data-nav="home"]');
