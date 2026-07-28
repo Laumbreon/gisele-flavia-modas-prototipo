@@ -24,6 +24,40 @@ function postJson(url, payload, headers) {
   });
 }
 
+function getJson(url, headers) {
+  if (typeof fetch === "function") {
+    return fetch(url, { method: "GET", headers })
+      .then(async response => ({ ok: response.ok, status: response.status, data: await response.json().catch(() => ({})) }));
+  }
+  return new Promise((resolve, reject) => {
+    const request = https.request(url, { method: "GET", headers }, response => {
+      let raw = "";
+      response.on("data", chunk => { raw += chunk; });
+      response.on("end", () => {
+        let data = {}; try { data = JSON.parse(raw || "{}"); } catch { data = { message: raw }; }
+        resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode, data });
+      });
+    });
+    request.on("error", reject); request.end();
+  });
+}
+
+async function consultarPagamento(paymentId) {
+  const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
+  if (!token) throw Object.assign(new Error("Access Token do Mercado Pago não configurado no backend."), { statusCode: 503 });
+  const id = String(paymentId || "").trim();
+  if (!id) throw Object.assign(new Error("ID do pagamento não informado."), { statusCode: 400 });
+  const response = await getJson(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(id)}`, {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  });
+  if (!response.ok) {
+    const message = response.data?.message || response.data?.error || `Mercado Pago respondeu HTTP ${response.status}.`;
+    throw Object.assign(new Error(message), { statusCode: response.status === 404 ? 404 : 502, mercadoPago: response.data });
+  }
+  return response.data;
+}
+
 async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
   if (!token) throw Object.assign(new Error("Access Token do Mercado Pago não configurado no backend."), { statusCode: 503 });
@@ -47,7 +81,8 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   };
   const successHost = new URL(success).hostname;
   if (!["localhost", "127.0.0.1"].includes(successHost)) payload.auto_return = "approved";
-  const notificationUrl = urlValida(config.webhook_url);
+  const webhookAtivo = String(process.env.MERCADO_PAGO_WEBHOOK_ENABLED || "true").toLowerCase() !== "false";
+  const notificationUrl = webhookAtivo ? (urlValida(config.webhook_url) || urlValida(`${appUrl}/api/mercado-pago/webhook`)) : null;
   if (notificationUrl) payload.notification_url = notificationUrl;
   const response = await postJson("https://api.mercadopago.com/checkout/preferences", payload, {
     Authorization: `Bearer ${token}`,
@@ -61,4 +96,4 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   return { preference_id: response.data.id, init_point: response.data.init_point, sandbox_init_point: response.data.sandbox_init_point, payload, resposta: response.data };
 }
 
-module.exports = { criarPreferenciaPagamentoVenda };
+module.exports = { criarPreferenciaPagamentoVenda, consultarPagamento };

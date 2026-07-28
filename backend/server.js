@@ -48,7 +48,8 @@ app.use("/api/maquininhas", authMiddleware, maquininhasRoutes);
 app.use("/api/usuarios", authMiddleware, usuariosRoutes);
 app.use("/api/pedidos-site", authMiddleware, pedidosSiteRoutes);
 app.use("/api/fiscal", authMiddleware, fiscalRoutes);
-app.use("/api/mercado-pago", authMiddleware, mercadoPagoRoutes);
+// O webhook do Mercado Pago é público; as demais rotas aplicam autenticação no próprio router.
+app.use("/api/mercado-pago", mercadoPagoRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Rota não encontrada" });
