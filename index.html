@@ -114,6 +114,57 @@
       <div class="shop-grid" id="catalogGrid"></div>
     </section>
 
+    <!-- ===================== CHECKOUT PÚBLICO ===================== -->
+    <section class="screen public-checkout-screen" id="screen-checkout-publico">
+      <header class="checkout-page-head">
+        <button class="btn btn-ghost" id="publicCheckoutBack" type="button">← Voltar ao catálogo</button>
+        <div>
+          <span class="hero-badge">Compra segura</span>
+          <h2 class="section-title">Seu carrinho</h2>
+          <p class="section-sub">Finalize seu pedido sem precisar entrar.</p>
+        </div>
+      </header>
+
+      <div id="publicCheckoutContent">
+        <div class="public-checkout-layout">
+          <section class="checkout-main-column">
+            <div class="checkout-card">
+              <h3 class="checkout-section-title">Itens do pedido</h3>
+              <div class="cart-items public-cart-items" id="cartItems"></div>
+              <div class="checkout-empty-actions" id="publicCartEmptyActions" hidden>
+                <p>Seu carrinho está vazio.</p>
+                <button class="btn btn-pink" id="publicEmptyCatalog" type="button">Voltar ao catálogo</button>
+              </div>
+            </div>
+
+            <div class="checkout-card">
+              <h3 class="checkout-section-title">Seus dados</h3>
+              <div class="form-row checkout-name-field"><label for="publicCustomerName">Nome</label><input id="publicCustomerName" required /></div>
+              <div class="form-grid"><div class="form-row"><label for="publicCustomerPhone">WhatsApp/telefone</label><input id="publicCustomerPhone" required /></div><div class="form-row"><label for="publicCustomerEmail">E-mail opcional</label><input id="publicCustomerEmail" type="email" /></div></div>
+            </div>
+
+            <div class="checkout-card">
+              <h3 class="checkout-section-title">Recebimento</h3>
+              <div class="checkout-choice-grid checkout-delivery-options">
+                <label><input type="radio" name="publicDelivery" value="retirada" checked /><span><strong>Retirada na loja</strong><small>Combine a retirada com a boutique.</small></span></label>
+                <label><input type="radio" name="publicDelivery" value="local" /><span><strong>Entrega local</strong><small>Calcule o frete pelo seu bairro.</small></span></label>
+              </div>
+              <div class="shipping-local" id="localShippingWrap"><div class="form-grid"><div class="form-row"><label for="customerCity">Cidade</label><input id="customerCity" /></div><div class="form-row"><label for="customerState">Estado</label><input id="customerState" maxlength="2" value="SP" /></div><div class="form-row"><label for="customerDistrict">Bairro</label><input id="customerDistrict" /></div><div class="form-row"><label for="publicAddress">Endereço</label><input id="publicAddress" /></div><div class="form-row"><label for="publicAddressNumber">Número</label><input id="publicAddressNumber" /></div><div class="form-row"><label for="publicComplement">Complemento</label><input id="publicComplement" /></div></div><div class="form-row"><label for="publicReference">Referência</label><input id="publicReference" /></div><button class="btn btn-ghost" id="btnCalculateShipping" type="button">Calcular frete local</button><p class="shipping-status" id="shippingStatus"></p></div>
+              <div id="customShippingWrap" hidden></div>
+            </div>
+
+            <div class="checkout-card">
+              <h3 class="checkout-section-title">Pagamento desejado</h3>
+              <div class="checkout-payment-options"><label><input type="radio" name="publicPayment" value="pix" checked /><span><strong>Pix</strong><small>Pagamento rápido e prático.</small></span></label><label><input type="radio" name="publicPayment" value="dinheiro" /><span><strong>Dinheiro</strong><small>Na retirada ou entrega.</small></span></label><label><input type="radio" name="publicPayment" value="cartao" /><span><strong>Cartão</strong><small>Na retirada ou entrega.</small></span></label></div>
+            </div>
+          </section>
+
+          <aside class="public-order-summary checkout-card"><h3>Resumo do pedido</h3><div class="cart-summary"><div><span>Subtotal</span><strong id="cartSubtotal">R$ 0,00</strong></div><div><span>Desconto</span><strong>R$ 0,00</strong></div><div><span>Frete</span><strong id="cartShipping">R$ 0,00</strong></div></div><div class="cart-total"><span>Total</span><strong id="cartTotal">R$ 0,00</strong></div><div class="form-row"><label for="publicOrderNotes">Observações</label><textarea id="publicOrderNotes" rows="4"></textarea></div><button class="btn btn-pink btn-block" id="btnCheckout" type="button">Finalizar pedido</button><p class="login-error" id="publicCheckoutError"></p></aside>
+        </div>
+      </div>
+      <div class="public-order-success checkout-card" id="publicOrderSuccess" hidden></div>
+    </section>
+
     <!-- ===================== PDV LOJA FÍSICA ===================== -->
     <section class="screen" id="screen-pdv">
       <div class="pdv-store-head"><div><span class="hero-badge">Venda presencial</span><h2 class="section-title">PDV Loja Física</h2><p class="section-sub">Atendimento rápido, caixa e pagamento em uma única tela.</p></div><div class="form-row compact"><label for="pdvTerminal">Terminal</label><select id="pdvTerminal"><option value="pdv_loja_1">PDV Loja 1</option><option value="pdv_loja_2">PDV Loja 2</option></select></div></div>
@@ -437,8 +488,6 @@
       <div class="modal-body" id="buyBody"></div>
     </div>
   </div>
-
-  <div class="modal-overlay" id="publicCheckoutModal" aria-hidden="true"><div class="modal public-checkout-modal" role="dialog" aria-modal="true" aria-labelledby="publicCheckoutTitle"><div class="modal-head"><div><h3 id="publicCheckoutTitle">Seu carrinho</h3><p class="checkout-step-note">Finalize seu pedido sem precisar entrar.</p></div><button class="modal-close" id="publicCheckoutClose" type="button">&times;</button></div><div class="modal-body"><div id="publicCheckoutContent"><div class="public-checkout-layout"><section><h4 class="checkout-section-title">Itens do pedido</h4><div class="cart-items public-cart-items" id="cartItems"></div><h4 class="checkout-section-title">Seus dados</h4><div class="form-grid"><div class="form-row"><label for="publicCustomerName">Nome</label><input id="publicCustomerName" required /></div><div class="form-row"><label for="publicCustomerPhone">WhatsApp/telefone</label><input id="publicCustomerPhone" required /></div></div><div class="form-row"><label for="publicCustomerEmail">E-mail opcional</label><input id="publicCustomerEmail" type="email" /></div><h4 class="checkout-section-title">Recebimento</h4><div class="form-row"><select id="deliveryType"><option value="retirada">Retirada na loja</option><option value="local">Entrega local</option></select></div><div class="shipping-local" id="localShippingWrap"><div class="form-grid"><div class="form-row"><label for="customerCity">Cidade</label><input id="customerCity" /></div><div class="form-row"><label for="customerState">Estado</label><input id="customerState" maxlength="2" value="SP" /></div><div class="form-row"><label for="customerDistrict">Bairro</label><input id="customerDistrict" /></div><div class="form-row"><label for="publicAddress">Endereço</label><input id="publicAddress" /></div><div class="form-row"><label for="publicAddressNumber">Número</label><input id="publicAddressNumber" /></div><div class="form-row"><label for="publicComplement">Complemento</label><input id="publicComplement" /></div></div><div class="form-row"><label for="publicReference">Referência</label><input id="publicReference" /></div><button class="btn btn-ghost" id="btnCalculateShipping" type="button">Calcular frete local</button><p class="shipping-status" id="shippingStatus"></p></div><div id="customShippingWrap" hidden></div><h4 class="checkout-section-title">Pagamento desejado</h4><div class="checkout-payment-options"><label><input type="radio" name="publicPayment" value="pix" checked /> Pix</label><label><input type="radio" name="publicPayment" value="dinheiro" /> Dinheiro na retirada/entrega</label><label><input type="radio" name="publicPayment" value="cartao" /> Cartão na retirada/entrega</label></div></section><aside class="public-order-summary"><h4>Resumo</h4><div class="cart-summary"><div><span>Subtotal</span><strong id="cartSubtotal">R$ 0,00</strong></div><div><span>Desconto</span><strong>R$ 0,00</strong></div><div><span>Frete</span><strong id="cartShipping">R$ 0,00</strong></div></div><div class="cart-total"><span>Total</span><strong id="cartTotal">R$ 0,00</strong></div><div class="form-row"><label for="publicOrderNotes">Observações</label><input id="publicOrderNotes" /></div><button class="btn btn-pink btn-block" id="btnCheckout" type="button">Finalizar pedido</button><p class="login-error" id="publicCheckoutError"></p></aside></div></div><div class="public-order-success" id="publicOrderSuccess" hidden></div></div></div></div>
 
   <!-- ===================== MODAL RELATÓRIOS ===================== -->
   <!-- ===================== MODAL LOGIN ADMIN ===================== -->

@@ -137,7 +137,7 @@ let stockMovements = [
 ];
 
 let sales = [];        // histórico de vendas
-let cart = [];         // carrinho (compartilhado entre vitrine e PDV)
+let cart = [];         // carrinho público da vitrine
 let activeCategory = "Todos";
 let nextProductId = 9;
 let nextSaleId = 1;
@@ -937,6 +937,7 @@ function navigate(screen, category = "Todos") {
   if (screen === "maquininhas") carregarMaquininhas();
   if (screen === "pdv") iniciarPdvLoja();
   if (screen === "etiquetas") iniciarEtiquetas();
+  if (screen === "checkout-publico") renderCart();
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
 
@@ -1441,7 +1442,7 @@ async function calcularFreteBairro() {
 }
 
 function getShippingData() {
-  const deliveryType = $("#deliveryType")?.value || "retirada";
+  const deliveryType = $("input[name='publicDelivery']:checked")?.value || "retirada";
   const option = DELIVERY_OPTIONS[deliveryType] || DELIVERY_OPTIONS.retirada;
   const customValue = parseFloat($("#customShippingValue")?.value || "0") || 0;
   const localKey = localShippingKey();
@@ -1626,8 +1627,10 @@ function finalizarVendaMockada(shipping, apiVenda = null, options = {}) {
 function renderCart() {
   const box = $("#cartItems");
   if (!box) return;
+  const emptyActions = $("#publicCartEmptyActions");
+  if (emptyActions) emptyActions.hidden = Boolean(cart.length);
   if (!cart.length) {
-    box.innerHTML = `<p class="cart-empty">Nenhum item adicionado ainda.</p>`;
+    box.innerHTML = "";
     updateCartTotals();
     return;
   }
@@ -1693,8 +1696,14 @@ async function checkout() {
   finally { button.disabled=false;button.textContent="Finalizar pedido"; }
 }
 
-function abrirCheckoutPublico() { $("#publicCheckoutContent").hidden=false;$("#publicOrderSuccess").hidden=true;$("#publicCheckoutError").textContent="";renderCart();openModal("#publicCheckoutModal"); }
-function fecharCheckoutPublico() { closeModal("#publicCheckoutModal"); }
+function abrirCheckoutPublico() {
+  $("#publicCheckoutContent").hidden = false;
+  $("#publicOrderSuccess").hidden = true;
+  $("#publicCheckoutError").textContent = "";
+  renderCart();
+  navigate("checkout-publico");
+}
+function fecharCheckoutPublico() { navigate("catalogo"); }
 
 /* ----------------- PDV ----------------- */
 function renderPdv(filter = "") {
@@ -2637,9 +2646,14 @@ function init() {
 
   // carrinho público
   $("#cartButton").addEventListener("click", abrirCheckoutPublico);
-  $("#publicCheckoutClose").addEventListener("click", fecharCheckoutPublico);
-  $("#publicCheckoutModal").addEventListener("click", event => { if (event.target.id === "publicCheckoutModal") fecharCheckoutPublico(); });
-  $("#deliveryType").addEventListener("change", () => { const local=$("#deliveryType").value==="local"; $("#localShippingWrap").classList.toggle("show",local); if(!local){localShippingQuote=null;setShippingStatus("");} updateCartTotals(); });
+  $("#publicCheckoutBack").addEventListener("click", fecharCheckoutPublico);
+  $("#publicEmptyCatalog").addEventListener("click", fecharCheckoutPublico);
+  $$("input[name='publicDelivery']").forEach(option => option.addEventListener("change", () => {
+    const local = option.value === "local" && option.checked;
+    $("#localShippingWrap").classList.toggle("show", local);
+    if (!local) { localShippingQuote = null; setShippingStatus(""); }
+    updateCartTotals();
+  }));
   ["#customerCity","#customerDistrict","#customerState"].forEach(id => $(id).addEventListener("input", resetLocalShippingQuote));
   $("#customerState").addEventListener("input", event => { event.target.value=event.target.value.toUpperCase(); });
   $("#btnCalculateShipping").addEventListener("click", calcularFreteBairro);
