@@ -178,7 +178,9 @@ async function gerarCodigosVariacoes(req, res) {
         p.nome AS produto_nome
       FROM produto_variacoes pv
       INNER JOIN produtos p ON p.id = pv.produto_id
-      WHERE pv.codigo_barras IS NULL OR pv.codigo_barras = ''
+      WHERE pv.codigo_barras IS NULL
+         OR pv.codigo_barras = ''
+         OR LENGTH(pv.codigo_barras) > 18
       ORDER BY p.nome ASC, pv.tamanho ASC, pv.cor ASC, pv.id ASC
       FOR UPDATE OF pv;
     `);
@@ -186,24 +188,17 @@ async function gerarCodigosVariacoes(req, res) {
     const atualizados = [];
 
     for (const variacao of variacoesResult.rows) {
-      const codigoBase = variacao.sku
-        ? slugCodigo(variacao.sku)
-        : gerarCodigoVariacao({
-            produtoNome: variacao.produto_nome,
-            tamanho: variacao.tamanho,
-            cor: variacao.cor,
-          });
-      const codigo = gerarCodigoUnico(codigoBase || `VARIACAO-${variacao.id}`, codigosExistentes);
+      const codigo = `GF${String(variacao.id).padStart(6, "0")}`;
+      if (codigosExistentes.some(existente => String(existente).toUpperCase() === codigo)) continue;
 
       const updateResult = await client.query(
         `
           UPDATE produto_variacoes
           SET codigo_barras = $1,
-              codigo_interno = COALESCE(NULLIF(codigo_interno, ''), $1),
-              sku = COALESCE(NULLIF(sku, ''), $1),
+              codigo_interno = COALESCE(NULLIF(codigo_interno, ''), sku, $1),
               updated_at = NOW()
           WHERE id = $2
-            AND (codigo_barras IS NULL OR codigo_barras = '')
+            AND (codigo_barras IS NULL OR codigo_barras = '' OR LENGTH(codigo_barras) > 18)
           RETURNING id, produto_id, tamanho, cor, sku, codigo_barras, codigo_interno;
         `,
         [codigo, variacao.id]
@@ -231,6 +226,28 @@ async function gerarCodigosVariacoes(req, res) {
     });
   } finally {
     client.release();
+  }
+}
+
+async function gerarCodigoCurtoVariacao(req, res) {
+  const produtoId = inteiroPositivo(req.params.id);
+  const variacaoId = inteiroPositivo(req.params.variacao_id);
+  if (!produtoId || !variacaoId) return res.status(400).json({ message: "Variação inválida." });
+  const codigo = `GF${String(variacaoId).padStart(6, "0")}`;
+  try {
+    const result = await query(
+      `UPDATE produto_variacoes
+       SET codigo_barras=$3, updated_at=NOW()
+       WHERE id=$1 AND produto_id=$2
+       RETURNING id,produto_id,sku,codigo_barras,codigo_interno,tamanho,cor`,
+      [variacaoId, produtoId, codigo]
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: "Variação não encontrada." });
+    res.json({ message: "Código curto gerado com sucesso.", variacao: result.rows[0] });
+  } catch (error) {
+    res.status(error.code === "23505" ? 409 : 500).json({
+      message: error.code === "23505" ? "Esse código curto já está sendo usado por outra variação." : "Não foi possível gerar o código curto.",
+    });
   }
 }
 
@@ -340,7 +357,7 @@ async function codigoUnicoParaVariacao(client, produtoNome, produtoCategoria, va
 }
 
 async function inserirVariacao(client, produtoId, produtoNome, produtoCategoria, body) {
-  const tamanho = textoV2(body.tamanho, 10), cor = textoV2(body.cor, 60);
+  const tamanho = textoV2(body.tamanho, 30), cor = textoV2(body.cor, 60);
   if (!tamanho || !cor) throw Object.assign(new Error("Tamanho e cor são obrigatórios em cada variação."), { statusCode: 400 });
   const preco = body.preco_venda === "" || body.preco_venda == null ? null : numeroNaoNegativo(body.preco_venda);
   const promocional = body.preco_promocional === "" || body.preco_promocional == null ? null : numeroNaoNegativo(body.preco_promocional);
@@ -349,10 +366,14 @@ async function inserirVariacao(client, produtoId, produtoNome, produtoCategoria,
   if (preco === null && body.preco_venda !== "" && body.preco_venda != null || promocional === null && body.preco_promocional !== "" && body.preco_promocional != null || quantidade === null || minimo === null || !Number.isInteger(quantidade) || !Number.isInteger(minimo)) throw Object.assign(new Error("Preço e estoque da variação são inválidos."), { statusCode: 400 });
   const gerado = await codigoUnicoParaVariacao(client, produtoNome, produtoCategoria, { ...body, tamanho, cor });
   const sku = textoV2(body.sku, 80) || gerado;
-  const codigoBarras = textoV2(body.codigo_barras, 80) || sku;
+  const codigoBarrasInformado = textoV2(body.codigo_barras, 80) || null;
   const codigoInterno = textoV2(body.codigo_interno, 80) || sku;
   const row = (await client.query(`INSERT INTO produto_variacoes (produto_id,tamanho,cor,sku,codigo_barras,codigo_interno,preco_venda,preco_promocional,ativo)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [produtoId, tamanho, cor, sku, codigoBarras, codigoInterno, preco, promocional, body.ativo !== false])).rows[0];
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [produtoId, tamanho, cor, sku, codigoBarrasInformado, codigoInterno, preco, promocional, body.ativo !== false])).rows[0];
+  if (!codigoBarrasInformado) {
+    row.codigo_barras = `GF${String(row.id).padStart(6, "0")}`;
+    await client.query("UPDATE produto_variacoes SET codigo_barras=$2,updated_at=NOW() WHERE id=$1", [row.id, row.codigo_barras]);
+  }
   await client.query("INSERT INTO estoque (produto_variacao_id,quantidade,quantidade_minima) VALUES ($1,$2,$3)", [row.id, quantidade, minimo]);
   if (quantidade > 0) await client.query(`INSERT INTO movimentacoes_estoque (produto_id,produto_variacao_id,tipo,quantidade,motivo,responsavel,observacoes)
     VALUES ($1,$2,'entrada',$3,'Estoque inicial',$4,'Cadastro de Produtos e Estoque V2')`, [produtoId, row.id, quantidade, "Cadastro administrativo"]);
@@ -386,7 +407,7 @@ async function criarVariacao(req, res) {
 
 async function atualizarVariacao(req, res) {
   const produtoId = inteiroPositivo(req.params.id), id = inteiroPositivo(req.params.variacao_id); if (!produtoId || !id) return res.status(400).json({ message: "Variação inválida." });
-  const b = req.body || {}, tamanho = textoV2(b.tamanho, 10), cor = textoV2(b.cor, 60); if (!tamanho || !cor) return res.status(400).json({ message: "Tamanho e cor são obrigatórios." });
+  const b = req.body || {}, tamanho = textoV2(b.tamanho, 30), cor = textoV2(b.cor, 60); if (!tamanho || !cor) return res.status(400).json({ message: "Tamanho e cor são obrigatórios." });
   if (b.preco_venda !== "" && b.preco_venda != null && numeroNaoNegativo(b.preco_venda) === null || b.preco_promocional !== "" && b.preco_promocional != null && numeroNaoNegativo(b.preco_promocional) === null) return res.status(400).json({ message: "Informe preços válidos e não negativos." });
   try { const result = await query(`UPDATE produto_variacoes SET tamanho=$3,cor=$4,sku=COALESCE(NULLIF($5,''),sku),codigo_barras=COALESCE(NULLIF($6,''),codigo_barras),codigo_interno=COALESCE(NULLIF($7,''),codigo_interno),preco_venda=$8,preco_promocional=$9,ativo=$10,updated_at=NOW() WHERE id=$1 AND produto_id=$2 RETURNING *`, [id, produtoId, tamanho, cor, textoV2(b.sku,80), textoV2(b.codigo_barras,80), textoV2(b.codigo_interno,80), b.preco_venda === "" || b.preco_venda == null ? null : numeroNaoNegativo(b.preco_venda), b.preco_promocional === "" || b.preco_promocional == null ? null : numeroNaoNegativo(b.preco_promocional), b.ativo !== false]); if (!result.rows[0]) return res.status(404).json({ message: "Variação não encontrada." }); const minimo=numeroNaoNegativo(b.estoque_minimo??0);if(minimo===null||!Number.isInteger(minimo))return res.status(400).json({message:"Estoque mínimo inválido."});await query("UPDATE estoque SET quantidade_minima=$2,updated_at=NOW() WHERE produto_variacao_id=$1",[id,minimo]);res.json(result.rows[0]); }
   catch (error) { res.status(error.code === "23505" ? 409 : 500).json({ message: error.code === "23505" ? "Código ou combinação tamanho/cor já cadastrada." : "Não foi possível atualizar a variação." }); }
@@ -458,12 +479,18 @@ async function criarMedida(req,res){const produtoId=inteiroPositivo(req.params.i
 async function atualizarMedida(req,res){const produtoId=inteiroPositivo(req.params.id),id=inteiroPositivo(req.params.medida_id);if(!produtoId||!id)return res.status(400).json({message:"Medida inválida."});try{const d=dadosMedida(req.body||{});const row=(await query(`UPDATE produto_medidas SET tamanho=$3,busto=$4,cintura=$5,quadril=$6,comprimento=$7,observacao=$8,ordem=$9,updated_at=NOW() WHERE id=$1 AND produto_id=$2 RETURNING *`,[id,produtoId,...d])).rows[0];if(!row)return res.status(404).json({message:"Medida não encontrada."});res.json(row);}catch{res.status(500).json({message:"Não foi possível atualizar a medida."});}}
 async function excluirMedida(req,res){const produtoId=inteiroPositivo(req.params.id),id=inteiroPositivo(req.params.medida_id);if(!produtoId||!id)return res.status(400).json({message:"Medida inválida."});try{const row=(await query("DELETE FROM produto_medidas WHERE id=$1 AND produto_id=$2 RETURNING id",[id,produtoId])).rows[0];if(!row)return res.status(404).json({message:"Medida não encontrada."});res.json({ok:true,message:"Medida removida."});}catch{res.status(500).json({message:"Não foi possível remover a medida."});}}
 
+async function listarCategorias(req,res){try{res.json((await query("SELECT * FROM categorias_produtos ORDER BY ativo DESC,ordem,nome")).rows);}catch{res.status(500).json({message:"Não foi possível carregar as categorias."});}}
+async function criarCategoria(req,res){const nome=textoV2(req.body?.nome,120);if(!nome)return res.status(400).json({message:"Informe o nome da categoria."});const slugBase=slugCodigo(nome).toLowerCase();try{const existente=(await query("SELECT * FROM categorias_produtos WHERE LOWER(nome)=LOWER($1) LIMIT 1",[nome])).rows[0];if(existente){const row=(await query("UPDATE categorias_produtos SET ativo=TRUE,updated_at=NOW() WHERE id=$1 RETURNING *",[existente.id])).rows[0];return res.json(row);}const row=(await query("INSERT INTO categorias_produtos (nome,slug,descricao,ordem) VALUES ($1,$2,$3,$4) RETURNING *",[nome,slugBase,textoV2(req.body?.descricao,2000)||null,Number(req.body?.ordem)||0])).rows[0];res.status(201).json(row);}catch(error){res.status(error.code==="23505"?409:500).json({message:error.code==="23505"?"Essa categoria já existe.":"Não foi possível criar a categoria."});}}
+async function atualizarCategoria(req,res){const id=inteiroPositivo(req.params.categoria_id),nome=textoV2(req.body?.nome,120);if(!id||!nome)return res.status(400).json({message:"Categoria inválida."});try{const row=(await query(`UPDATE categorias_produtos SET nome=$2,slug=$3,descricao=$4,ativo=$5,ordem=$6,updated_at=NOW() WHERE id=$1 RETURNING *`,[id,nome,slugCodigo(nome).toLowerCase(),textoV2(req.body?.descricao,2000)||null,req.body?.ativo!==false,Number(req.body?.ordem)||0])).rows[0];if(!row)return res.status(404).json({message:"Categoria não encontrada."});res.json(row);}catch(error){res.status(error.code==="23505"?409:500).json({message:error.code==="23505"?"Já existe uma categoria com esse nome.":"Não foi possível atualizar a categoria."});}}
+async function excluirCategoria(req,res){const id=inteiroPositivo(req.params.categoria_id);if(!id)return res.status(400).json({message:"Categoria inválida."});try{const row=(await query("UPDATE categorias_produtos SET ativo=FALSE,updated_at=NOW() WHERE id=$1 RETURNING *",[id])).rows[0];if(!row)return res.status(404).json({message:"Categoria não encontrada."});res.json({ok:true,message:"Categoria inativada.",categoria:row});}catch{res.status(500).json({message:"Não foi possível inativar a categoria."});}}
+
 module.exports = {
   listarProdutos,
   listarProdutosPublicos,
   obterProduto,
   obterProdutoPublico,
   gerarCodigosVariacoes,
+  gerarCodigoCurtoVariacao,
   buscarProdutoPorCodigo,
   criarProduto,
   atualizarProduto,
@@ -478,4 +505,8 @@ module.exports = {
   criarMedida,
   atualizarMedida,
   excluirMedida,
+  listarCategorias,
+  criarCategoria,
+  atualizarCategoria,
+  excluirCategoria,
 };

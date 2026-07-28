@@ -4,7 +4,9 @@
    ============================================================ */
 
 /* ----------------- DADOS MOCKADOS ----------------- */
-const TAMANHOS = ["Único", "P", "M", "G", "GG"];
+const TAMANHOS_ROUPA = ["PP", "P", "M", "G", "GG", "Único"];
+const TAMANHOS_NUMERICOS = ["34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44"];
+const TAMANHOS = [...TAMANHOS_ROUPA, ...TAMANHOS_NUMERICOS];
 const API_BASE_URL =
   window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "http://localhost:3001/api"
@@ -156,6 +158,7 @@ let freightDeactivateConfirmId = null;
 let maquininhas = [];
 let adminPinValue = "";
 let productFilesSelected = [];
+let categoriasProdutos = [];
 let pendingPinAction = null;
 let pdvCart = [];
 let pdvCaixa = null;
@@ -432,7 +435,7 @@ function money(v) {
 }
 
 function totalStock(p) {
-  return TAMANHOS.reduce((sum, s) => sum + (p.sizes[s] || 0), 0);
+  return Object.values(p.sizes||{}).reduce((sum, quantidade) => sum + Number(quantidade||0), 0);
 }
 
 function productStatus(p) {
@@ -502,10 +505,7 @@ function numeroApi(value, fallback = 0) {
 
 function adaptarProdutoApi(produto) {
   const variacoes = Array.isArray(produto.variacoes) ? produto.variacoes : [];
-  const sizes = TAMANHOS.reduce((acc, size) => {
-    acc[size] = 0;
-    return acc;
-  }, {});
+  const sizes = {};
   const colors = [];
 
   variacoes.forEach(variacao => {
@@ -994,7 +994,33 @@ function productMedia(p) {
     ? [...p.midias].sort((a, b) => Number(b.principal) - Number(a.principal) || (a.ordem || 0) - (b.ordem || 0) || a.id - b.id)
     : [];
 }
-function mediaUrl(url) { const value=String(url||"");return value.startsWith("/uploads/")?`${API_BASE_URL.replace(/\/api$/,"")}${value}`:value; }
+function resolverUrlMidia(url) {
+  const value = String(url || "").trim().replace(/\\/g, "/");
+  if (!value) return "";
+  if (/^(https?:|blob:|data:)/i.test(value)) return value;
+  if (/^\/?(?:uploads\/)+/i.test(value)) {
+    const uploadPath = `/${value.replace(/^\/?(?:uploads\/)+/i, "uploads/")}`;
+    return API_BASE_URL.startsWith("http")
+      ? `${API_BASE_URL.replace(/\/api\/?$/, "")}${uploadPath}`
+      : uploadPath;
+  }
+  if (/^\/?assets\//i.test(value)) return value.replace(/^\//, "");
+  return value;
+}
+
+// Alias mantido para compatibilidade com os renderizadores existentes.
+function mediaUrl(url) { return resolverUrlMidia(url); }
+
+function corrigirUrlMidiaAoFalhar(event) {
+  const element = event.target;
+  if (!(element instanceof HTMLImageElement) || element.dataset.mediaRetry === "done") return;
+  const original = element.getAttribute("src") || "";
+  const resolved = resolverUrlMidia(original);
+  if (resolved && resolved !== original) {
+    element.dataset.mediaRetry = "done";
+    element.src = resolved;
+  }
+}
 
 function mainProductImage(p) {
   const midias = productMedia(p);
@@ -1019,17 +1045,17 @@ function renderMediaStage(media, p, color) {
   }
 
   if (media?.tipo === "imagem") {
-    return `<img class="detail-media-main" src="${mediaUrl(media.url)}" alt="${mediaAlt(media, p)}" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
-      <div class="detail-visual detail-visual-fallback"><strong>Sem foto cadastrada</strong></div>`;
+    return `<img class="detail-media-main" src="${escaparHtml(resolverUrlMidia(media.url))}" alt="${escaparHtml(mediaAlt(media, p))}" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
+      <div class="detail-visual detail-visual-fallback"><span aria-hidden="true">&#128247;</span><strong>Foto não cadastrada</strong></div>`;
   }
 
-  return `<div class="detail-visual"><strong>Sem foto cadastrada</strong></div>`;
+  return `<div class="detail-visual detail-visual-empty"><span aria-hidden="true">&#128247;</span><strong>Foto não cadastrada</strong></div>`;
 }
 
 function renderMediaThumb(media, index, active) {
   const videoMark = media.tipo === "video" ? `<span class="media-play">Play</span>` : "";
   const preview = media.tipo === "imagem"
-    ? `<img src="${mediaUrl(media.url)}" alt="${media.titulo || `Foto ${index + 1}`}" onerror="this.hidden=true" />`
+    ? `<img src="${escaparHtml(resolverUrlMidia(media.url))}" alt="${escaparHtml(media.titulo || `Foto ${index + 1}`)}" onerror="this.hidden=true;this.parentElement.classList.add('media-thumb-error')" />`
     : `<span class="media-video-thumb">Vídeo</span>`;
 
   return `<button class="detail-media-thumb ${active ? "active" : ""}" type="button" data-detail-media="${index}" aria-label="Ver mídia ${index + 1}">
@@ -1067,17 +1093,14 @@ function colorGradient(color) {
 }
 
 function colorSizes(p, color) {
-  const colorIndex = Math.max(0, p.colors.indexOf(color));
-  return TAMANHOS.reduce((acc, size, sizeIndex) => {
-    const base = p.sizes[size] || 0;
-    const reduction = colorIndex === 0 ? 0 : ((colorIndex + sizeIndex) % 3);
-    acc[size] = Math.max(0, base - reduction);
-    return acc;
-  }, {});
+  if(Array.isArray(p.apiVariacoes)&&p.apiVariacoes.length)return p.apiVariacoes.filter(v=>v.ativo!==false&&String(v.cor||"Único")===String(color)).reduce((acc,v)=>{acc[normalizarTamanho(v.tamanho)]=(acc[normalizarTamanho(v.tamanho)]||0)+Number(v.quantidade_estoque||0);return acc;},{});
+  return {...(p.sizes||{})};
 }
 
+function tamanhosProduto(p, sizes=p?.sizes||{}) { const valores=[...(p?.apiVariacoes||[]).filter(v=>v.ativo!==false).map(v=>normalizarTamanho(v.tamanho)),...Object.keys(sizes)];return [...new Set(valores.filter(Boolean))].sort((a,b)=>{const na=Number(a),nb=Number(b);if(Number.isFinite(na)&&Number.isFinite(nb))return na-nb;const ia=TAMANHOS_ROUPA.indexOf(a),ib=TAMANHOS_ROUPA.indexOf(b);if(ia>=0||ib>=0)return (ia<0?999:ia)-(ib<0?999:ib);return a.localeCompare(b,'pt-BR');}); }
+
 function firstAvailableSize(sizes) {
-  return TAMANHOS.find(size => (sizes[size] || 0) > 0) || "";
+  return tamanhosProduto(null,sizes).find(size => (sizes[size] || 0) > 0) || "";
 }
 
 function shopCard(p) {
@@ -1085,7 +1108,7 @@ function shopCard(p) {
   const selectedColor = p.colors[0] || "Único";
   const availableByColor = colorSizes(p, selectedColor);
   const selectedSize = firstAvailableSize(availableByColor);
-  const sizes = TAMANHOS.map(s => {
+  const sizes = tamanhosProduto(p,availableByColor).map(s => {
     const off = (availableByColor[s] || 0) === 0 ? "off" : "";
     const active = s === selectedSize ? "active" : "";
     const disabled = off ? "disabled" : "";
@@ -1113,7 +1136,7 @@ function shopCard(p) {
       <span class="shop-tag ${status}">${statusLabel(status)}</span>
       ${promoTag}
       ${mediaBadge}
-      ${mainImage ? `<span class="shop-photo-fallback">Sem foto cadastrada</span><img class="shop-thumb-img" src="${mediaUrl(mainImage.url)}" alt="${mediaAlt(mainImage, p)}" loading="lazy" onerror="this.hidden=true" />` : '<span class="shop-photo-fallback">Sem foto cadastrada</span>'}
+      ${mainImage ? `<span class="shop-photo-fallback"><span aria-hidden="true">&#128247;</span>Foto não cadastrada</span><img class="shop-thumb-img" src="${escaparHtml(resolverUrlMidia(mainImage.url))}" alt="${escaparHtml(mediaAlt(mainImage, p))}" loading="lazy" onerror="this.hidden=true;this.previousElementSibling.classList.add('is-visible')" />` : '<span class="shop-photo-fallback is-visible"><span aria-hidden="true">&#128247;</span>Foto não cadastrada</span>'}
     </div>
     <div class="shop-body">
       <span class="shop-cat">${p.category}</span>
@@ -1132,7 +1155,7 @@ function shopCard(p) {
 function renderCardSizes(card, p, color) {
   const sizes = colorSizes(p, color);
   const selectedSize = firstAvailableSize(sizes);
-  $(".shop-sizes", card).innerHTML = TAMANHOS.map(s => {
+  $(".shop-sizes", card).innerHTML = tamanhosProduto(p,sizes).map(s => {
     const off = (sizes[s] || 0) === 0 ? "off" : "";
     const active = s === selectedSize ? "active" : "";
     const disabled = off ? "disabled" : "";
@@ -1210,7 +1233,7 @@ function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
       <span class="color-swatch" style="background:${colorHex(c)}"></span>${c}
     </span>
   `).join("");
-  const sizeChips = TAMANHOS.map(s => {
+  const sizeChips = tamanhosProduto(p,sizes).map(s => {
     const off = (sizes[s] || 0) === 0 ? "off" : "";
     return `<span class="detail-size-chip ${off}">${s}</span>`;
   }).join("");
@@ -1284,7 +1307,9 @@ function renderHome() {
 
 /* ----------------- CATÁLOGO (vitrine filtrável) ----------------- */
 function renderFilters() {
-  const cats = ["Todos", "Vestidos", "Blusas", "Calças", "Saias", "Conjuntos", "Promoções"];
+  const cats = ["Todos", ...new Set(products.map(p=>p.category).filter(Boolean))];
+  if(products.some(isPromo))cats.push("Promoções");
+  if(!cats.includes(activeCategory))activeCategory="Todos";
   $("#catalogFilters").innerHTML = cats.map(c =>
     `<button class="filter-pill ${c === activeCategory ? "active" : ""}" data-cat="${c}" type="button">${c}</button>`
   ).join("");
@@ -1319,7 +1344,7 @@ function renderCatalog() {
 function openBuyModal(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
-  const sizeOpts = TAMANHOS.filter(s => (p.sizes[s] || 0) > 0)
+  const sizeOpts = tamanhosProduto(p).filter(s => (p.sizes[s] || 0) > 0)
     .map(s => `<option value="${s}">${s} — ${p.sizes[s]} disponível(is)</option>`).join("");
   const colorOpts = p.colors.map(c => `<option value="${c}">${c}</option>`).join("");
 
@@ -1715,7 +1740,7 @@ function renderPdv(filter = "") {
   }
 
   grid.innerHTML = list.map(p => {
-    const sizeOpts = TAMANHOS.filter(s => (p.sizes[s] || 0) > 0)
+    const sizeOpts = tamanhosProduto(p).filter(s => (p.sizes[s] || 0) > 0)
       .map(s => `<option value="${s}">${s} (${p.sizes[s]})</option>`).join("");
     const colorOpts = p.colors.map(c => `<option value="${c}">${c}</option>`).join("");
 
@@ -2300,7 +2325,7 @@ function buildStockReport(fields) {
           <tr>
             ${reportCell(fields.includes("produtos"), `<td>${p.name}</td>`)}
             <td>${p.category}</td>
-            ${reportCell(fields.includes("tamanhos"), `<td>${TAMANHOS.map(s => `${s}: ${p.sizes[s] || 0}`).join("<br>")}</td>`)}
+            ${reportCell(fields.includes("tamanhos"), `<td>${tamanhosProduto(p).map(s => `${s}: ${p.sizes[s] || 0}`).join("<br>")}</td>`)}
             ${reportCell(fields.includes("cores"), `<td>${p.colors.join(", ")}</td>`)}
             ${reportCell(fields.includes("valores"), `<td>${money(p.price)}</td>`)}
             ${reportCell(fields.includes("fornecedor"), `<td>${suppliers[idx % suppliers.length].name}</td>`)}
@@ -2451,7 +2476,7 @@ async function buscarProdutoPdv(event) {
   if (!encontrados.length) {
     if (!pdvProdutosPublicos.length) await carregarProdutosPdv();
     const busca = termo.toLowerCase();
-    encontrados = pdvProdutosPublicos.filter(p => `${p.nome} ${p.categoria} ${(p.variacoes || []).map(v => `${v.sku} ${v.codigo_barras} ${v.codigo_interno}`).join(" ")}`.toLowerCase().includes(busca));
+    encontrados = pdvProdutosPublicos.filter(p => `${p.nome} ${p.categoria} ${(p.variacoes || []).map(v => `${v.sku} ${v.codigo_barras} ${v.codigo_interno} ${v.cor} ${v.tamanho}`).join(" ")}`.toLowerCase().includes(busca));
   }
   $("#pdvSearchStatus").textContent = encontrados.length ? `${encontrados.length} produto(s) encontrado(s).` : "Nenhum produto encontrado.";
   renderResultadosPdv(encontrados);
@@ -2598,19 +2623,30 @@ function montarVariacoesEtiquetas(produtos) {
   })));
 }
 
-function codigoEtiqueta(item) { return item.codigo_barras || item.sku || item.codigo_interno || ""; }
+function codigoEtiqueta(item) { return String(item.codigo_barras || "").trim(); }
+function precisaCodigoCurto(item) { const codigo=codigoEtiqueta(item);return !codigo || codigo.length>18; }
+function nomeCurtoEtiqueta(nome, limite=30) { const texto=String(nome||"Produto").trim();return texto.length>limite?`${texto.slice(0,limite-1).trimEnd()}…`:texto; }
 function filtrarEtiquetas() {
   const termo = ($("#labelsSearch")?.value || "").trim().toLowerCase();
   const lista = variacoesEtiquetas.filter(item => `${item.produto} ${item.categoria} ${item.sku} ${item.codigo_barras} ${item.codigo_interno} ${item.cor} ${item.tamanho}`.toLowerCase().includes(termo));
-  $("#labelsVariationsTable").innerHTML = `<thead><tr><th>Produto</th><th>Variação</th><th>Código</th><th>Preço</th><th>Estoque</th><th>Ação</th></tr></thead><tbody>${lista.map(item => `<tr><td data-label="Produto"><strong>${escaparHtml(item.produto)}</strong><small>${escaparHtml(item.categoria)}</small></td><td data-label="Variação"><strong>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)}</strong></td><td data-label="Código"><code class="variation-code">${escaparHtml(codigoEtiqueta(item) || "Sem código")}</code><small>${item.sku && item.sku !== codigoEtiqueta(item) ? `SKU: ${escaparHtml(item.sku)}` : ""}</small></td><td data-label="Preço"><strong class="variation-price">${formatarMoeda(item.preco)}</strong></td><td data-label="Estoque"><span class="stock-pill ${item.estoque > 0 ? "available" : "empty"}">${item.estoque} un.</span></td><td data-label="Ação"><button class="btn btn-ghost btn-sm label-add-button" data-label-add="${item.id}" type="button">Adicionar etiqueta</button></td></tr>`).join("") || `<tr><td colspan="6">Nenhuma variação encontrada.</td></tr>`}</tbody>`;
+  $("#labelsVariationsTable").innerHTML = `<thead><tr><th>Produto</th><th>Variação</th><th>SKU</th><th>Código de barras</th><th>Preço</th><th>Estoque</th><th>Ação</th></tr></thead><tbody>${lista.map(item => `<tr><td data-label="Produto"><strong>${escaparHtml(item.produto)}</strong><small>${escaparHtml(item.categoria)}</small></td><td data-label="Variação"><strong>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)}</strong></td><td data-label="SKU"><code class="variation-sku" title="${escaparHtml(item.sku)}">${escaparHtml(item.sku||"—")}</code></td><td data-label="Código de barras"><code class="variation-code ${precisaCodigoCurto(item)?'needs-short-code':''}">${escaparHtml(codigoEtiqueta(item)||"Sem código")}</code>${precisaCodigoCurto(item)?`<button class="link-btn label-generate-code" data-label-generate="${item.id}" type="button">Gerar código curto</button>`:''}</td><td data-label="Preço"><strong class="variation-price">${formatarMoeda(item.preco)}</strong></td><td data-label="Estoque"><span class="stock-pill ${item.estoque > 0 ? "available" : "empty"}">${item.estoque} un.</span></td><td data-label="Ação"><button class="btn btn-ghost btn-sm label-add-button" data-label-add="${item.id}" type="button" ${precisaCodigoCurto(item)?'disabled title="Gere um código curto antes de imprimir"':''}>Adicionar etiqueta</button></td></tr>`).join("") || `<tr><td colspan="7">Nenhuma variação encontrada.</td></tr>`}</tbody>`;
   $$('[data-label-add]').forEach(button => button.addEventListener("click", () => adicionarEtiquetaParaImpressao(Number(button.dataset.labelAdd))));
+  $$('[data-label-generate]').forEach(button => button.addEventListener("click", () => gerarCodigoCurtoEtiqueta(Number(button.dataset.labelGenerate))));
+}
+
+async function gerarCodigoCurtoEtiqueta(id) {
+  if (!usuarioAdministrador() && !temPermissao("produtos.editar")) return showToast("Você não tem permissão para gerar códigos.");
+  const item=variacoesEtiquetas.find(variacao=>variacao.id===id);if(!item)return;
+  const response=await fetchAdmin(`/produtos/${item.produto_id}/variacoes/${item.id}/gerar-codigo-curto`,{method:"POST"});
+  const data=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(data.message||"Não foi possível gerar o código curto.");
+  showToast(data.message||"Código curto gerado.");await carregarProdutosEtiquetas();
 }
 
 async function gerarCodigosFaltantes() {
   if (!usuarioAdministrador() && !temPermissao("produtos.editar")) return showToast("Você não tem permissão para gerar códigos. Solicite à dona da loja.");
-  const faltantes = variacoesEtiquetas.filter(item => !codigoEtiqueta(item)).length;
-  if (!faltantes) return showToast("Todas as variações já possuem código.");
-  if (!confirm(`Gerar códigos para ${faltantes} variação(ões)?`)) return;
+  const faltantes = variacoesEtiquetas.filter(precisaCodigoCurto).length;
+  if (!faltantes) return showToast("Todas as variações já possuem código de barras curto.");
+  if (!confirm(`Gerar códigos curtos para ${faltantes} variação(ões)? Os SKUs serão mantidos.`)) return;
   const response = await fetchAdmin("/produtos/gerar-codigos", { method: "POST", headers: { "Content-Type": "application/json" } });
   const data = await response?.json().catch(() => ({}));
   if (!response?.ok) return showToast(data.message || "Não foi possível gerar os códigos.");
@@ -2620,7 +2656,7 @@ async function gerarCodigosFaltantes() {
 function adicionarEtiquetaParaImpressao(id) {
   const item = variacoesEtiquetas.find(variacao => variacao.id === id);
   if (!item) return;
-  if (!codigoEtiqueta(item)) return showToast("Gere códigos antes de imprimir esta etiqueta.");
+  if (precisaCodigoCurto(item)) return showToast("Gere um código de barras curto antes de imprimir esta etiqueta.");
   const existente = etiquetasSelecionadas.find(etiqueta => etiqueta.id === id);
   if (existente) existente.quantidade += 1; else etiquetasSelecionadas.push({ ...item, quantidade: 1 });
   renderEtiquetasSelecionadas();
@@ -2637,14 +2673,14 @@ function renderEtiquetasSelecionadas() {
 }
 
 function atualizarResumoEtiquetas() {
-  const comCodigo = variacoesEtiquetas.filter(item => Boolean(codigoEtiqueta(item))).length;
+  const comCodigo = variacoesEtiquetas.filter(item => !precisaCodigoCurto(item)).length;
   const selecionadas = etiquetasSelecionadas.reduce((total,item) => total + item.quantidade, 0);
   $("#labelsSummary").innerHTML = [["Total de variações",variacoesEtiquetas.length],["Com código",comCodigo],["Sem código",variacoesEtiquetas.length-comCodigo],["Selecionadas",selecionadas]].map(([rotulo,valor])=>`<div class="stat-card"><span>${rotulo}</span><strong>${valor}</strong></div>`).join("");
 }
 
 function montarHtmlEtiqueta(item) {
   const codigo = codigoEtiqueta(item);
-  return `<article class="product-label"><header>Gisele Flávia Modas</header><strong class="label-product">${escaparHtml(item.produto)}</strong><span>${escaparHtml(item.tamanho)} · ${escaparHtml(item.cor)}</span><b class="label-price">${formatarMoeda(item.preco)}</b><div class="barcode-block"><svg class="barcode-svg" data-barcode="${escaparHtml(codigo)}" role="img" aria-label="Código de barras ${escaparHtml(codigo)}"></svg><div class="barcode-fallback" aria-hidden="true"></div><code class="label-code-text">${escaparHtml(codigo)}</code></div></article>`;
+  return `<article class="product-label"><header>Gisele Flávia Modas</header><strong class="label-product" title="${escaparHtml(item.produto)}">${escaparHtml(nomeCurtoEtiqueta(item.produto))}</strong><span class="label-variation">${escaparHtml(item.tamanho)} · ${escaparHtml(item.cor)}</span><b class="label-price">${formatarMoeda(item.preco)}</b><div class="barcode-block"><svg class="barcode-svg" data-barcode="${escaparHtml(codigo)}" role="img" aria-label="Código de barras ${escaparHtml(codigo)}"></svg><div class="barcode-fallback" aria-hidden="true"></div><code class="label-code-text">${escaparHtml(codigo)}</code></div>${item.sku?`<small class="label-sku" title="${escaparHtml(item.sku)}">SKU: ${escaparHtml(nomeCurtoEtiqueta(item.sku,34))}</small>`:''}</article>`;
 }
 
 function htmlEtiquetasSelecionadas() { return etiquetasSelecionadas.flatMap(item => Array.from({length:item.quantidade},()=>montarHtmlEtiqueta(item))).join(""); }
@@ -2776,18 +2812,26 @@ function closeModal(sel) {
 }
 
 /* ----------------- CADASTRO DE PRODUTOS E ESTOQUE V2 ----------------- */
-function htmlVariacaoProduto(v={}) { const codigo=v.codigo_barras||v.sku||v.codigo_interno||"";return `<div class="product-v2-item" data-variation-id="${v.id||""}"><div class="form-grid"><div class="form-row"><label>Tamanho</label><input class="pv-size" list="productSizes" maxlength="10" value="${escaparHtml(v.tamanho||"")}" required /><datalist id="productSizes"><option value="PP"><option value="P"><option value="M"><option value="G"><option value="GG"><option value="Único"></datalist></div><div class="form-row"><label>Cor</label><input class="pv-color" maxlength="60" value="${escaparHtml(v.cor||"")}" required /></div><div class="form-row"><label>Quantidade inicial</label><input class="pv-stock" type="number" min="0" step="1" value="${v.quantidade_estoque??0}" ${v.id?'disabled':''} /></div><div class="form-row"><label>Estoque mínimo</label><input class="pv-min" type="number" min="0" step="1" value="${v.estoque_minimo??0}" /></div></div><label class="form-check"><input class="pv-active" type="checkbox" ${v.ativo===false?'':'checked'} /> Variação ativa</label><details class="product-advanced"><summary>${codigo?`Código: ${escaparHtml(codigo)}`:'Código gerado automaticamente'}</summary><p>O código de barras será criado após salvar.</p><div class="form-grid"><div class="form-row"><label>SKU</label><input class="pv-sku" maxlength="80" value="${escaparHtml(v.sku||"")}" /></div><div class="form-row"><label>Código de barras</label><input class="pv-barcode" maxlength="80" value="${escaparHtml(v.codigo_barras||"")}" /></div><input class="pv-price" type="hidden" value="${v.preco_venda??""}" /><input class="pv-promo" type="hidden" value="${v.preco_promocional??""}" /></div></details><button class="link-btn pv-remove" type="button">${v.id?'Inativar/remover':'Remover linha'}</button></div>`; }
-function htmlMidiaProduto(m={}) { return `<div class="product-v2-item" data-media-id="${m.id||""}"><div class="form-grid"><div class="form-row"><label>Caminho ou URL da imagem</label><input class="pm-url" value="${escaparHtml(m.url||"")}" required placeholder="assets/produtos/nome-da-foto.jpg" /></div><div class="form-row"><label>Texto alternativo opcional</label><input class="pm-alt" maxlength="180" value="${escaparHtml(m.alt_text||m.titulo||"")}" /></div></div><label class="form-check"><input class="pm-main" name="product-main-media" type="radio" ${m.principal?'checked':''} /> Imagem principal</label><button class="link-btn pm-remove" type="button">Remover imagem</button><div class="product-media-preview-wrap">${m.url?`<img class="product-media-preview" src="${escaparHtml(m.url)}" alt="Prévia" onerror="this.remove()" />`:''}<span>Imagem não encontrada</span></div></div>`; }
+async function carregarCategoriasProdutos(selecionar=""){try{const r=await fetchAdmin('/produtos/categorias'),data=await r?.json().catch(()=>[]);if(r?.ok)categoriasProdutos=Array.isArray(data)?data:[];}catch{}const select=$("#fCategory");if(select){const atual=selecionar||select.value;select.innerHTML='<option value="">Escolha uma categoria</option>'+categoriasProdutos.filter(c=>c.ativo||c.nome===atual).map(c=>`<option value="${escaparHtml(c.nome)}" ${c.nome===atual?'selected':''}>${escaparHtml(c.nome)}${c.ativo?'':' (inativa)'}</option>`).join('');if(atual&&![...select.options].some(o=>o.value===atual))select.insertAdjacentHTML('beforeend',`<option selected value="${escaparHtml(atual)}">${escaparHtml(atual)} (produto antigo)</option>`);}}
+async function salvarNovaCategoria(event){event.preventDefault();const status=$("#categoryError"),nome=$("#categoryName").value.trim();status.textContent='Salvando...';const r=await fetchAdmin('/produtos/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome})}),data=await r?.json().catch(()=>({}));if(!r?.ok)return status.textContent=data.message||'Não foi possível criar a categoria.';await carregarCategoriasProdutos(data.nome);closeModal('#categoryModal');showToast('Categoria criada.');}
+function renderGerenciamentoCategorias(){const area=$("#categoryManagementList");area.innerHTML=categoriasProdutos.map(c=>`<div><span>${escaparHtml(c.nome)}${c.ativo?'':' · inativa'}</span><span><button class="link-btn" data-category-edit="${c.id}" type="button">Editar</button><button class="link-btn" data-category-toggle="${c.id}" data-category-active="${c.ativo}" type="button">${c.ativo?'Inativar':'Reativar'}</button></span></div>`).join('');$$('[data-category-edit]',area).forEach(b=>b.onclick=async()=>{const categoria=categoriasProdutos.find(c=>Number(c.id)===Number(b.dataset.categoryEdit)),nome=prompt('Novo nome da categoria:',categoria.nome)?.trim();if(!nome)return;const r=await fetchAdmin(`/produtos/categorias/${categoria.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...categoria,nome})});if(!r?.ok)return showToast('Não foi possível editar a categoria.');await carregarCategoriasProdutos($("#fCategory").value===categoria.nome?nome:$("#fCategory").value);renderGerenciamentoCategorias();});$$('[data-category-toggle]',area).forEach(b=>b.onclick=async()=>{const ativo=b.dataset.categoryActive!=='true',categoria=categoriasProdutos.find(c=>Number(c.id)===Number(b.dataset.categoryToggle));const r=await fetchAdmin(`/produtos/categorias/${categoria.id}`,ativo?{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...categoria,ativo:true})}:{method:'DELETE'});if(!r?.ok)return showToast('Não foi possível atualizar a categoria.');await carregarCategoriasProdutos($("#fCategory").value);renderGerenciamentoCategorias();});}
+async function abrirCategoriasProduto(){await carregarCategoriasProdutos($("#fCategory").value);$("#categoryForm").reset();$("#categoryError").textContent='';renderGerenciamentoCategorias();openModal('#categoryModal');}
+function renderGradeTamanhos(){$("#sizeGridOptions").innerHTML=["34","36","38","40","42","44"].map(t=>`<label><input type="checkbox" data-grid-size="${t}"><strong>${t}</strong><input type="number" data-grid-qty="${t}" min="0" step="1" value="1" aria-label="Quantidade tamanho ${t}"></label>`).join('');}
+function confirmarGradeTamanhos(){const cor=$("#sizeGridColor").value.trim()||'Única';const selecionados=$$('[data-grid-size]:checked',$("#sizeGridOptions"));if(!selecionados.length)return showToast('Escolha ao menos um tamanho da grade.');selecionados.forEach(check=>{const tamanho=check.dataset.gridSize,quantidade=Number($(`[data-grid-qty="${tamanho}"]`).value||0);$("#productVariationsEditor").insertAdjacentHTML('beforeend',htmlVariacaoProduto({tamanho,cor,quantidade_estoque:quantidade}));});bindEditorProduto();showToast(`${selecionados.length} variações adicionadas.`);renderGradeTamanhos();}
+function chipsTamanho(){return `<div class="size-suggestions"><span>Tamanhos de roupa</span><div>${TAMANHOS_ROUPA.map(t=>`<button type="button" data-size-suggestion="${t}">${t}</button>`).join('')}</div><span>Numeração</span><div>${TAMANHOS_NUMERICOS.map(t=>`<button type="button" data-size-suggestion="${t}">${t}</button>`).join('')}</div></div>`;}
+function htmlVariacaoProduto(v={}) { const codigo=v.codigo_barras||v.sku||v.codigo_interno||"";return `<div class="product-v2-item" data-variation-id="${v.id||""}"><div class="form-grid"><div class="form-row"><label>Tamanho</label><input class="pv-size" maxlength="30" value="${escaparHtml(v.tamanho||"")}" required placeholder="Ex.: M, 38, 35/36 ou Plus Size" />${chipsTamanho()}</div><div class="form-row"><label>Cor</label><input class="pv-color" maxlength="60" value="${escaparHtml(v.cor||"")}" required /></div><div class="form-row"><label>Quantidade inicial</label><input class="pv-stock" type="number" min="0" step="1" value="${v.quantidade_estoque??0}" ${v.id?'disabled':''} /></div><div class="form-row"><label>Estoque mínimo</label><input class="pv-min" type="number" min="0" step="1" value="${v.estoque_minimo??0}" /></div></div><label class="form-check"><input class="pv-active" type="checkbox" ${v.ativo===false?'':'checked'} /> Variação ativa</label><details class="product-advanced"><summary>${codigo?`Código: ${escaparHtml(codigo)}`:'Código gerado automaticamente'}</summary><p>O SKU identifica a peça internamente. O código curto é usado na etiqueta e no leitor.</p><div class="form-grid"><div class="form-row"><label>SKU</label><input class="pv-sku" maxlength="80" value="${escaparHtml(v.sku||"")}" /></div><div class="form-row"><label>Código de barras</label><input class="pv-barcode" maxlength="80" value="${escaparHtml(v.codigo_barras||"")}" /></div><input class="pv-price" type="hidden" value="${v.preco_venda??""}" /><input class="pv-promo" type="hidden" value="${v.preco_promocional??""}" /></div>${v.id?`<button class="btn btn-ghost btn-sm pv-generate-short" type="button">Gerar código curto</button>`:''}</details><button class="link-btn pv-remove" type="button">${v.id?'Inativar/remover':'Remover linha'}</button></div>`; }
+function htmlMidiaProduto(m={}) { const url=resolverUrlMidia(m.url);return `<div class="product-v2-item" data-media-id="${m.id||""}"><div class="form-grid"><div class="form-row"><label>Caminho ou URL da imagem</label><input class="pm-url" value="${escaparHtml(m.url||"")}" required placeholder="assets/produtos/nome-da-foto.jpg" /></div><div class="form-row"><label>Texto alternativo opcional</label><input class="pm-alt" maxlength="180" value="${escaparHtml(m.alt_text||m.titulo||"")}" /></div></div><label class="form-check"><input class="pm-main" name="product-main-media" type="radio" ${m.principal?'checked':''} /> Imagem principal</label><button class="link-btn pm-remove" type="button">Remover imagem</button><div class="product-media-preview-wrap">${url?`<img class="product-media-preview" src="${escaparHtml(url)}" alt="Prévia" onerror="this.hidden=true;this.parentElement.classList.add('media-preview-error')" />`:''}<span>Imagem não encontrada</span></div></div>`; }
 function htmlMedidaProduto(m={}){return `<div class="product-v2-item" data-measure-id="${m.id||''}"><div class="form-grid"><div class="form-row"><label>Tamanho</label><input class="measure-size" value="${escaparHtml(m.tamanho||'')}" /></div><div class="form-row"><label>Busto</label><input class="measure-bust" value="${escaparHtml(m.busto||'')}" placeholder="Ex.: 88 cm" /></div><div class="form-row"><label>Cintura</label><input class="measure-waist" value="${escaparHtml(m.cintura||'')}" /></div><div class="form-row"><label>Quadril</label><input class="measure-hip" value="${escaparHtml(m.quadril||'')}" /></div><div class="form-row"><label>Comprimento</label><input class="measure-length" value="${escaparHtml(m.comprimento||'')}" /></div><div class="form-row"><label>Observação</label><input class="measure-note" value="${escaparHtml(m.observacao||'')}" /></div></div><button class="link-btn measure-remove" type="button">Remover medida</button></div>`;}
 function tamanhoArquivo(bytes){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
 function renderArquivosProduto(){const area=$("#productFilesPreview");area.innerHTML=productFilesSelected.map((item,index)=>`<div class="product-file-card ${item.principal?'principal':''}">${item.file.type.startsWith('image/')?`<img src="${item.preview}" alt="Prévia">`:`<video src="${item.preview}" controls playsinline preload="metadata"></video>`}<div><strong>${escaparHtml(item.file.name)}</strong><span>${item.file.type.startsWith('image/')?'Foto':'Vídeo'} · ${tamanhoArquivo(item.file.size)}</span></div>${item.file.type.startsWith('image/')?`<button class="btn btn-ghost btn-sm" data-file-main="${index}" type="button">${item.principal?'Foto principal':'Definir como principal'}</button>`:''}<button class="link-btn" data-file-remove="${index}" type="button">Remover</button></div>`).join('');$$('[data-file-remove]',area).forEach(b=>b.onclick=()=>{URL.revokeObjectURL(productFilesSelected[Number(b.dataset.fileRemove)].preview);productFilesSelected.splice(Number(b.dataset.fileRemove),1);if(!productFilesSelected.some(x=>x.principal)){const first=productFilesSelected.find(x=>x.file.type.startsWith('image/'));if(first)first.principal=true;}renderArquivosProduto();});$$('[data-file-main]',area).forEach(b=>b.onclick=()=>{productFilesSelected.forEach(x=>x.principal=false);productFilesSelected[Number(b.dataset.fileMain)].principal=true;renderArquivosProduto();});}
 function selecionarArquivosProduto(event){const allowed=new Set(['image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm']);const novos=[...event.target.files];for(const file of novos){if(!allowed.has(file.type)){showToast('Esse tipo de arquivo não é aceito. Use JPG, PNG, WEBP, MP4, MOV ou WEBM.');continue;}if(file.type.startsWith('image/')&&file.size>10*1024*1024||file.type.startsWith('video/')&&file.size>80*1024*1024){showToast(`${file.name} excede o limite permitido.`);continue;}if(productFilesSelected.length>=12){showToast('Selecione no máximo 12 arquivos por produto.');break;}productFilesSelected.push({file,preview:URL.createObjectURL(file),principal:false});}if(!productFilesSelected.some(x=>x.principal)){const first=productFilesSelected.find(x=>x.file.type.startsWith('image/'));if(first)first.principal=true;}event.target.value='';renderArquivosProduto();}
-function renderGaleriaAtualProduto(produtoId,midias=[]){const area=$("#productCurrentGallery");area.innerHTML=midias.length?`<h4>Fotos e vídeos atuais</h4><div class="current-gallery-grid">${midias.map(m=>`<article>${m.tipo==='imagem'?`<img src="${mediaUrl(m.url)}" alt="${escaparHtml(m.alt_text||'Foto')}">`:'<video src="'+mediaUrl(m.url)+'" controls playsinline preload="metadata"></video>'}<span>${m.tipo==='imagem'?'Foto':'Vídeo'}${m.principal?' · Principal':''}</span>${m.tipo==='imagem'&&!m.principal?`<button class="btn btn-ghost btn-sm" data-current-main="${m.id}" type="button">Definir como principal</button>`:''}<button class="link-btn" data-current-delete="${m.id}" type="button">Excluir</button></article>`).join('')}</div>`:'';$$('[data-current-main]',area).forEach(b=>b.onclick=async()=>{const r=await fetchAdmin(`/produtos/${produtoId}/midias/${b.dataset.currentMain}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({principal:true})});if(r?.ok)openProductModal(produtoId);else showToast('Não foi possível definir a foto principal.');});$$('[data-current-delete]',area).forEach(b=>b.onclick=async()=>{if(!confirm('Excluir esta foto ou vídeo?'))return;const r=await fetchAdmin(`/produtos/${produtoId}/midias/${b.dataset.currentDelete}`,{method:'DELETE'});if(r?.ok)openProductModal(produtoId);else showToast('Não foi possível excluir o arquivo.');});}
+function renderGaleriaAtualProduto(produtoId,midias=[]){const area=$("#productCurrentGallery");area.innerHTML=midias.length?`<h4>Fotos e vídeos atuais</h4><div class="current-gallery-grid">${midias.map(m=>{const url=escaparHtml(resolverUrlMidia(m.url));return `<article class="current-media-card">${m.principal?'<b class="current-media-badge">Principal</b>':''}<div class="current-media-visual">${m.tipo==='imagem'?`<img src="${url}" alt="${escaparHtml(m.alt_text||'Foto do produto')}" onerror="this.hidden=true;this.parentElement.classList.add('media-preview-error')">`:`<video src="${url}" controls muted playsinline preload="metadata"></video>`}<span>${m.tipo==='imagem'?'Imagem não encontrada':'Vídeo indisponível'}</span></div><small>${m.tipo==='imagem'?'Foto':'Vídeo'}</small>${m.tipo==='imagem'&&!m.principal?`<button class="btn btn-ghost btn-sm" data-current-main="${m.id}" type="button">Definir como principal</button>`:''}<button class="link-btn" data-current-delete="${m.id}" type="button">Remover</button></article>`;}).join('')}</div>`:'';$$('[data-current-main]',area).forEach(b=>b.onclick=async()=>{const r=await fetchAdmin(`/produtos/${produtoId}/midias/${b.dataset.currentMain}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({principal:true})});if(r?.ok)openProductModal(produtoId);else showToast('Não foi possível definir a foto principal.');});$$('[data-current-delete]',area).forEach(b=>b.onclick=async()=>{if(!confirm('Remover esta foto ou vídeo?'))return;const r=await fetchAdmin(`/produtos/${produtoId}/midias/${b.dataset.currentDelete}`,{method:'DELETE'});if(r?.ok)openProductModal(produtoId);else showToast('Não foi possível remover o arquivo.');});}
 function bindMedidasProduto(){$$('.measure-remove',$("#productMeasuresEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.measureId)item.dataset.remove='true';item.hidden=true;});}
 function dadosMedidaEditor(item,index){return{tamanho:$('.measure-size',item).value.trim(),busto:$('.measure-bust',item).value.trim(),cintura:$('.measure-waist',item).value.trim(),quadril:$('.measure-hip',item).value.trim(),comprimento:$('.measure-length',item).value.trim(),observacao:$('.measure-note',item).value.trim(),ordem:index};}
-function bindEditorProduto(){ $$('.pv-remove',$("#productVariationsEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.variationId)item.dataset.remove='true';else item.remove();item.hidden=true;}); $$('.pm-remove',$("#productMediaEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.mediaId)item.dataset.remove='true';else item.remove();item.hidden=true;});$$('.pm-url',$("#productMediaEditor")).forEach(input=>input.oninput=()=>{const wrap=input.closest('.product-v2-item').querySelector('.product-media-preview-wrap');wrap.innerHTML=input.value.trim()?`<img class="product-media-preview" src="${escaparHtml(input.value.trim())}" alt="Prévia" onerror="this.remove()"><span>Imagem não encontrada</span>`:'<span>Sem foto cadastrada</span>';});const radios=$$('.pm-main',$("#productMediaEditor"));if(radios.length&&!radios.some(r=>r.checked))radios[0].checked=true; }
-async function openProductModal(id = null) { const form=$("#productForm");form.reset();productFilesSelected.forEach(x=>URL.revokeObjectURL(x.preview));productFilesSelected=[];renderArquivosProduto();$("#productFormError").textContent="";$("#productVariationsEditor").innerHTML="";$("#productMediaEditor").innerHTML="";$("#productMeasuresEditor").innerHTML="";$("#productCurrentGallery").innerHTML="";if(id){const response=await fetchAdmin(`/produtos/${id}`),raw=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(raw.message||"Não foi possível abrir o produto.");const p=adaptarProdutoApi(raw);$("#modalTitle").textContent="Editar produto";$("#fId").value=p.id;$("#fName").value=p.name;$("#fCategory").value=p.category;$("#fPrice").value=p.price;$("#fPromoPrice").value=p.oldPrice??"";$("#fDescription").value=p.description||"";$("#fActive").checked=p.ativo;$("#productVariationsEditor").innerHTML=p.apiVariacoes.map(htmlVariacaoProduto).join("");$("#productMeasuresEditor").innerHTML=p.medidas.map(htmlMedidaProduto).join("");renderGaleriaAtualProduto(p.id,p.midias);}else{$("#modalTitle").textContent="Novo produto";$("#fId").value="";$("#productVariationsEditor").innerHTML=htmlVariacaoProduto({tamanho:"M",cor:"Único"});}bindEditorProduto();bindMedidasProduto();openModal("#productModal"); }
+function bindEditorProduto(){ $$('.pv-remove',$("#productVariationsEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.variationId)item.dataset.remove='true';else item.remove();item.hidden=true;});$$('[data-size-suggestion]',$("#productVariationsEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');$('.pv-size',item).value=b.dataset.sizeSuggestion;$$('[data-size-suggestion]',item).forEach(x=>x.classList.toggle('active',x===b));}); $$('.pm-remove',$("#productMediaEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.mediaId)item.dataset.remove='true';else item.remove();item.hidden=true;});$$('.pm-url',$("#productMediaEditor")).forEach(input=>input.oninput=()=>{const wrap=input.closest('.product-v2-item').querySelector('.product-media-preview-wrap'),url=resolverUrlMidia(input.value);wrap.classList.remove('media-preview-error');wrap.innerHTML=url?`<img class="product-media-preview" src="${escaparHtml(url)}" alt="Prévia" onerror="this.hidden=true;this.parentElement.classList.add('media-preview-error')"><span>Imagem não encontrada</span>`:'<span>Foto não cadastrada</span>';});const radios=$$('.pm-main',$("#productMediaEditor"));if(radios.length&&!radios.some(r=>r.checked))radios[0].checked=true; }
+async function openProductModal(id = null) { const form=$("#productForm");form.reset();await carregarCategoriasProdutos();productFilesSelected.forEach(x=>URL.revokeObjectURL(x.preview));productFilesSelected=[];renderArquivosProduto();$("#productFormError").textContent="";$("#productVariationsEditor").innerHTML="";$("#productMediaEditor").innerHTML="";$("#productMeasuresEditor").innerHTML="";$("#productCurrentGallery").innerHTML="";if(id){const response=await fetchAdmin(`/produtos/${id}`),raw=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(raw.message||"Não foi possível abrir o produto.");const p=adaptarProdutoApi(raw);$("#modalTitle").textContent="Editar produto";$("#fId").value=p.id;$("#fName").value=p.name;await carregarCategoriasProdutos(p.category);$("#fPrice").value=p.price;$("#fPromoPrice").value=p.oldPrice??"";$("#fDescription").value=p.description||"";$("#fActive").checked=p.ativo;$("#productVariationsEditor").innerHTML=p.apiVariacoes.map(htmlVariacaoProduto).join("");$("#productMeasuresEditor").innerHTML=p.medidas.map(htmlMedidaProduto).join("");renderGaleriaAtualProduto(p.id,p.midias);}else{$("#modalTitle").textContent="Novo produto";$("#fId").value="";$("#productVariationsEditor").innerHTML=htmlVariacaoProduto({tamanho:"M",cor:"Único"});}bindEditorProduto();bindMedidasProduto();openModal("#productModal"); }
 function dadosVariacaoEditor(item){return{tamanho:$('.pv-size',item).value.trim(),cor:$('.pv-color',item).value.trim(),sku:$('.pv-sku',item).value.trim()||null,codigo_barras:$('.pv-barcode',item).value.trim()||null,preco_venda:$('.pv-price',item).value||null,preco_promocional:$('.pv-promo',item).value||null,quantidade_inicial:$('.pv-stock',item).disabled?undefined:Number($('.pv-stock',item).value||0),estoque_minimo:Number($('.pv-min',item).value||0),ativo:$('.pv-active',item).checked};}
+async function gerarCodigoCurtoEditor(button){const item=button.closest('.product-v2-item'),produtoId=Number($("#fId").value),variacaoId=Number(item?.dataset.variationId);if(!produtoId||!variacaoId)return showToast('Salve a variação antes de gerar o código curto.');button.disabled=true;const response=await fetchAdmin(`/produtos/${produtoId}/variacoes/${variacaoId}/gerar-codigo-curto`,{method:'POST'}),data=await response?.json().catch(()=>({}));button.disabled=false;if(!response?.ok)return showToast(data.message||'Não foi possível gerar o código curto.');$('.pv-barcode',item).value=data.variacao.codigo_barras;showToast('Código curto gerado.');}
 async function handleProductSubmit(e) { e.preventDefault();const status=$("#productFormError");status.textContent="Salvando...";const id=Number($("#fId").value)||null;const variationItems=$$('.product-v2-item',$("#productVariationsEditor"));const mediaItems=$$('.product-v2-item',$("#productMediaEditor"));const body={nome:$("#fName").value.trim(),categoria:$("#fCategory").value.trim(),descricao:$("#fDescription").value.trim(),preco:Number($("#fPrice").value),preco_promocional:$("#fPromoPrice").value||null,ativo:$("#fActive").checked,variacoes:id?[]:variationItems.filter(x=>!x.hidden).map(dadosVariacaoEditor)};try{let response=await fetchAdmin(id?`/produtos/${id}`:"/produtos",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),data=await response?.json().catch(()=>({}));if(!response?.ok)throw new Error(data.message||"Não foi possível salvar o produto.");const produtoId=id||data.id;if(id)for(const item of variationItems){const vid=Number(item.dataset.variationId);if(item.dataset.remove==='true'&&vid){const r=await fetchAdmin(`/produtos/${id}/variacoes/${vid}`,{method:"DELETE"});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao remover variação.");}else if(!item.hidden){const payload=dadosVariacaoEditor(item),r=await fetchAdmin(vid?`/produtos/${id}/variacoes/${vid}`:`/produtos/${id}/variacoes`,{method:vid?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao salvar variação.");}}for(const item of mediaItems){const mid=Number(item.dataset.mediaId);if(item.dataset.remove==='true'&&mid){const r=await fetchAdmin(`/produtos/${produtoId}/midias/${mid}`,{method:"DELETE"});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao remover imagem.");}else if(!item.hidden){const payload={url:$('.pm-url',item).value.trim(),alt_text:$('.pm-alt',item).value.trim(),titulo:$('.pm-alt',item).value.trim(),principal:$('.pm-main',item).checked};const r=await fetchAdmin(mid?`/produtos/${produtoId}/midias/${mid}`:`/produtos/${produtoId}/midias`,{method:mid?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao salvar imagem.");}}closeModal("#productModal");showToast(id?"Produto atualizado.":"Produto cadastrado.");await carregarProdutosDaApi();await carregarEstoqueDaApi();if(typeof carregarProdutosEtiquetas==="function")carregarProdutosEtiquetas();}catch(error){status.textContent=error.message||"Backend indisponível.";} }
 async function handleProductSubmitV3(event){event.preventDefault();const status=$("#productFormError"),id=Number($("#fId").value)||null,variacoes=$$('.product-v2-item',$("#productVariationsEditor")),links=$$('.product-v2-item',$("#productMediaEditor")),medidas=$$('.product-v2-item',$("#productMeasuresEditor"));status.textContent="Salvando produto...";const body={nome:$("#fName").value.trim(),categoria:$("#fCategory").value.trim(),descricao:$("#fDescription").value.trim(),preco:Number($("#fPrice").value),preco_promocional:$("#fPromoPrice").value||null,ativo:$("#fActive").checked,variacoes:id?[]:variacoes.filter(x=>!x.hidden).map(dadosVariacaoEditor)};try{const response=await fetchAdmin(id?`/produtos/${id}`:'/produtos',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await response?.json().catch(()=>({}));if(!response?.ok)throw new Error(data.message||'Não foi possível salvar o produto.');const produtoId=id||data.id;if(id)for(const item of variacoes){const variacaoId=Number(item.dataset.variationId),remove=item.dataset.remove==='true';const r=await fetchAdmin(remove&&variacaoId?`/produtos/${produtoId}/variacoes/${variacaoId}`:variacaoId?`/produtos/${produtoId}/variacoes/${variacaoId}`:`/produtos/${produtoId}/variacoes`,{method:remove&&variacaoId?'DELETE':variacaoId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:remove?undefined:JSON.stringify(dadosVariacaoEditor(item))});if(!r?.ok)throw new Error((await r?.json().catch(()=>({}))).message||'Falha ao salvar uma variação.');}for(const item of links.filter(x=>!x.hidden)){const payload={url:$('.pm-url',item).value.trim(),alt_text:$('.pm-alt',item).value.trim(),principal:$('.pm-main',item).checked};const r=await fetchAdmin(`/produtos/${produtoId}/midias`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||'Falha ao salvar um link.');}
     for(let index=0;index<medidas.length;index+=1){const item=medidas[index],medidaId=Number(item.dataset.measureId);if(item.dataset.remove==='true'&&medidaId){await fetchAdmin(`/produtos/${produtoId}/medidas/${medidaId}`,{method:'DELETE'});continue;}if(item.hidden)continue;const payload=dadosMedidaEditor(item,index);if(!Object.values(payload).some(Boolean))continue;const r=await fetchAdmin(medidaId?`/produtos/${produtoId}/medidas/${medidaId}`:`/produtos/${produtoId}/medidas`,{method:medidaId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||'Falha ao salvar as medidas.');}
@@ -2799,6 +2843,7 @@ async function abrirDetalheEstoque(variacaoId){const row=estoqueApiRows?.find(r=
 
 /* ----------------- INICIALIZAÇÃO ----------------- */
 function init() {
+  document.addEventListener("error", corrigirUrlMidiaAoFalhar, true);
   buildStoryNav();
   renderHome();
   renderFilters();
@@ -2895,6 +2940,12 @@ function init() {
   $("#chooseProductFiles").addEventListener("click", () => $("#productFiles").click());
   $("#productFiles").addEventListener("change", selecionarArquivosProduto);
   $("#addProductMeasure").addEventListener("click", () => { $("#productMeasuresEditor").insertAdjacentHTML("beforeend",htmlMedidaProduto());bindMedidasProduto(); });
+  renderGradeTamanhos();
+  $("#confirmSizeGrid").addEventListener("click", confirmarGradeTamanhos);
+  $("#newProductCategory").addEventListener("click", abrirCategoriasProduto);
+  $("#categoryForm").addEventListener("submit", salvarNovaCategoria);
+  $("#categoryClose").addEventListener("click",()=>closeModal("#categoryModal"));
+  $("#categoryCancel").addEventListener("click",()=>closeModal("#categoryModal"));
   $("#modalClose").addEventListener("click", () => closeModal("#productModal"));
   $("#modalCancel").addEventListener("click", () => closeModal("#productModal"));
   $("#productModal").addEventListener("click", (e) => {
@@ -2993,6 +3044,7 @@ function init() {
   $("#labelsPreviewCancel").addEventListener("click", fecharPreviewEtiquetas);
   $("#labelsPreviewModal").addEventListener("click", event => { if(event.target.id==="labelsPreviewModal") fecharPreviewEtiquetas(); });
   $("#labelsPrintSize").addEventListener("change", () => { if ($("#labelsPreviewModal").classList.contains("open")) prepararAreaEtiquetas(); });
+  $("#productVariationsEditor").addEventListener("click", event => { const button=event.target.closest('.pv-generate-short');if(button)gerarCodigoCurtoEditor(button); });
 
   // marca "Início" como ativo
   const homeNav = $('.nav-link[data-nav="home"]');
