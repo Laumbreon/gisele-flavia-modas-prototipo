@@ -7,7 +7,7 @@
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
 const API_BASE_URL = "http://localhost:3001/api";
 const AUTH_STORAGE_KEY = "gfm_admin_auth";
-const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas"]);
+const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas", "pedidos-site"]);
 const ADMIN_PIN_SESSION_KEY = "adminPinOk";
 
 // Gradientes por categoria (placeholder visual com CSS)
@@ -159,6 +159,8 @@ let pdvProdutosPublicos = [];
 let ultimaVendaPdv = null;
 let variacoesEtiquetas = [];
 let etiquetasSelecionadas = [];
+let pedidosSite = [];
+let pedidoSiteAtual = null;
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -244,6 +246,14 @@ function podeAcessarEtiquetas() {
   return usuarioLogado() && (usuarioAdministrador() || temPermissao("produtos.editar") || temPermissao("etiquetas.imprimir"));
 }
 
+function podeVerPedidosSite() {
+  return usuarioLogado() && (usuarioAdministrador() || temPermissao("vendas.criar") || temPermissao("relatorios.ver"));
+}
+
+function podeOperarPedidosSite() {
+  return usuarioLogado() && (usuarioAdministrador() || temPermissao("vendas.criar") || temPermissao("configuracoes.editar"));
+}
+
 function getAuthHeaders(extraHeaders = {}) {
   return {
     ...extraHeaders,
@@ -281,6 +291,7 @@ function atualizarAuthUi() {
   $$(".admin-only").forEach(element => { element.hidden = !usuarioAdministrador(); });
   $$(".pdv-only").forEach(element => { element.hidden = !podeAcessarPdv(); });
   $$(".labels-only").forEach(element => { element.hidden = !podeAcessarEtiquetas(); });
+  $$(".orders-only").forEach(element => { element.hidden = !podeVerPedidosSite(); });
   if ($("#storyTrack")) buildStoryNav();
 }
 
@@ -379,7 +390,7 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
-    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
+    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("relatorios.ver") && !temPermissao("configuracoes.editar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
       limparLogin();
       throw new Error("Usuário sem permissão para acessar áreas administrativas.");
     }
@@ -903,7 +914,11 @@ function navigate(screen, category = "Todos") {
     if (usuarioLogado()) { showToast("Você não tem permissão para acessar Códigos e Etiquetas."); return; }
     abrirLoginAdmin(() => navigate(screen, category)); return;
   }
-  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas"].includes(screen) && !usuarioAdministrador()) {
+  if (screen === "pedidos-site" && !podeVerPedidosSite()) {
+    if (usuarioLogado()) { showToast("Você não tem permissão para acessar Pedidos do Site."); return; }
+    abrirLoginAdmin(() => navigate(screen, category)); return;
+  }
+  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas", "pedidos-site"].includes(screen) && !usuarioAdministrador()) {
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
@@ -918,7 +933,7 @@ function navigate(screen, category = "Todos") {
 
   // marca link da navbar ativo
   $$(".nav-link").forEach(b => b.classList.remove("active"));
-  const navMap = { home: "home", catalogo: "catalogo", pdv: "pdv", gestao: "gestao", movimentacoes: "movimentacoes", fornecedores: "fornecedores", maquininhas: "maquininhas", etiquetas: "etiquetas" };
+  const navMap = { home: "home", catalogo: "catalogo", pdv: "pdv", gestao: "gestao", movimentacoes: "movimentacoes", fornecedores: "fornecedores", maquininhas: "maquininhas", etiquetas: "etiquetas", "pedidos-site": "pedidos-site" };
   const activeNav = $(`.nav-link[data-nav="${navMap[screen]}"]`);
   if (activeNav) activeNav.classList.add("active");
 
@@ -938,6 +953,7 @@ function navigate(screen, category = "Todos") {
   if (screen === "pdv") iniciarPdvLoja();
   if (screen === "etiquetas") iniciarEtiquetas();
   if (screen === "checkout-publico") renderCart();
+  if (screen === "pedidos-site") carregarPedidosSite();
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
 
@@ -2054,6 +2070,127 @@ function renderHistory() {
   }).join("");
 }
 
+/* ----------------- PEDIDOS DO SITE ----------------- */
+function rotuloStatusPedido(status) {
+  return ({ pendente:"Pendente", pago:"Pago", cancelado:"Cancelado", sem_entrega:"Sem entrega", separando:"Separando", pronto_retirada:"Pronto para retirada", saiu_entrega:"Saiu para entrega", entregue:"Entregue" })[status] || String(status || "—").replaceAll("_", " ");
+}
+
+function classeStatusPedido(status) {
+  if (["pago", "entregue"].includes(status)) return "success";
+  if (["cancelado", "cancelada"].includes(status)) return "danger";
+  if (["separando", "pronto_retirada", "saiu_entrega"].includes(status)) return "info";
+  return "warning";
+}
+
+function atualizarResumoPedidosSite() {
+  const resumo = $("#siteOrdersSummary");
+  if (!resumo) return;
+  const pendentes = pedidosSite.filter(p => p.status !== "cancelada" && p.status_entrega !== "entregue").length;
+  const pagamentos = pedidosSite.filter(p => p.status_pagamento === "pendente").length;
+  const andamento = pedidosSite.filter(p => ["separando", "pronto_retirada", "saiu_entrega"].includes(p.status_entrega)).length;
+  const concluidos = pedidosSite.filter(p => p.status_entrega === "entregue").length;
+  resumo.innerHTML = `<div class="stat-card"><span>Pedidos pendentes</span><strong>${pendentes}</strong></div><div class="stat-card"><span>Pagamentos pendentes</span><strong>${pagamentos}</strong></div><div class="stat-card"><span>Prontos/em andamento</span><strong>${andamento}</strong></div><div class="stat-card"><span>Entregues/concluídos</span><strong>${concluidos}</strong></div>`;
+}
+
+function renderPedidosSite() {
+  const table = $("#siteOrdersTable");
+  if (!table) return;
+  atualizarResumoPedidosSite();
+  if (!pedidosSite.length) {
+    table.innerHTML = `<tbody><tr><td><p class="empty-note">Nenhum pedido encontrado para os filtros selecionados.</p></td></tr></tbody>`;
+    return;
+  }
+  table.innerHTML = `<thead><tr><th>Pedido</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th>Data</th><th>Ações</th></tr></thead><tbody>${pedidosSite.map(p => `<tr><td data-label="Pedido"><strong>#${p.id}</strong><small>${escaparHtml(p.tipo_entrega === "entrega_local" ? "Entrega local" : "Retirada")}</small></td><td data-label="Cliente"><strong>${escaparHtml(p.cliente || "Cliente")}</strong><small>${escaparHtml(p.telefone || "Sem telefone")}</small></td><td data-label="Total"><strong>${formatarMoeda(p.total)}</strong></td><td data-label="Pagamento"><span class="order-status ${classeStatusPedido(p.status_pagamento)}">${escaparHtml(rotuloStatusPedido(p.status_pagamento))}</span><small>${escaparHtml(rotuloStatusPedido(p.forma_pagamento))}</small></td><td data-label="Entrega"><span class="order-status ${classeStatusPedido(p.status_entrega)}">${escaparHtml(rotuloStatusPedido(p.status_entrega))}</span><small>${escaparHtml([p.bairro,p.cidade].filter(Boolean).join(" / ") || "—")}</small></td><td data-label="Data">${new Date(p.created_at).toLocaleString("pt-BR")}</td><td data-label="Ações"><button class="btn btn-ghost btn-sm" data-site-order="${p.id}" type="button">Ver detalhes</button></td></tr>`).join("")}</tbody>`;
+  $$('[data-site-order]', table).forEach(button => button.addEventListener("click", () => abrirPedidoSite(Number(button.dataset.siteOrder))));
+}
+
+async function carregarPedidosSite() {
+  if (!podeVerPedidosSite()) return;
+  const status = $("#siteOrdersStatus");
+  status.textContent = "Carregando pedidos...";
+  const params = new URLSearchParams();
+  const filtros = { busca:$("#siteOrdersSearch").value.trim(), status_pagamento:$("#siteOrdersPaymentFilter").value, status_entrega:$("#siteOrdersDeliveryFilter").value, tipo_entrega:$("#siteOrdersTypeFilter").value, data_inicio:$("#siteOrdersStart").value, data_fim:$("#siteOrdersEnd").value };
+  Object.entries(filtros).forEach(([key,value]) => { if (value) params.set(key,value); });
+  try {
+    const response = await fetchAdmin(`/pedidos-site${params.size ? `?${params}` : ""}`);
+    const data = await response?.json().catch(() => ({}));
+    if (!response?.ok) throw new Error(data.message || "Não foi possível carregar os pedidos.");
+    pedidosSite = Array.isArray(data) ? data : [];
+    renderPedidosSite();
+    status.textContent = `${pedidosSite.length} pedido(s) encontrado(s).`;
+  } catch (error) { status.textContent = error.message || "Backend indisponível."; }
+}
+
+function montarEnderecoPedidoSite(entrega) {
+  if (!entrega) return "Retirada na loja";
+  return [entrega.endereco, entrega.numero, entrega.complemento, entrega.bairro, entrega.cidade, entrega.estado].filter(Boolean).join(", ");
+}
+
+function linkWhatsappPedidoSite(pedido, mensagem) {
+  const telefone = String(pedido.telefone || pedido.whatsapp || pedido.entrega?.destinatario_telefone || "").replace(/\D/g, "");
+  const destino = telefone ? (telefone.startsWith("55") ? telefone : `55${telefone}`) : "5511999990000";
+  return `https://wa.me/${destino}?text=${encodeURIComponent(mensagem)}`;
+}
+
+function mensagemWhatsappPedidoSite(pedido) {
+  if (pedido.status_entrega === "pronto_retirada") return `Seu pedido #${pedido.id} está pronto para retirada.`;
+  if (pedido.status_entrega === "saiu_entrega") return `Seu pedido #${pedido.id} saiu para entrega.`;
+  return `Olá! Recebemos seu pedido #${pedido.id} no site da Gisele Flávia Modas. Vamos confirmar o pagamento e a entrega.`;
+}
+
+function montarHtmlDetalhePedidoSite(pedido) {
+  const itens = (pedido.itens || []).map(i => `<tr><td>${escaparHtml(i.produto_nome)}</td><td>${escaparHtml(i.tamanho || "—")}</td><td>${escaparHtml(i.cor || "—")}</td><td>${i.quantidade}</td><td>${formatarMoeda(i.subtotal)}</td></tr>`).join("");
+  const operar = podeOperarPedidosSite() && pedido.status !== "cancelada";
+  const retirada = !pedido.entrega;
+  const opcoes = (retirada ? ["separando","pronto_retirada","entregue"] : ["pendente","separando","saiu_entrega","entregue"]).map(s => `<option value="${s}" ${pedido.status_entrega===s?"selected":""}>${rotuloStatusPedido(s)}</option>`).join("");
+  const mensagem = mensagemWhatsappPedidoSite(pedido);
+  return `<div class="site-order-meta"><div><span>Cliente</span><strong>${escaparHtml(pedido.cliente || "—")}</strong><small>${escaparHtml(pedido.telefone || pedido.whatsapp || "—")} · ${escaparHtml(pedido.email || "E-mail não informado")}</small></div><div><span>Total</span><strong>${formatarMoeda(pedido.total)}</strong><small>${escaparHtml(rotuloStatusPedido(pedido.forma_pagamento))}</small></div><div><span>Pagamento</span><strong>${escaparHtml(rotuloStatusPedido(pedido.status_pagamento))}</strong></div><div><span>Entrega</span><strong>${escaparHtml(rotuloStatusPedido(pedido.status_entrega))}</strong><small>${escaparHtml(montarEnderecoPedidoSite(pedido.entrega))}</small></div></div><h4>Itens</h4><div class="stock-table-wrap"><table class="history-items"><thead><tr><th>Produto</th><th>Tam.</th><th>Cor</th><th>Qtd.</th><th>Subtotal</th></tr></thead><tbody>${itens || '<tr><td colspan="5">Sem itens.</td></tr>'}</tbody></table></div>${pedido.observacoes?`<div class="admin-notice"><strong>Observações:</strong> ${escaparHtml(pedido.observacoes)}</div>`:""}<div class="site-order-actions"><a class="btn btn-ghost" href="${linkWhatsappPedidoSite(pedido,mensagem)}" target="_blank" rel="noopener">Abrir WhatsApp</a><button class="btn btn-ghost" id="siteOrderPrint" type="button">Imprimir separação</button>${operar&&pedido.status_pagamento!=="pago"?'<button class="btn btn-pink" id="siteOrderPay" type="button">Confirmar pagamento</button>':""}${operar?`<select id="siteOrderDeliveryStatus">${opcoes}</select><button class="btn btn-ghost" id="siteOrderUpdateDelivery" type="button">Atualizar entrega</button><button class="btn btn-danger" id="siteOrderCancel" type="button">Cancelar pedido</button>`:""}</div><p class="login-error" id="siteOrderActionError"></p>`;
+}
+
+async function abrirPedidoSite(id) {
+  try {
+    const response = await fetchAdmin(`/pedidos-site/${id}`); const data = await response?.json().catch(() => ({}));
+    if (!response?.ok) throw new Error(data.message || "Não foi possível abrir o pedido.");
+    pedidoSiteAtual = data;
+    $("#siteOrderModalTitle").textContent = `Pedido #${data.id}`;
+    $("#siteOrderDetail").innerHTML = montarHtmlDetalhePedidoSite(data);
+    openModal("#siteOrderModal");
+    $("#siteOrderPrint")?.addEventListener("click", () => imprimirPedidoSite(pedidoSiteAtual));
+    $("#siteOrderPay")?.addEventListener("click", confirmarPagamentoPedidoSite);
+    $("#siteOrderUpdateDelivery")?.addEventListener("click", atualizarEntregaPedidoSite);
+    $("#siteOrderCancel")?.addEventListener("click", cancelarPedidoSite);
+  } catch (error) { showToast(error.message || "Backend indisponível."); }
+}
+
+async function executarAcaoPedidoSite(path, body, confirmacao) {
+  if (confirmacao && !confirm(confirmacao)) return;
+  const error = $("#siteOrderActionError"); if (error) error.textContent = "Processando...";
+  try {
+    const response = await fetchAdmin(path, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body || {}) });
+    const data = await response?.json().catch(() => ({}));
+    if (!response?.ok) throw new Error(data.message || "Não foi possível concluir a ação.");
+    showToast(data.message || "Pedido atualizado."); closeModal("#siteOrderModal"); await carregarPedidosSite();
+  } catch (err) { if (error) error.textContent = err.message || "Backend indisponível."; }
+}
+
+function confirmarPagamentoPedidoSite() {
+  const forma = pedidoSiteAtual?.forma_pagamento;
+  executarAcaoPedidoSite(`/pedidos-site/${pedidoSiteAtual.id}/confirmar-pagamento`, { forma_pagamento_confirmada:forma, observacoes:"Pagamento confirmado pela loja" }, `Confirmar pagamento do pedido #${pedidoSiteAtual.id}?`);
+}
+function cancelarPedidoSite() { executarAcaoPedidoSite(`/pedidos-site/${pedidoSiteAtual.id}/cancelar`, {}, `Cancelar o pedido #${pedidoSiteAtual.id} e devolver os itens ao estoque?`); }
+function atualizarEntregaPedidoSite() {
+  const status = $("#siteOrderDeliveryStatus").value;
+  executarAcaoPedidoSite(`/pedidos-site/${pedidoSiteAtual.id}/status-entrega`, { status_entrega:status }, `Atualizar o pedido #${pedidoSiteAtual.id} para “${rotuloStatusPedido(status)}”?`);
+}
+
+function imprimirPedidoSite(pedido) {
+  if (!pedido) return showToast("Pedido não disponível para impressão.");
+  const itens = (pedido.itens || []).map(i => `<tr><td>${escaparHtml(i.produto_nome)}</td><td>${escaparHtml([i.tamanho,i.cor].filter(Boolean).join(" / "))}</td><td>${i.quantidade}</td></tr>`).join("");
+  $("#siteOrderPrintArea").innerHTML = `<h1>Pedido #${pedido.id}</h1><p><strong>Cliente:</strong> ${escaparHtml(pedido.cliente || "—")}</p><p><strong>Telefone:</strong> ${escaparHtml(pedido.telefone || pedido.whatsapp || "—")}</p><table><thead><tr><th>Produto</th><th>Variação</th><th>Qtd.</th></tr></thead><tbody>${itens}</tbody></table><p><strong>Recebimento:</strong> ${escaparHtml(pedido.entrega ? "Entrega local" : "Retirada na loja")}</p><p>${escaparHtml(montarEnderecoPedidoSite(pedido.entrega))}</p><p><strong>Total:</strong> ${formatarMoeda(pedido.total)}</p>${pedido.observacoes?`<p><strong>Observações:</strong> ${escaparHtml(pedido.observacoes)}</p>`:""}`;
+  document.body.classList.add("printing-site-order");
+  try { window.print(); } finally { document.body.classList.remove("printing-site-order"); }
+}
+
 /* ----------------- RELATÓRIOS ----------------- */
 function reportTypeLabel(type) {
   return { vendas: "Vendas", estoque: "Estoque", movimentacoes: "Movimentações" }[type] || "Vendas";
@@ -2677,6 +2814,13 @@ function init() {
   $("#machineCancel").addEventListener("click", () => closeModal("#machineModal"));
   $("#machineSearch").addEventListener("input", renderMaquininhas);
   $("#machineStatus").addEventListener("change", renderMaquininhas);
+
+  // pedidos do site
+  $("#siteOrdersRefresh").addEventListener("click", carregarPedidosSite);
+  $("#siteOrdersFilter").addEventListener("click", carregarPedidosSite);
+  $("#siteOrdersSearch").addEventListener("keydown", event => { if (event.key === "Enter") carregarPedidosSite(); });
+  $("#siteOrderClose").addEventListener("click", () => closeModal("#siteOrderModal"));
+  $("#siteOrderModal").addEventListener("click", event => { if (event.target.id === "siteOrderModal") closeModal("#siteOrderModal"); });
 
   // CRUD de produto
   $("#btnAddProduct").addEventListener("click", () => openProductModal());

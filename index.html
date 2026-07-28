@@ -27,6 +27,7 @@
         <button class="nav-link" data-nav="home" type="button">Início</button>
         <button class="nav-link" data-nav="catalogo" type="button">Catálogo</button>
         <button class="nav-link pdv-only" data-nav="pdv" type="button" hidden>PDV Loja</button>
+        <button class="nav-link orders-only" data-nav="pedidos-site" type="button" hidden>Pedidos Site</button>
         <button class="nav-link admin-only" data-nav="gestao" type="button" hidden>Gestão</button>
         <button class="nav-link admin-only" data-nav="movimentacoes" type="button" hidden>Movimentações</button>
         <button class="nav-link admin-only" data-nav="fornecedores" type="button" hidden>Fornecedores</button>
@@ -202,6 +203,7 @@
         <button class="management-module" data-nav="etiquetas" type="button"><span>04</span><strong>Códigos e Etiquetas</strong><small>Códigos e impressão</small></button>
         <button class="management-module" data-scroll-target="usersManagement" type="button"><span>05</span><strong>Usuários</strong><small>Funcionárias e permissões</small></button>
         <button class="management-module" data-nav="maquininhas" type="button"><span>06</span><strong>Maquininhas</strong><small>Terminais e configurações</small></button>
+        <button class="management-module orders-only" data-nav="pedidos-site" type="button"><span>07</span><strong>Pedidos do Site</strong><small>Pagamentos, separação e entregas</small></button>
       </nav>
 
       <div class="cards-grid" id="dashboardCards"></div>
@@ -269,6 +271,25 @@
       </div>
 
       <div class="panel labels-entry-panel"><div class="panel-head"><div><h3>Códigos e Etiquetas</h3><p class="section-sub">Consulte códigos e prepare etiquetas de produtos.</p></div><button class="btn btn-pink btn-sm" data-nav="etiquetas" type="button">Abrir etiquetas</button></div></div>
+    </section>
+
+    <!-- ===================== PEDIDOS DO SITE ===================== -->
+    <section class="screen" id="screen-pedidos-site">
+      <div class="section-head orders-page-head"><div><span class="hero-badge">Checkout público</span><h2 class="section-title">Pedidos do Site</h2><p class="section-sub">Acompanhe pagamentos, separação, retirada e entregas.</p></div><button class="btn btn-ghost" id="siteOrdersRefresh" type="button">Atualizar pedidos</button></div>
+      <div class="orders-summary cards-grid" id="siteOrdersSummary"></div>
+      <div class="panel">
+        <div class="site-orders-filters">
+          <input id="siteOrdersSearch" type="search" placeholder="ID, cliente ou telefone" />
+          <select id="siteOrdersPaymentFilter"><option value="">Todos os pagamentos</option><option value="pendente">Pagamento pendente</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option></select>
+          <select id="siteOrdersDeliveryFilter"><option value="">Todos os status</option><option value="sem_entrega">Sem entrega</option><option value="pendente">Pendente</option><option value="separando">Separando</option><option value="pronto_retirada">Pronto para retirada</option><option value="saiu_entrega">Saiu para entrega</option><option value="entregue">Entregue</option><option value="cancelado">Cancelado</option></select>
+          <select id="siteOrdersTypeFilter"><option value="">Retirada e entrega</option><option value="retirada">Retirada</option><option value="entrega_local">Entrega local</option></select>
+          <input id="siteOrdersStart" type="date" aria-label="Data inicial" />
+          <input id="siteOrdersEnd" type="date" aria-label="Data final" />
+          <button class="btn btn-pink" id="siteOrdersFilter" type="button">Filtrar</button>
+        </div>
+        <p class="shipping-status" id="siteOrdersStatus"></p>
+        <div class="stock-table-wrap"><table class="stock-table site-orders-table" id="siteOrdersTable"></table></div>
+      </div>
     </section>
 
     <!-- ===================== HISTÓRICO ===================== -->
@@ -573,6 +594,9 @@
 
   <div class="modal-overlay" id="receiptModal" aria-hidden="true"><div class="modal receipt-preview-modal" role="dialog" aria-modal="true" aria-labelledby="receiptPreviewTitle"><div class="modal-head"><h3 id="receiptPreviewTitle">Prévia do comprovante</h3><button class="modal-close" id="receiptClose" type="button">&times;</button></div><div class="modal-body"><div id="receiptPreview" class="receipt-80mm"></div><div class="modal-foot receipt-preview-actions"><button class="btn btn-ghost" id="receiptCancel" type="button">Fechar</button><button class="btn btn-pink" id="receiptPrint" type="button">Imprimir</button></div></div></div></div>
   <div id="receiptPrintArea" class="print-area receipt-80mm" aria-hidden="true"></div>
+
+  <div class="modal-overlay" id="siteOrderModal" aria-hidden="true"><div class="modal site-order-modal" role="dialog" aria-modal="true" aria-labelledby="siteOrderModalTitle"><div class="modal-head"><h3 id="siteOrderModalTitle">Detalhes do pedido</h3><button class="modal-close" id="siteOrderClose" type="button">&times;</button></div><div class="modal-body" id="siteOrderDetail"></div></div></div>
+  <div id="siteOrderPrintArea" class="site-order-print-area" aria-hidden="true"></div>
 
   <div class="modal-overlay" id="labelsPreviewModal" aria-hidden="true"><div class="modal labels-preview-modal" role="dialog" aria-modal="true" aria-labelledby="labelsPreviewTitle"><div class="modal-head"><h3 id="labelsPreviewTitle">Prévia das etiquetas</h3><button class="modal-close" id="labelsPreviewClose" type="button">&times;</button></div><div class="modal-body"><div id="labelsPreviewArea" class="labels-sheet"></div><div class="modal-foot"><button class="btn btn-ghost" id="labelsPreviewCancel" type="button">Fechar</button><button class="btn btn-pink" id="labelsPreviewPrint" type="button">Imprimir</button></div></div></div></div>
   <div id="labelsPrintArea" class="labels-print-area labels-sheet" aria-hidden="true"></div>
