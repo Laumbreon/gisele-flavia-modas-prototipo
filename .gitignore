@@ -5,3 +5,13 @@ backend/uploads/*
 !backend/uploads/produtos/
 !backend/uploads/produtos/.gitkeep
 
+
+# Arquivos sensíveis do backend
+backend/.env
+
+# Uploads reais de produtos
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/produtos/
+backend/uploads/produtos/*
+!backend/uploads/produtos/.gitkeep
