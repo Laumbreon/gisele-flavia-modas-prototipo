@@ -289,6 +289,7 @@
 
     <section class="screen" id="screen-etiquetas">
       <div class="section-head"><div><h2 class="section-title">Códigos e Etiquetas</h2><p class="section-sub">Geração, consulta e impressão de etiquetas por variação.</p></div><button class="btn btn-pink" id="generateMissingCodes" type="button">Gerar códigos faltantes</button></div>
+      <div class="scanner-print-notice"><strong>Leitura por scanner</strong><span>Use impressão em boa qualidade e evite reduzir o tamanho no diálogo de impressão.</span></div>
       <div class="cards-grid labels-summary" id="labelsSummary"></div>
       <div class="labels-layout">
         <div class="panel labels-catalog"><div class="panel-head"><div><h3>Variações de produtos</h3><p class="section-sub">Encontre a variação e adicione-a à fila de impressão.</p></div></div><div class="labels-search"><input id="labelsSearch" type="search" placeholder="Produto, categoria, SKU, código, cor ou tamanho" /></div><p class="shipping-status" id="labelsStatus"></p><div class="stock-table-wrap smooth-scroll"><table class="stock-table labels-variations-table" id="labelsVariationsTable"></table></div></div>
@@ -588,6 +589,8 @@
   <!-- ===================== TOAST ===================== -->
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <!-- Coloque JsBarcode.all.min.js em /libs para gerar CODE128 real; o fallback textual funciona sem a biblioteca. -->
+  <script src="libs/JsBarcode.all.min.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

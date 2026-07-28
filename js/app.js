@@ -2441,7 +2441,7 @@ async function gerarCodigosFaltantes() {
 function adicionarEtiquetaParaImpressao(id) {
   const item = variacoesEtiquetas.find(variacao => variacao.id === id);
   if (!item) return;
-  if (!codigoEtiqueta(item)) return showToast("Esta variação não possui código. Gere os códigos antes de adicionar.");
+  if (!codigoEtiqueta(item)) return showToast("Gere códigos antes de imprimir esta etiqueta.");
   const existente = etiquetasSelecionadas.find(etiqueta => etiqueta.id === id);
   if (existente) existente.quantidade += 1; else etiquetasSelecionadas.push({ ...item, quantidade: 1 });
   renderEtiquetasSelecionadas();
@@ -2465,13 +2465,36 @@ function atualizarResumoEtiquetas() {
 
 function montarHtmlEtiqueta(item) {
   const codigo = codigoEtiqueta(item);
-  return `<article class="product-label"><header>Gisele Flávia Modas</header><strong class="label-product">${escaparHtml(item.produto)}</strong><span>${escaparHtml(item.tamanho)} · ${escaparHtml(item.cor)}</span><b class="label-price">${formatarMoeda(item.preco)}</b><div class="fake-barcode" aria-hidden="true"></div><code>${escaparHtml(codigo)}</code></article>`;
+  return `<article class="product-label"><header>Gisele Flávia Modas</header><strong class="label-product">${escaparHtml(item.produto)}</strong><span>${escaparHtml(item.tamanho)} · ${escaparHtml(item.cor)}</span><b class="label-price">${formatarMoeda(item.preco)}</b><div class="barcode-block"><svg class="barcode-svg" data-barcode="${escaparHtml(codigo)}" role="img" aria-label="Código de barras ${escaparHtml(codigo)}"></svg><div class="barcode-fallback" aria-hidden="true"></div><code class="label-code-text">${escaparHtml(codigo)}</code></div></article>`;
 }
 
 function htmlEtiquetasSelecionadas() { return etiquetasSelecionadas.flatMap(item => Array.from({length:item.quantidade},()=>montarHtmlEtiqueta(item))).join(""); }
-function prepararAreaEtiquetas() { const formato=$("#labelsPrintSize").value; const html=htmlEtiquetasSelecionadas(); [$("#labelsPreviewArea"),$("#labelsPrintArea")].forEach(area=>{area.className=`${area.id === "labelsPrintArea" ? "labels-print-area " : ""}labels-sheet labels-size-${formato}`;area.innerHTML=html;}); }
-function abrirPreviewEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para visualizar."); prepararAreaEtiquetas(); openModal("#labelsPreviewModal"); }
-function imprimirEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para imprimir."); prepararAreaEtiquetas(); document.body.classList.add("printing-labels"); try { window.print(); } finally { document.body.classList.remove("printing-labels"); } }
+function opcoesCodigoBarrasEtiquetas(container) {
+  if (container.classList.contains("labels-size-small")) return { width: 1.15, height: 28 };
+  if (container.classList.contains("labels-size-roll80")) return { width: 2, height: 52 };
+  return { width: 1.5, height: 40 };
+}
+function renderizarCodigosBarrasEtiquetas(container) {
+  if (!container) return;
+  const opcoes = opcoesCodigoBarrasEtiquetas(container);
+  $$(".barcode-svg[data-barcode]", container).forEach(svg => {
+    const codigo = svg.dataset.barcode || "";
+    const bloco = svg.closest(".barcode-block");
+    bloco?.classList.remove("barcode-ready", "barcode-error");
+    if (typeof window.JsBarcode !== "function") return;
+    try {
+      window.JsBarcode(svg, codigo, { format: "CODE128", displayValue: false, margin: 0, background: "#ffffff", lineColor: "#000000", width: opcoes.width, height: opcoes.height });
+      bloco?.classList.add("barcode-ready");
+    } catch (error) {
+      bloco?.classList.add("barcode-error");
+      const fallback = $(".barcode-fallback", bloco);
+      if (fallback) fallback.textContent = "Código inválido para CODE128";
+    }
+  });
+}
+function prepararAreaEtiquetas() { const formato=$("#labelsPrintSize").value; const html=htmlEtiquetasSelecionadas(); [$("#labelsPreviewArea"),$("#labelsPrintArea")].forEach(area=>{area.className=`${area.id === "labelsPrintArea" ? "labels-print-area " : ""}labels-sheet labels-size-${formato}`;area.innerHTML=html;renderizarCodigosBarrasEtiquetas(area);}); }
+function abrirPreviewEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para visualizar."); prepararAreaEtiquetas(); renderizarCodigosBarrasEtiquetas($("#labelsPreviewArea")); openModal("#labelsPreviewModal"); }
+function imprimirEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para imprimir."); prepararAreaEtiquetas(); renderizarCodigosBarrasEtiquetas($("#labelsPrintArea")); document.body.classList.add("printing-labels"); try { window.print(); } finally { document.body.classList.remove("printing-labels"); } }
 
 function abrirModalMovimentacaoCaixa(tipo) { if(!pdvCaixa)return showToast("Não há caixa aberto."); $("#cashMoveForm").reset(); $("#cashMoveType").value=tipo; $("#cashMoveTitle").textContent=tipo==="reforco"?"Reforço de caixa":"Sangria de caixa"; openModal("#cashMoveModal"); }
 async function salvarMovimentacaoCaixa(event) { event.preventDefault(); const valor=valorPdv("#cashMoveValue"); if(valor<=0)return $("#cashMoveError").textContent="Informe um valor positivo."; const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/movimentacoes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:$("#cashMoveType").value,valor,forma_pagamento:$("#cashMovePayment").value,descricao:$("#cashMoveDescription").value.trim()})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return $("#cashMoveError").textContent=data.message||"Não foi possível registrar.";closeModal("#cashMoveModal");showToast("Movimentação registrada");await carregarCaixaAberto();}
@@ -2693,6 +2716,9 @@ function init() {
   // PDV Loja Física
   $("#pdvTerminal").addEventListener("change", selecionarTerminalPdv);
   $("#pdvSearchForm").addEventListener("submit", buscarProdutoPdv);
+  $("#pdvStoreSearch").addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); buscarProdutoPdv(event); }
+  });
   $("#pdvOpenCashForm").addEventListener("submit", abrirCaixaPdv);
   $("#pdvDiscount").addEventListener("input", atualizarCarrinhoPdv);
   ["#payCash", "#payPix", "#payDebit", "#payCredit"].forEach(id => $(id).addEventListener("input", calcularPagamentosPdv));
