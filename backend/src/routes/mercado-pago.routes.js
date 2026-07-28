@@ -1,0 +1,10 @@
+const express=require("express");
+const controller=require("../controllers/mercado-pago.controller");
+const permissoes=require("../middlewares/permissoes.middleware");
+const pin=require("../middlewares/fiscal-pin.middleware");
+const router=express.Router();
+router.post("/vendas/:venda_id/criar-preferencia",permissoes(["vendas.criar","relatorios.ver"]),controller.criarPreferencia);
+router.get("/vendas/:venda_id",permissoes(["vendas.criar","relatorios.ver"]),controller.buscarPagamentoVenda);
+router.get("/config",permissoes(["configuracoes.editar","mercado_pago.configurar"]),controller.obterConfig);
+router.put("/config",permissoes(["configuracoes.editar","mercado_pago.configurar"]),pin,controller.salvarConfig);
+module.exports=router;

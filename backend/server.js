@@ -22,6 +22,7 @@ const maquininhasRoutes = require("./src/routes/maquininhas.routes");
 const usuariosRoutes = require("./src/routes/usuarios.routes");
 const pedidosSiteRoutes = require("./src/routes/pedidos-site.routes");
 const fiscalRoutes = require("./src/routes/fiscal.routes");
+const mercadoPagoRoutes = require("./src/routes/mercado-pago.routes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -47,6 +48,7 @@ app.use("/api/maquininhas", authMiddleware, maquininhasRoutes);
 app.use("/api/usuarios", authMiddleware, usuariosRoutes);
 app.use("/api/pedidos-site", authMiddleware, pedidosSiteRoutes);
 app.use("/api/fiscal", authMiddleware, fiscalRoutes);
+app.use("/api/mercado-pago", authMiddleware, mercadoPagoRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "Rota não encontrada" });

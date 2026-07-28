@@ -297,6 +297,7 @@ function atualizarAuthUi() {
   $$(".labels-only").forEach(element => { element.hidden = !podeAcessarEtiquetas(); });
   $$(".orders-only").forEach(element => { element.hidden = !podeVerPedidosSite(); });
   $$(".fiscal-only").forEach(element => { element.hidden = !podeGerenciarFiscal(); });
+  $$(".mp-only").forEach(element => { element.hidden = usuarioAdministrador() || !(temPermissao("mercado_pago.configurar") || temPermissao("configuracoes.editar")); });
   if ($("#storyTrack")) buildStoryNav();
 }
 
@@ -395,7 +396,7 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
-    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("relatorios.ver") && !temPermissao("configuracoes.editar") && !temPermissao("fiscal.ver") && !temPermissao("fiscal.gerenciar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
+    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("relatorios.ver") && !temPermissao("configuracoes.editar") && !temPermissao("fiscal.ver") && !temPermissao("fiscal.gerenciar") && !temPermissao("mercado_pago.configurar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
       limparLogin();
       throw new Error("Usuário sem permissão para acessar áreas administrativas.");
     }
@@ -924,7 +925,8 @@ function navigate(screen, category = "Todos") {
     abrirLoginAdmin(() => navigate(screen, category)); return;
   }
   if (screen === "fiscal" && !podeGerenciarFiscal()) { if(usuarioLogado()){showToast("Você não tem permissão para acessar a área fiscal.");return;} abrirLoginAdmin(()=>navigate(screen));return; }
-  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas", "pedidos-site", "fiscal"].includes(screen) && !usuarioAdministrador()) {
+  if (screen === "maquininhas" && !usuarioAdministrador() && !temPermissao("mercado_pago.configurar") && !temPermissao("configuracoes.editar")) { showToast("Você não tem permissão para acessar Mercado Pago."); return; }
+  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas", "pedidos-site", "fiscal", "maquininhas"].includes(screen) && !usuarioAdministrador()) {
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
@@ -955,7 +957,7 @@ function navigate(screen, category = "Todos") {
     carregarUsuariosAdmin();
     carregarFretesBairro();
   }
-  if (screen === "maquininhas") carregarMaquininhas();
+  if (screen === "maquininhas") { carregarMaquininhas(); carregarConfigMercadoPago(); }
   if (screen === "pdv") iniciarPdvLoja();
   if (screen === "etiquetas") iniciarEtiquetas();
   if (screen === "checkout-publico") renderCart();
@@ -1714,6 +1716,9 @@ async function checkout() {
     const response=await fetch(`${API_BASE_URL}/public/checkout`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const data=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.message||"Não foi possível finalizar o pedido.");
     cart=[];localShippingQuote=null;renderCart();updateCartBadge();$("#publicCheckoutContent").hidden=true;const mensagem=encodeURIComponent(`Olá! Acabei de fazer o pedido #${data.venda_id} pelo site.`);$("#publicOrderSuccess").hidden=false;$("#publicOrderSuccess").innerHTML=`<div class="success-mark">✓</div><h3>Pedido recebido com sucesso!</h3><p>Número do pedido: <strong>#${data.venda_id}</strong></p><p>A loja entrará em contato para confirmar o pagamento e a entrega.</p><a class="btn btn-pink" href="https://wa.me/5511999990000?text=${mensagem}" target="_blank" rel="noopener">Chamar no WhatsApp</a><button class="btn btn-ghost" id="publicContinueShopping" type="button">Continuar comprando</button>`;$("#publicContinueShopping").onclick=fecharCheckoutPublico;
+    if (["cartao", "pix"].includes(payload.forma_pagamento)) {
+      $("#publicOrderSuccess").insertAdjacentHTML("beforeend", '<p class="mp-checkout-note">A loja enviará o link de pagamento Mercado Pago após conferir seu pedido.</p>');
+    }
     await carregarProdutosDaApi();
   } catch(err) { error.textContent=err.message||"Backend indisponível. Tente novamente."; }
   finally { button.disabled=false;button.textContent="Finalizar pedido"; }
@@ -2161,11 +2166,17 @@ async function abrirPedidoSite(id) {
     pedidoSiteAtual = data;
     $("#siteOrderModalTitle").textContent = `Pedido #${data.id}`;
     $("#siteOrderDetail").innerHTML = montarHtmlDetalhePedidoSite(data);
+    if (data.status_pagamento === "pendente") {
+      $(".site-order-actions", $("#siteOrderDetail"))?.insertAdjacentHTML("afterbegin", '<button class="btn btn-mp" id="siteOrderMercadoPago" type="button">Gerar link Mercado Pago</button>');
+      $(".site-order-actions", $("#siteOrderDetail"))?.insertAdjacentHTML("afterend", '<div class="mp-payment-result" id="siteOrderMpResult"></div>');
+    }
     openModal("#siteOrderModal");
     $("#siteOrderPrint")?.addEventListener("click", () => imprimirPedidoSite(pedidoSiteAtual));
     $("#siteOrderPay")?.addEventListener("click", confirmarPagamentoPedidoSite);
     $("#siteOrderUpdateDelivery")?.addEventListener("click", atualizarEntregaPedidoSite);
     $("#siteOrderCancel")?.addEventListener("click", cancelarPedidoSite);
+    $("#siteOrderMercadoPago")?.addEventListener("click", () => gerarLinkMercadoPagoPedido(data));
+    carregarLinkMercadoPagoExistente(data);
   } catch (error) { showToast(error.message || "Backend indisponível."); }
 }
 
@@ -2197,6 +2208,15 @@ function imprimirPedidoSite(pedido) {
   document.body.classList.add("printing-site-order");
   try { window.print(); } finally { document.body.classList.remove("printing-site-order"); }
 }
+
+/* ----------------- MERCADO PAGO — CHECKOUT PRO FASE 1 ----------------- */
+function urlMercadoPago(data){return data?.url_pagamento||data?.sandbox_init_point||data?.init_point||"";}
+function mostrarLinkMercadoPago(pedido,data){const box=$("#siteOrderMpResult");if(!box)return;const url=urlMercadoPago(data);if(!url)return;const mensagem=`Olá! Segue o link de pagamento do seu pedido #${pedido.id} na Gisele Flávia Modas: ${url}`;box.innerHTML=`<strong>Link Mercado Pago gerado</strong><a href="${escaparHtml(url)}" target="_blank" rel="noopener">${escaparHtml(url)}</a><div><a class="btn btn-mp btn-sm" href="${escaparHtml(url)}" target="_blank" rel="noopener">Abrir pagamento</a><button class="btn btn-ghost btn-sm" id="mpCopyLink" type="button">Copiar link</button><a class="btn btn-ghost btn-sm" href="${linkWhatsappPedidoSite(pedido,mensagem)}" target="_blank" rel="noopener">Enviar pelo WhatsApp</a></div><small>O pedido continua com pagamento pendente até confirmação manual.</small>`;$("#mpCopyLink").onclick=async()=>{try{await navigator.clipboard.writeText(url);showToast("Link copiado.");}catch{showToast("Não foi possível copiar automaticamente.");}};}
+async function carregarLinkMercadoPagoExistente(pedido){if(pedido.status_pagamento!=="pendente")return;try{const r=await fetchAdmin(`/mercado-pago/vendas/${pedido.id}`),d=await r?.json().catch(()=>null);if(r?.ok&&d)mostrarLinkMercadoPago(pedido,d);}catch(error){console.info("Link Mercado Pago ainda não disponível.",error);}}
+async function gerarLinkMercadoPagoPedido(pedido){const button=$("#siteOrderMercadoPago");if(button){button.disabled=true;button.textContent="Gerando link...";}try{const r=await fetchAdmin(`/mercado-pago/vendas/${pedido.id}/criar-preferencia`,{method:"POST",headers:{"Content-Type":"application/json"}}),d=await r?.json().catch(()=>({}));if(!r?.ok)throw new Error(d.message||"Não foi possível gerar o link.");mostrarLinkMercadoPago(pedido,d);showToast("Link Mercado Pago disponível. O pagamento segue pendente.");}catch(error){const box=$("#siteOrderMpResult");if(box)box.innerHTML=`<p class="login-error">${escaparHtml(error.message)}</p>`;}finally{if(button){button.disabled=false;button.textContent="Gerar link Mercado Pago";}}}
+function preencherConfigMercadoPago(c={}){$("#mpEnvironment").value=c.ambiente||"sandbox";$("#mpPublicKey").value=c.public_key||"";$("#mpSuccessUrl").value=c.success_url||"";$("#mpFailureUrl").value=c.failure_url||"";$("#mpPendingUrl").value=c.pending_url||"";$("#mpWebhookUrl").value=c.webhook_url||"";$("#mpActive").checked=Boolean(c.ativo);const badge=$("#mpTokenStatus");badge.textContent=c.access_token_configurado?"Access Token configurado":"Access Token não configurado";badge.className=`status-badge ${c.access_token_configurado?"open":"closed"}`;}
+async function carregarConfigMercadoPago(){try{const r=await fetchAdmin("/mercado-pago/config"),d=await r?.json().catch(()=>({}));if(!r?.ok)throw new Error(d.message);preencherConfigMercadoPago(d);$("#mpConfigStatus").textContent="";}catch(error){$("#mpConfigStatus").textContent=error.message||"Não foi possível carregar a configuração.";}}
+function salvarConfigMercadoPago(event){event.preventDefault();comPin(async pin=>{const body={ambiente:$("#mpEnvironment").value,ativo:$("#mpActive").checked,public_key:$("#mpPublicKey").value.trim()||null,success_url:$("#mpSuccessUrl").value.trim()||null,failure_url:$("#mpFailureUrl").value.trim()||null,pending_url:$("#mpPendingUrl").value.trim()||null,webhook_url:$("#mpWebhookUrl").value.trim()||null};const r=await fetchAdmin("/mercado-pago/config",{method:"PUT",headers:{"Content-Type":"application/json","X-Admin-Pin":pin},body:JSON.stringify(body)}),d=await r?.json().catch(()=>({}));if(!r?.ok)return $("#mpConfigStatus").textContent=d.message||"Não foi possível salvar.";preencherConfigMercadoPago(d);$("#mpConfigStatus").textContent="Configuração salva. Nenhum pagamento foi confirmado.";});}
 
 /* ----------------- NOTA FISCAL — PREPARAÇÃO V1 ----------------- */
 function valorFiscal(id){return $(id)?.value?.trim()||null;}
@@ -2841,6 +2861,7 @@ function init() {
   $("#machineCancel").addEventListener("click", () => closeModal("#machineModal"));
   $("#machineSearch").addEventListener("input", renderMaquininhas);
   $("#machineStatus").addEventListener("change", renderMaquininhas);
+  $("#mpConfigForm").addEventListener("submit", salvarConfigMercadoPago);
 
   // pedidos do site
   $("#siteOrdersRefresh").addEventListener("click", carregarPedidosSite);

@@ -33,6 +33,7 @@
         <button class="nav-link admin-only" data-nav="movimentacoes" type="button" hidden>Movimentações</button>
         <button class="nav-link admin-only" data-nav="fornecedores" type="button" hidden>Fornecedores</button>
         <button class="nav-link admin-only" data-nav="maquininhas" type="button" hidden>Maquininhas</button>
+        <button class="nav-link mp-only" data-nav="maquininhas" type="button" hidden>Mercado Pago</button>
         <button class="nav-link labels-only" data-nav="etiquetas" type="button" hidden>Etiquetas</button>
       </nav>
 
@@ -364,7 +365,8 @@
         <button class="btn btn-pink" id="btnAddMachine" type="button">Cadastrar maquininha</button>
       </div>
       <div class="machine-summary cards-grid" id="machineSummary"></div>
-      <div class="mp-notice"><strong>Integração Mercado Pago</strong><p>Integração Mercado Pago será ativada em etapa futura. Não insira tokens reais aqui.</p></div>
+      <div class="mp-notice"><strong>Integração Mercado Pago</strong><p>Checkout Pro gera links de pagamento para pedidos do site. A confirmação automática será implementada em uma fase futura.</p></div>
+      <form class="panel mp-config-panel" id="mpConfigForm"><div class="panel-head"><div><h3>Mercado Pago — Checkout Pro</h3><p class="section-sub">O Access Token permanece somente no arquivo .env do backend.</p></div><span class="status-badge" id="mpTokenStatus">Consultando token...</span></div><div class="form-grid"><div class="form-row"><label for="mpEnvironment">Ambiente</label><select id="mpEnvironment"><option value="sandbox">Sandbox</option><option value="producao">Produção</option></select></div><div class="form-row"><label for="mpPublicKey">Public Key</label><input id="mpPublicKey" autocomplete="off" /></div><div class="form-row"><label for="mpSuccessUrl">URL de sucesso</label><input id="mpSuccessUrl" type="url" /></div><div class="form-row"><label for="mpFailureUrl">URL de falha</label><input id="mpFailureUrl" type="url" /></div><div class="form-row"><label for="mpPendingUrl">URL pendente</label><input id="mpPendingUrl" type="url" /></div><div class="form-row"><label for="mpWebhookUrl">Webhook futuro</label><input id="mpWebhookUrl" type="url" /></div></div><label class="form-check"><input id="mpActive" type="checkbox" /> Integração ativa para gerar links</label><div class="mp-security-note">Nunca cole Access Token no frontend. Configure <code>MERCADO_PAGO_ACCESS_TOKEN</code> no <code>.env</code> do backend.</div><p class="login-error" id="mpConfigStatus"></p><button class="btn btn-pink" type="submit">Salvar configuração com PIN</button></form>
       <div class="panel">
         <div class="machine-toolbar"><input id="machineSearch" type="search" placeholder="Pesquisar nome, tipo ou PDV..." /><select id="machineStatus"><option value="todos">Todas</option><option value="ativas">Ativas</option><option value="inativas">Inativas</option></select></div>
         <div class="stock-table-wrap"><table class="stock-table" id="machineTable"></table></div>

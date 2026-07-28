@@ -7,7 +7,7 @@ const router = express.Router();
 router.post(
   "/validar-pin",
   authMiddleware,
-  permissoes(["admin.sensivel", "fiscal.gerenciar", "configuracoes.editar"]),
+  permissoes(["admin.sensivel", "fiscal.gerenciar", "mercado_pago.configurar", "configuracoes.editar"]),
   adminController.validarPin
 );
 

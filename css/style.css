@@ -2263,6 +2263,11 @@ video.detail-media-main { object-fit: contain; }
 .fiscal-prepare { display:grid; grid-template-columns:minmax(180px,300px) auto; gap:10px; margin-bottom:10px; }
 .fiscal-modal { max-width:720px; }.fiscal-document-modal { max-width:900px; }.fiscal-doc-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:16px; }.fiscal-alerts { margin-bottom:15px; padding:14px 16px; border-radius:12px; background:#fff7ed; color:#9a3412; }.fiscal-alerts ul { margin:8px 0 0 20px; }.fiscal-json { max-height:48vh; padding:16px; overflow:auto; border-radius:12px; background:#111827; color:#e5e7eb; font:11px/1.5 Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 
+/* ===================== MERCADO PAGO — CHECKOUT PRO ===================== */
+.btn-mp { border-color:#009ee3; background:#009ee3; color:#fff; }.btn-mp:hover { border-color:#008dcc; background:#008dcc; color:#fff; }
+.mp-config-panel { border-top:4px solid #009ee3; }.mp-config-panel input,.mp-config-panel select { width:100%; min-width:0; padding:10px 12px; border:1px solid var(--border); border-radius:10px; font:inherit; }.mp-security-note { margin:4px 0 16px; padding:12px 14px; border-radius:11px; background:#eff8ff; color:#075985; font-size:12px; }.mp-security-note code { font-weight:700; }
+.mp-payment-result { display:grid; gap:9px; margin-top:14px; padding:15px; border:1px solid #bae6fd; border-radius:13px; background:#f0f9ff; }.mp-payment-result>a { color:#0369a1; font-size:12px; overflow-wrap:anywhere; }.mp-payment-result>div { display:flex; flex-wrap:wrap; gap:8px; }.mp-payment-result small,.mp-checkout-note { color:#075985; }.mp-checkout-note { max-width:520px; margin:18px auto 0!important; padding:12px 14px; border-radius:11px; background:#eff8ff; font-size:12px; }
+
 /* ===================== RESPONSIVO ===================== */
 @media (max-width: 1024px) {
   .orders-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
