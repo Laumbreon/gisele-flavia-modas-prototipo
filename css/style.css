@@ -784,6 +784,7 @@ img { max-width: 100%; display: block; }
 .print-area { display:none; }
 .receipt-80mm { width:80mm; max-width:100%; margin:0 auto; padding:6mm; box-sizing:border-box; background:#fff; color:#000; font-family:Arial,Helvetica,sans-serif; font-size:12px; line-height:1.35; }
 .receipt-header,.receipt-footer { text-align:center; }.receipt-header h2 { margin:0; font:700 20px/1.15 Arial,sans-serif; color:#000; }.receipt-header p,.receipt-footer p { margin:3px 0; }.receipt-separator { margin:8px 0; border-top:1px dashed #000; }.receipt-meta p,.receipt-delivery p { margin:2px 0; }.receipt-item { padding:4px 0; }.receipt-item>small { display:block; }.receipt-item>div,.receipt-values>div,.receipt-payments>div { display:flex; justify-content:space-between; gap:8px; }.receipt-values>div,.receipt-payments>div { margin:3px 0; }.receipt-total { margin:6px 0!important; padding:5px 0; border-top:1px solid #000; border-bottom:1px solid #000; font-size:15px; }.receipt-payments h4,.receipt-delivery h4 { margin:8px 0 4px; font-size:11px; }.receipt-footer strong { display:block; margin-bottom:5px; }.receipt-empty { text-align:center; font-style:italic; }
+.labels-summary { margin-bottom:20px; }.labels-layout { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:20px; align-items:start; }.labels-selection { position:sticky; top:92px; }.labels-search input { width:100%; padding:11px 14px; border:1px solid var(--border); border-radius:10px; font:inherit; }.labels-actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }.selected-label { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:9px; padding:11px 0; border-bottom:1px solid var(--border); }.selected-label small { display:block; margin-top:3px; color:var(--text-muted); }.labels-preview-modal { max-width:850px; }.labels-preview-modal .modal-body { background:#eee; }.labels-print-area { display:none; }.labels-sheet { display:grid; grid-template-columns:repeat(auto-fill,minmax(48mm,1fr)); gap:4mm; padding:5mm; background:#fff; color:#000; }.product-label { box-sizing:border-box; min-height:30mm; padding:3mm; border:1px dashed #555; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; font:10px/1.2 Arial,sans-serif; color:#000; overflow:hidden; }.product-label header { font-size:9px; font-weight:700; }.label-product { width:100%; margin:2mm 0 1mm; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:11px; }.label-price { margin:1mm 0; font-size:15px; }.fake-barcode { width:90%; height:10mm; margin:1mm 0; background:repeating-linear-gradient(90deg,#000 0,#000 1px,transparent 1px,transparent 3px,#000 3px,#000 5px,transparent 5px,transparent 7px); }.product-label code { font:8px/1 monospace; letter-spacing:.5px; }.labels-size-small { grid-template-columns:repeat(auto-fill,minmax(38mm,1fr)); }.labels-size-small .product-label { min-height:25mm; }.labels-size-medium { grid-template-columns:repeat(auto-fill,minmax(55mm,1fr)); }.labels-size-medium .product-label { min-height:35mm; }.labels-size-roll80 { width:80mm; grid-template-columns:1fr; margin:0 auto; }.labels-size-roll80 .product-label { min-height:35mm; }
 .pdv-layout { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; }
 .search-box {
   display: flex;
@@ -1943,6 +1944,7 @@ video.detail-media-main { object-fit: contain; }
 
 /* ===================== RESPONSIVO ===================== */
 @media (max-width: 900px) {
+  .labels-layout { grid-template-columns:1fr; }.labels-selection { position:static; }
   .pdv-store-layout { grid-template-columns:1fr; }.pdv-store-side { position:static; }
   .main-nav { order: 3; width: 100%; justify-content: center; }
   .dash-bottom { grid-template-columns: 1fr; }
@@ -2084,6 +2086,7 @@ video.detail-media-main { object-fit: contain; }
 
 
 @media (max-width: 560px) {
+  .labels-actions { grid-template-columns:1fr; }.labels-sheet { grid-template-columns:1fr; padding:3mm; }
   .receipt-search { grid-template-columns:1fr; }.receipt-preview-modal .modal-body { padding:10px; }.receipt-80mm { width:100%; }
   .pdv-store-head { align-items:stretch;flex-direction:column; }.pdv-store-head .form-row { min-width:0; }.pdv-search-line { grid-template-columns:1fr; }.pdv-result-grid,.payment-grid { grid-template-columns:1fr; }.pdv-cart-line { grid-template-columns:1fr auto; }.pdv-cart-line>.qty-control { grid-row:2; }.cash-status-list { grid-template-columns:1fr; }
   .filter-bar {
@@ -2180,12 +2183,28 @@ video.detail-media-main { object-fit: contain; }
 }
 
 @media print {
-  @page { size:80mm auto; margin:0; }
-  html,body { width:80mm; margin:0!important; padding:0!important; background:#fff!important; }
+  body.printing-labels #receiptPrintArea { display:none!important; }
+  body.printing-labels #labelsPrintArea,body.printing-labels #labelsPrintArea * { visibility:visible!important; }
+  body.printing-labels #labelsPrintArea { display:grid!important; position:absolute; left:0; top:0; width:100%; margin:0; color:#000!important; background:#fff!important; }
+  body.printing-labels #labelsPrintArea * { color:#000!important; box-shadow:none!important; }
+  body.printing-labels #reportOutput { display:none!important; }
+}
+
+@media print {
+  @page { margin:0; }
+  html,body { margin:0!important; padding:0!important; background:#fff!important; }
+  body:not(.printing-labels) { width:80mm; }
   body * { visibility:hidden!important; }
   #receiptPrintArea,#receiptPrintArea * { visibility:visible!important; }
   #receiptPrintArea { display:block!important; position:absolute; left:0; top:0; width:80mm; margin:0; padding:4mm; color:#000!important; background:#fff!important; }
   #reportOutput { display:none!important; }
   #receiptPrintArea * { color:#000!important; background:transparent!important; box-shadow:none!important; }
+}
+
+@media print {
+  body.printing-labels { width:auto!important; }
+  body.printing-labels #receiptPrintArea { display:none!important; visibility:hidden!important; }
+  body.printing-labels #labelsPrintArea,body.printing-labels #labelsPrintArea * { visibility:visible!important; }
+  body.printing-labels #labelsPrintArea { display:grid!important; position:absolute; inset:0 auto auto 0; width:100%; margin:0; background:#fff!important; }
 }
 

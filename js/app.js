@@ -7,7 +7,7 @@
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
 const API_BASE_URL = "http://localhost:3001/api";
 const AUTH_STORAGE_KEY = "gfm_admin_auth";
-const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas"]);
+const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas"]);
 const ADMIN_PIN_SESSION_KEY = "adminPinOk";
 
 // Gradientes por categoria (placeholder visual com CSS)
@@ -157,6 +157,8 @@ let pdvMaquininhas = [];
 let pdvFrete = null;
 let pdvProdutosPublicos = [];
 let ultimaVendaPdv = null;
+let variacoesEtiquetas = [];
+let etiquetasSelecionadas = [];
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -238,6 +240,10 @@ function podeAcessarPdv() {
   return usuarioLogado() && (usuarioAdministrador() || temPermissao("pdv.acessar") || temPermissao("vendas.criar"));
 }
 
+function podeAcessarEtiquetas() {
+  return usuarioLogado() && (usuarioAdministrador() || temPermissao("produtos.editar") || temPermissao("etiquetas.imprimir"));
+}
+
 function getAuthHeaders(extraHeaders = {}) {
   return {
     ...extraHeaders,
@@ -274,6 +280,7 @@ function atualizarAuthUi() {
   if (logoutBtn) logoutBtn.hidden = !usuarioLogado();
   $$(".admin-only").forEach(element => { element.hidden = !usuarioAdministrador(); });
   $$(".pdv-only").forEach(element => { element.hidden = !podeAcessarPdv(); });
+  $$(".labels-only").forEach(element => { element.hidden = !podeAcessarEtiquetas(); });
   if ($("#storyTrack")) buildStoryNav();
 }
 
@@ -330,6 +337,7 @@ function logoutAdmin() {
   pdvMaquininhas = [];
   pdvFrete = null;
   ultimaVendaPdv = null;
+  etiquetasSelecionadas = [];
   if ($("#receiptPrintArea")) $("#receiptPrintArea").innerHTML = "";
   limparLogin();
   showToast("Sessao administrativa encerrada");
@@ -371,9 +379,9 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
-    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar")) {
+    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
       limparLogin();
-      throw new Error("Usuário sem permissão para acessar o PDV.");
+      throw new Error("Usuário sem permissão para acessar áreas administrativas.");
     }
     fecharLoginAdmin();
     showToast("Login realizado com sucesso");
@@ -891,7 +899,11 @@ function navigate(screen, category = "Todos") {
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
-  if (ADMIN_SCREENS.has(screen) && screen !== "pdv" && !usuarioAdministrador()) {
+  if (screen === "etiquetas" && !podeAcessarEtiquetas()) {
+    if (usuarioLogado()) { showToast("Você não tem permissão para acessar Códigos e Etiquetas."); return; }
+    abrirLoginAdmin(() => navigate(screen, category)); return;
+  }
+  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas"].includes(screen) && !usuarioAdministrador()) {
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
@@ -906,7 +918,7 @@ function navigate(screen, category = "Todos") {
 
   // marca link da navbar ativo
   $$(".nav-link").forEach(b => b.classList.remove("active"));
-  const navMap = { home: "home", catalogo: "catalogo", pdv: "pdv", gestao: "gestao", movimentacoes: "movimentacoes", fornecedores: "fornecedores" };
+  const navMap = { home: "home", catalogo: "catalogo", pdv: "pdv", gestao: "gestao", movimentacoes: "movimentacoes", fornecedores: "fornecedores", maquininhas: "maquininhas", etiquetas: "etiquetas" };
   const activeNav = $(`.nav-link[data-nav="${navMap[screen]}"]`);
   if (activeNav) activeNav.classList.add("active");
 
@@ -924,6 +936,7 @@ function navigate(screen, category = "Todos") {
   }
   if (screen === "maquininhas") carregarMaquininhas();
   if (screen === "pdv") iniciarPdvLoja();
+  if (screen === "etiquetas") iniciarEtiquetas();
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
 
@@ -2375,6 +2388,89 @@ function iniciarNovaVendaPdv() {
   $("#pdvSaleResult").innerHTML = ""; $("#pdvStoreSearch").value = ""; $("#pdvSearchResults").innerHTML = ""; $("#pdvSearchStatus").textContent = ""; $("#pdvStoreSearch").focus();
 }
 
+async function iniciarEtiquetas() {
+  if (!podeAcessarEtiquetas()) return showToast("Você não tem permissão para acessar Códigos e Etiquetas.");
+  renderEtiquetasSelecionadas();
+  await carregarProdutosEtiquetas();
+}
+
+async function carregarProdutosEtiquetas() {
+  $("#labelsStatus").textContent = "Carregando produtos e variações...";
+  try {
+    const response = await fetch(`${API_BASE_URL}/public/produtos`);
+    const data = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(data)) throw new Error("Resposta inválida");
+    variacoesEtiquetas = montarVariacoesEtiquetas(data);
+    $("#labelsStatus").textContent = `${variacoesEtiquetas.length} variação(ões) carregada(s).`;
+    filtrarEtiquetas(); atualizarResumoEtiquetas();
+  } catch (error) {
+    variacoesEtiquetas = []; filtrarEtiquetas(); atualizarResumoEtiquetas();
+    $("#labelsStatus").textContent = "Backend indisponível. Não foi possível carregar os produtos agora.";
+  }
+}
+
+function montarVariacoesEtiquetas(produtos) {
+  return produtos.flatMap(produto => (produto.variacoes || []).map(variacao => ({
+    id: Number(variacao.id), produto_id: Number(produto.id), produto: produto.nome || "Produto",
+    categoria: produto.categoria || "—", tamanho: variacao.tamanho || "—", cor: variacao.cor || "—",
+    sku: variacao.sku || "", codigo_barras: variacao.codigo_barras || "", codigo_interno: variacao.codigo_interno || "",
+    preco: Number(variacao.preco_promocional || variacao.preco_venda || produto.preco_promocional || produto.preco || 0),
+    estoque: Number(variacao.quantidade_estoque || 0),
+  })));
+}
+
+function codigoEtiqueta(item) { return item.codigo_barras || item.sku || item.codigo_interno || ""; }
+function filtrarEtiquetas() {
+  const termo = ($("#labelsSearch")?.value || "").trim().toLowerCase();
+  const lista = variacoesEtiquetas.filter(item => `${item.produto} ${item.categoria} ${item.sku} ${item.codigo_barras} ${item.codigo_interno} ${item.cor} ${item.tamanho}`.toLowerCase().includes(termo));
+  $("#labelsVariationsTable").innerHTML = `<thead><tr><th>Produto</th><th>Categoria</th><th>Variação</th><th>SKU</th><th>Cód. barras</th><th>Cód. interno</th><th>Preço</th><th>Estoque</th><th></th></tr></thead><tbody>${lista.map(item => `<tr><td>${escaparHtml(item.produto)}</td><td>${escaparHtml(item.categoria)}</td><td>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)}</td><td>${escaparHtml(item.sku || "—")}</td><td>${escaparHtml(item.codigo_barras || "—")}</td><td>${escaparHtml(item.codigo_interno || "—")}</td><td>${formatarMoeda(item.preco)}</td><td>${item.estoque}</td><td><button class="btn btn-ghost btn-sm" data-label-add="${item.id}" type="button">Adicionar etiqueta</button></td></tr>`).join("") || `<tr><td colspan="9">Nenhuma variação encontrada.</td></tr>`}</tbody>`;
+  $$('[data-label-add]').forEach(button => button.addEventListener("click", () => adicionarEtiquetaParaImpressao(Number(button.dataset.labelAdd))));
+}
+
+async function gerarCodigosFaltantes() {
+  if (!usuarioAdministrador() && !temPermissao("produtos.editar")) return showToast("Você não tem permissão para gerar códigos. Solicite à dona da loja.");
+  const faltantes = variacoesEtiquetas.filter(item => !codigoEtiqueta(item)).length;
+  if (!faltantes) return showToast("Todas as variações já possuem código.");
+  if (!confirm(`Gerar códigos para ${faltantes} variação(ões)?`)) return;
+  const response = await fetchAdmin("/produtos/gerar-codigos", { method: "POST", headers: { "Content-Type": "application/json" } });
+  const data = await response?.json().catch(() => ({}));
+  if (!response?.ok) return showToast(data.message || "Não foi possível gerar os códigos.");
+  showToast(`${Number(data.total_preenchido || 0)} código(s) gerado(s).`); await carregarProdutosEtiquetas();
+}
+
+function adicionarEtiquetaParaImpressao(id) {
+  const item = variacoesEtiquetas.find(variacao => variacao.id === id);
+  if (!item) return;
+  if (!codigoEtiqueta(item)) return showToast("Esta variação não possui código. Gere os códigos antes de adicionar.");
+  const existente = etiquetasSelecionadas.find(etiqueta => etiqueta.id === id);
+  if (existente) existente.quantidade += 1; else etiquetasSelecionadas.push({ ...item, quantidade: 1 });
+  renderEtiquetasSelecionadas();
+}
+
+function removerEtiquetaImpressao(id) { etiquetasSelecionadas = etiquetasSelecionadas.filter(item => item.id !== id); renderEtiquetasSelecionadas(); }
+function alterarQuantidadeEtiqueta(id, delta) { const item = etiquetasSelecionadas.find(etiqueta => etiqueta.id === id); if (!item) return; item.quantidade += delta; if (item.quantidade <= 0) removerEtiquetaImpressao(id); else renderEtiquetasSelecionadas(); }
+function renderEtiquetasSelecionadas() {
+  $("#labelsSelectedList").innerHTML = etiquetasSelecionadas.map(item => `<div class="selected-label"><div><strong>${escaparHtml(item.produto)}</strong><small>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)} · ${escaparHtml(codigoEtiqueta(item))}<br>${formatarMoeda(item.preco)}</small></div><div class="qty-control"><button data-label-minus="${item.id}" type="button">−</button><span>${item.quantidade}</span><button data-label-plus="${item.id}" type="button">+</button></div><button class="cart-remove" data-label-remove="${item.id}" type="button">×</button></div>`).join("") || `<p class="empty-note">Nenhuma etiqueta selecionada.</p>`;
+  $$('[data-label-minus]').forEach(b => b.onclick=()=>alterarQuantidadeEtiqueta(Number(b.dataset.labelMinus),-1)); $$('[data-label-plus]').forEach(b => b.onclick=()=>alterarQuantidadeEtiqueta(Number(b.dataset.labelPlus),1)); $$('[data-label-remove]').forEach(b => b.onclick=()=>removerEtiquetaImpressao(Number(b.dataset.labelRemove)));
+  atualizarResumoEtiquetas();
+}
+
+function atualizarResumoEtiquetas() {
+  const comCodigo = variacoesEtiquetas.filter(item => Boolean(codigoEtiqueta(item))).length;
+  const selecionadas = etiquetasSelecionadas.reduce((total,item) => total + item.quantidade, 0);
+  $("#labelsSummary").innerHTML = [["Total de variações",variacoesEtiquetas.length],["Com código",comCodigo],["Sem código",variacoesEtiquetas.length-comCodigo],["Selecionadas",selecionadas]].map(([rotulo,valor])=>`<div class="stat-card"><span>${rotulo}</span><strong>${valor}</strong></div>`).join("");
+}
+
+function montarHtmlEtiqueta(item) {
+  const codigo = codigoEtiqueta(item);
+  return `<article class="product-label"><header>Gisele Flávia Modas</header><strong class="label-product">${escaparHtml(item.produto)}</strong><span>${escaparHtml(item.tamanho)} · ${escaparHtml(item.cor)}</span><b class="label-price">${formatarMoeda(item.preco)}</b><div class="fake-barcode" aria-hidden="true"></div><code>${escaparHtml(codigo)}</code></article>`;
+}
+
+function htmlEtiquetasSelecionadas() { return etiquetasSelecionadas.flatMap(item => Array.from({length:item.quantidade},()=>montarHtmlEtiqueta(item))).join(""); }
+function prepararAreaEtiquetas() { const formato=$("#labelsPrintSize").value; const html=htmlEtiquetasSelecionadas(); [$("#labelsPreviewArea"),$("#labelsPrintArea")].forEach(area=>{area.className=`${area.id === "labelsPrintArea" ? "labels-print-area " : ""}labels-sheet labels-size-${formato}`;area.innerHTML=html;}); }
+function abrirPreviewEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para visualizar."); prepararAreaEtiquetas(); openModal("#labelsPreviewModal"); }
+function imprimirEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para imprimir."); prepararAreaEtiquetas(); document.body.classList.add("printing-labels"); try { window.print(); } finally { document.body.classList.remove("printing-labels"); } }
+
 function abrirModalMovimentacaoCaixa(tipo) { if(!pdvCaixa)return showToast("Não há caixa aberto."); $("#cashMoveForm").reset(); $("#cashMoveType").value=tipo; $("#cashMoveTitle").textContent=tipo==="reforco"?"Reforço de caixa":"Sangria de caixa"; openModal("#cashMoveModal"); }
 async function salvarMovimentacaoCaixa(event) { event.preventDefault(); const valor=valorPdv("#cashMoveValue"); if(valor<=0)return $("#cashMoveError").textContent="Informe um valor positivo."; const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/movimentacoes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:$("#cashMoveType").value,valor,forma_pagamento:$("#cashMovePayment").value,descricao:$("#cashMoveDescription").value.trim()})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return $("#cashMoveError").textContent=data.message||"Não foi possível registrar.";closeModal("#cashMoveModal");showToast("Movimentação registrada");await carregarCaixaAberto();}
 async function fecharCaixaPdv(event) { event.preventDefault();if(!pdvCaixa)return showToast("Não há caixa aberto.");if(!confirm(`Confirma o fechamento do caixa #${pdvCaixa.id}?`))return;const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/fechar`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dinheiro:valorPdv("#closeCash"),pix:valorPdv("#closePix"),debito:valorPdv("#closeDebit"),credito:valorPdv("#closeCredit"),observacoes:$("#closeNotes").value.trim()||null})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(data.message||"Não foi possível fechar o caixa.");$("#pdvCloseResult").innerHTML=`<div class="sale-success"><strong>Caixa fechado</strong><span>Sistema: ${money(Number(data.total_sistema))} · Informado: ${money(Number(data.total_informado))} · Divergência: ${money(Number(data.divergencia))}</span></div>`;pdvCaixa=null;await carregarCaixaAberto();}
@@ -2593,6 +2689,14 @@ function init() {
   $("#receiptClose").addEventListener("click", () => closeModal("#receiptModal"));
   $("#receiptCancel").addEventListener("click", () => closeModal("#receiptModal"));
   $("#receiptModal").addEventListener("click", event => { if (event.target.id === "receiptModal") closeModal("#receiptModal"); });
+  $("#labelsSearch").addEventListener("input", filtrarEtiquetas);
+  $("#generateMissingCodes").addEventListener("click", gerarCodigosFaltantes);
+  $("#labelsPreviewButton").addEventListener("click", abrirPreviewEtiquetas);
+  $("#labelsPrintButton").addEventListener("click", imprimirEtiquetas);
+  $("#labelsPreviewPrint").addEventListener("click", imprimirEtiquetas);
+  $("#labelsPreviewClose").addEventListener("click", () => closeModal("#labelsPreviewModal"));
+  $("#labelsPreviewCancel").addEventListener("click", () => closeModal("#labelsPreviewModal"));
+  $("#labelsPrintSize").addEventListener("change", () => { if ($("#labelsPreviewModal").classList.contains("open")) prepararAreaEtiquetas(); });
 
   // marca "Início" como ativo
   const homeNav = $('.nav-link[data-nav="home"]');

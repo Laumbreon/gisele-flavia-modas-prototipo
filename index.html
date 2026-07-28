@@ -31,6 +31,7 @@
         <button class="nav-link admin-only" data-nav="movimentacoes" type="button" hidden>Movimentações</button>
         <button class="nav-link admin-only" data-nav="fornecedores" type="button" hidden>Fornecedores</button>
         <button class="nav-link admin-only" data-nav="maquininhas" type="button" hidden>Maquininhas</button>
+        <button class="nav-link labels-only" data-nav="etiquetas" type="button" hidden>Etiquetas</button>
       </nav>
 
       <div class="topbar-actions">
@@ -206,6 +207,8 @@
         <div class="admin-notice">Criação de funcionárias ainda é feita via script nesta fase.</div>
         <div class="stock-table-wrap"><table class="stock-table" id="usersTable"><tbody><tr><td>Carregando usuários...</td></tr></tbody></table></div>
       </div>
+
+      <div class="panel labels-entry-panel"><div class="panel-head"><div><h3>Códigos e Etiquetas</h3><p class="section-sub">Consulte códigos e prepare etiquetas de produtos.</p></div><button class="btn btn-pink btn-sm" data-nav="etiquetas" type="button">Abrir etiquetas</button></div></div>
     </section>
 
     <!-- ===================== HISTÓRICO ===================== -->
@@ -272,6 +275,15 @@
       <div class="panel">
         <div class="machine-toolbar"><input id="machineSearch" type="search" placeholder="Pesquisar nome, tipo ou PDV..." /><select id="machineStatus"><option value="todos">Todas</option><option value="ativas">Ativas</option><option value="inativas">Inativas</option></select></div>
         <div class="stock-table-wrap"><table class="stock-table" id="machineTable"></table></div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-etiquetas">
+      <div class="section-head"><div><h2 class="section-title">Códigos e Etiquetas</h2><p class="section-sub">Geração, consulta e impressão de etiquetas por variação.</p></div><button class="btn btn-pink" id="generateMissingCodes" type="button">Gerar códigos faltantes</button></div>
+      <div class="cards-grid labels-summary" id="labelsSummary"></div>
+      <div class="labels-layout">
+        <div class="panel"><div class="panel-head"><h3>Variações de produtos</h3></div><div class="labels-search"><input id="labelsSearch" type="search" placeholder="Produto, categoria, SKU, código, cor ou tamanho" /></div><p class="shipping-status" id="labelsStatus"></p><div class="stock-table-wrap"><table class="stock-table" id="labelsVariationsTable"></table></div></div>
+        <aside class="panel labels-selection"><div class="panel-head"><h3>Etiquetas para imprimir</h3></div><div id="labelsSelectedList"></div><div class="form-row"><label for="labelsPrintSize">Formato</label><select id="labelsPrintSize"><option value="small">Etiqueta pequena</option><option value="medium">Etiqueta média</option><option value="roll80">Bobina 80mm</option></select></div><div class="labels-actions"><button class="btn btn-ghost" id="labelsPreviewButton" type="button">Pré-visualizar</button><button class="btn btn-pink" id="labelsPrintButton" type="button">Imprimir etiquetas</button></div></aside>
       </div>
     </section>
 
@@ -500,6 +512,9 @@
 
   <div class="modal-overlay" id="receiptModal" aria-hidden="true"><div class="modal receipt-preview-modal" role="dialog" aria-modal="true" aria-labelledby="receiptPreviewTitle"><div class="modal-head"><h3 id="receiptPreviewTitle">Prévia do comprovante</h3><button class="modal-close" id="receiptClose" type="button">&times;</button></div><div class="modal-body"><div id="receiptPreview" class="receipt-80mm"></div><div class="modal-foot receipt-preview-actions"><button class="btn btn-ghost" id="receiptCancel" type="button">Fechar</button><button class="btn btn-pink" id="receiptPrint" type="button">Imprimir</button></div></div></div></div>
   <div id="receiptPrintArea" class="print-area receipt-80mm" aria-hidden="true"></div>
+
+  <div class="modal-overlay" id="labelsPreviewModal" aria-hidden="true"><div class="modal labels-preview-modal" role="dialog" aria-modal="true" aria-labelledby="labelsPreviewTitle"><div class="modal-head"><h3 id="labelsPreviewTitle">Prévia das etiquetas</h3><button class="modal-close" id="labelsPreviewClose" type="button">&times;</button></div><div class="modal-body"><div id="labelsPreviewArea" class="labels-sheet"></div><div class="modal-foot"><button class="btn btn-ghost" id="labelsPreviewCancel" type="button">Fechar</button><button class="btn btn-pink" id="labelsPreviewPrint" type="button">Imprimir</button></div></div></div></div>
+  <div id="labelsPrintArea" class="labels-print-area labels-sheet" aria-hidden="true"></div>
 
   <div class="modal-overlay" id="productDetailModal" aria-hidden="true">
     <div class="modal product-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
