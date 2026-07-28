@@ -144,6 +144,15 @@
         <div class="hero-deco" aria-hidden="true">GF</div>
       </div>
 
+      <nav class="management-modules" aria-label="Atalhos da Gestão">
+        <button class="management-module" data-scroll-target="productsManagement" type="button"><span>01</span><strong>Produtos e estoque</strong><small>Cadastro, saldo e movimentações</small></button>
+        <button class="management-module" data-nav="pdv" type="button"><span>02</span><strong>Vendas e caixa</strong><small>PDV Loja e histórico</small></button>
+        <button class="management-module" data-scroll-target="freightManagement" type="button"><span>03</span><strong>Entregas e fretes</strong><small>Bairros, valores e prazos</small></button>
+        <button class="management-module" data-nav="etiquetas" type="button"><span>04</span><strong>Códigos e Etiquetas</strong><small>Códigos e impressão</small></button>
+        <button class="management-module" data-scroll-target="usersManagement" type="button"><span>05</span><strong>Usuários</strong><small>Funcionárias e permissões</small></button>
+        <button class="management-module" data-nav="maquininhas" type="button"><span>06</span><strong>Maquininhas</strong><small>Terminais e configurações</small></button>
+      </nav>
+
       <div class="cards-grid" id="dashboardCards"></div>
 
       <div class="dash-bottom">
@@ -164,7 +173,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel management-section" id="productsManagement">
         <div class="panel-head">
           <h3>Estoque de produtos</h3>
           <div class="panel-actions">
@@ -180,7 +189,7 @@
         </div>
       </div>
 
-      <div class="panel freight-admin-panel">
+      <div class="panel freight-admin-panel management-section" id="freightManagement">
         <div class="panel-head">
           <h3>Fretes por Bairro</h3>
           <button class="btn btn-pink btn-sm" id="btnAddFreight" type="button">Cadastrar bairro</button>
@@ -202,7 +211,7 @@
         </div>
       </div>
 
-      <div class="panel users-admin-panel">
+      <div class="panel users-admin-panel management-section" id="usersManagement">
         <div class="panel-head"><div><h3>Usuários e funcionárias</h3><p class="section-sub">Acessos ativos da operação.</p></div></div>
         <div class="admin-notice">Criação de funcionárias ainda é feita via script nesta fase.</div>
         <div class="stock-table-wrap"><table class="stock-table" id="usersTable"><tbody><tr><td>Carregando usuários...</td></tr></tbody></table></div>
@@ -282,8 +291,8 @@
       <div class="section-head"><div><h2 class="section-title">Códigos e Etiquetas</h2><p class="section-sub">Geração, consulta e impressão de etiquetas por variação.</p></div><button class="btn btn-pink" id="generateMissingCodes" type="button">Gerar códigos faltantes</button></div>
       <div class="cards-grid labels-summary" id="labelsSummary"></div>
       <div class="labels-layout">
-        <div class="panel"><div class="panel-head"><h3>Variações de produtos</h3></div><div class="labels-search"><input id="labelsSearch" type="search" placeholder="Produto, categoria, SKU, código, cor ou tamanho" /></div><p class="shipping-status" id="labelsStatus"></p><div class="stock-table-wrap"><table class="stock-table" id="labelsVariationsTable"></table></div></div>
-        <aside class="panel labels-selection"><div class="panel-head"><h3>Etiquetas para imprimir</h3></div><div id="labelsSelectedList"></div><div class="form-row"><label for="labelsPrintSize">Formato</label><select id="labelsPrintSize"><option value="small">Etiqueta pequena</option><option value="medium">Etiqueta média</option><option value="roll80">Bobina 80mm</option></select></div><div class="labels-actions"><button class="btn btn-ghost" id="labelsPreviewButton" type="button">Pré-visualizar</button><button class="btn btn-pink" id="labelsPrintButton" type="button">Imprimir etiquetas</button></div></aside>
+        <div class="panel labels-catalog"><div class="panel-head"><div><h3>Variações de produtos</h3><p class="section-sub">Encontre a variação e adicione-a à fila de impressão.</p></div></div><div class="labels-search"><input id="labelsSearch" type="search" placeholder="Produto, categoria, SKU, código, cor ou tamanho" /></div><p class="shipping-status" id="labelsStatus"></p><div class="stock-table-wrap smooth-scroll"><table class="stock-table labels-variations-table" id="labelsVariationsTable"></table></div></div>
+        <aside class="panel labels-selection"><div class="panel-head"><div><h3>Etiquetas para imprimir</h3><p class="section-sub" id="labelsSelectionHint">Ajuste as quantidades antes de imprimir.</p></div></div><div id="labelsSelectedList"></div><div class="labels-print-config"><div class="form-row"><label for="labelsPrintSize">Formato de impressão</label><select id="labelsPrintSize"><option value="small">Etiqueta pequena</option><option value="medium">Etiqueta média</option><option value="roll80">Bobina 80mm</option></select></div></div><div class="labels-actions"><button class="btn btn-ghost" id="labelsPreviewButton" type="button">Pré-visualizar</button><button class="btn btn-pink" id="labelsPrintButton" type="button">Imprimir etiquetas</button></div></aside>
       </div>
     </section>
 

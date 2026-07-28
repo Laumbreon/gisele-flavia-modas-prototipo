@@ -2423,7 +2423,7 @@ function codigoEtiqueta(item) { return item.codigo_barras || item.sku || item.co
 function filtrarEtiquetas() {
   const termo = ($("#labelsSearch")?.value || "").trim().toLowerCase();
   const lista = variacoesEtiquetas.filter(item => `${item.produto} ${item.categoria} ${item.sku} ${item.codigo_barras} ${item.codigo_interno} ${item.cor} ${item.tamanho}`.toLowerCase().includes(termo));
-  $("#labelsVariationsTable").innerHTML = `<thead><tr><th>Produto</th><th>Categoria</th><th>Variação</th><th>SKU</th><th>Cód. barras</th><th>Cód. interno</th><th>Preço</th><th>Estoque</th><th></th></tr></thead><tbody>${lista.map(item => `<tr><td>${escaparHtml(item.produto)}</td><td>${escaparHtml(item.categoria)}</td><td>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)}</td><td>${escaparHtml(item.sku || "—")}</td><td>${escaparHtml(item.codigo_barras || "—")}</td><td>${escaparHtml(item.codigo_interno || "—")}</td><td>${formatarMoeda(item.preco)}</td><td>${item.estoque}</td><td><button class="btn btn-ghost btn-sm" data-label-add="${item.id}" type="button">Adicionar etiqueta</button></td></tr>`).join("") || `<tr><td colspan="9">Nenhuma variação encontrada.</td></tr>`}</tbody>`;
+  $("#labelsVariationsTable").innerHTML = `<thead><tr><th>Produto</th><th>Variação</th><th>Código</th><th>Preço</th><th>Estoque</th><th>Ação</th></tr></thead><tbody>${lista.map(item => `<tr><td data-label="Produto"><strong>${escaparHtml(item.produto)}</strong><small>${escaparHtml(item.categoria)}</small></td><td data-label="Variação"><strong>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)}</strong></td><td data-label="Código"><code class="variation-code">${escaparHtml(codigoEtiqueta(item) || "Sem código")}</code><small>${item.sku && item.sku !== codigoEtiqueta(item) ? `SKU: ${escaparHtml(item.sku)}` : ""}</small></td><td data-label="Preço"><strong class="variation-price">${formatarMoeda(item.preco)}</strong></td><td data-label="Estoque"><span class="stock-pill ${item.estoque > 0 ? "available" : "empty"}">${item.estoque} un.</span></td><td data-label="Ação"><button class="btn btn-ghost btn-sm label-add-button" data-label-add="${item.id}" type="button">Adicionar etiqueta</button></td></tr>`).join("") || `<tr><td colspan="6">Nenhuma variação encontrada.</td></tr>`}</tbody>`;
   $$('[data-label-add]').forEach(button => button.addEventListener("click", () => adicionarEtiquetaParaImpressao(Number(button.dataset.labelAdd))));
 }
 
@@ -2452,6 +2452,8 @@ function alterarQuantidadeEtiqueta(id, delta) { const item = etiquetasSelecionad
 function renderEtiquetasSelecionadas() {
   $("#labelsSelectedList").innerHTML = etiquetasSelecionadas.map(item => `<div class="selected-label"><div><strong>${escaparHtml(item.produto)}</strong><small>${escaparHtml(item.tamanho)} / ${escaparHtml(item.cor)} · ${escaparHtml(codigoEtiqueta(item))}<br>${formatarMoeda(item.preco)}</small></div><div class="qty-control"><button data-label-minus="${item.id}" type="button">−</button><span>${item.quantidade}</span><button data-label-plus="${item.id}" type="button">+</button></div><button class="cart-remove" data-label-remove="${item.id}" type="button">×</button></div>`).join("") || `<p class="empty-note">Nenhuma etiqueta selecionada.</p>`;
   $$('[data-label-minus]').forEach(b => b.onclick=()=>alterarQuantidadeEtiqueta(Number(b.dataset.labelMinus),-1)); $$('[data-label-plus]').forEach(b => b.onclick=()=>alterarQuantidadeEtiqueta(Number(b.dataset.labelPlus),1)); $$('[data-label-remove]').forEach(b => b.onclick=()=>removerEtiquetaImpressao(Number(b.dataset.labelRemove)));
+  const quantidadeTotal = etiquetasSelecionadas.reduce((total, item) => total + item.quantidade, 0);
+  if ($("#labelsSelectionHint")) $("#labelsSelectionHint").textContent = quantidadeTotal ? `${quantidadeTotal} etiqueta(s) pronta(s) para impressão.` : "Ajuste as quantidades antes de imprimir.";
   atualizarResumoEtiquetas();
 }
 
@@ -2480,8 +2482,22 @@ async function carregarUsuariosAdmin() {
   const response = await fetchAdmin("/usuarios");
   const data = await response?.json().catch(() => []);
   if (!response?.ok) { $("#usersTable").innerHTML = `<tbody><tr><td>${data.message || "Não foi possível carregar os usuários."}</td></tr></tbody>`; return; }
-  $("#usersTable").innerHTML = `<thead><tr><th>Nome</th><th>E-mail</th><th>Tipo</th><th>Status</th><th>Permissões</th></tr></thead><tbody>${data.map(usuario => `<tr><td>${usuario.nome}</td><td>${usuario.email}</td><td>${usuario.tipo}</td><td>${usuario.ativo ? "Ativo" : "Inativo"}</td><td><div class="permission-list">${(usuario.permissoes || []).map(item => `<span>${item.permissao}</span>`).join("") || "—"}</div></td></tr>`).join("")}</tbody>`;
+  $("#usersTable").innerHTML = `<thead><tr><th>Usuário</th><th>Perfil</th><th>Status</th><th>Acessos</th></tr></thead><tbody>${data.map(usuario => {
+    const permissoes = (usuario.permissoes || []).map(item => item.permissao);
+    const grupos = agruparPermissoesUsuario(permissoes);
+    const total = ["dona", "super_admin"].includes(usuario.tipo);
+    const resumo = total ? "Acesso total" : Object.keys(grupos).slice(0, 3).join(", ") || "Sem permissões";
+    const detalhes = Object.entries(grupos).map(([grupo, itens]) => `<div class="permission-group"><strong>${grupo}</strong><div>${itens.map(item => `<span>${escaparHtml(rotuloPermissao(item))}</span>`).join("")}</div></div>`).join("");
+    return `<tr class="${usuario.tipo === "super_admin" ? "super-admin-row" : ""}"><td data-label="Usuário"><strong>${escaparHtml(usuario.nome)}</strong><small>${escaparHtml(usuario.email)}</small></td><td data-label="Perfil"><span class="profile-badge ${usuario.tipo}">${usuario.tipo === "super_admin" ? "Super admin" : usuario.tipo === "dona" ? "Dona" : "Funcionária"}</span></td><td data-label="Status"><span class="user-status ${usuario.ativo ? "active" : "inactive"}">${usuario.ativo ? "Ativo" : "Inativo"}</span></td><td data-label="Acessos"><strong class="permission-summary">${resumo}</strong>${detalhes ? `<details class="permission-details"><summary>Ver permissões</summary><div class="permission-groups">${detalhes}</div></details>` : ""}</td></tr>`;
+  }).join("")}</tbody>`;
 }
+
+function categoriaPermissao(permissao) {
+  const prefixo = String(permissao).split(".")[0];
+  return ({ admin:"Admin",configuracoes:"Admin",funcionarios:"Admin",pdv:"PDV",vendas:"PDV",caixa:"Caixa",produtos:"Produtos",etiquetas:"Produtos",estoque:"Estoque",fornecedores:"Fornecedores",relatorios:"Relatórios",maquininhas:"Maquininhas",mercado_pago:"Mercado Pago" })[prefixo] || "Admin";
+}
+function agruparPermissoesUsuario(permissoes) { return permissoes.reduce((grupos, permissao) => { const categoria=categoriaPermissao(permissao); (grupos[categoria] ||= []).push(permissao); return grupos; }, {}); }
+function rotuloPermissao(permissao) { return String(permissao).split(".").map(parte => parte.replaceAll("_", " ")).join(" · "); }
 
 async function carregarMaquininhas() {
   const response = await fetchAdmin("/maquininhas");
@@ -2585,6 +2601,10 @@ function init() {
   $$("[data-nav]").forEach(b => {
     b.addEventListener("click", () => navigate(b.dataset.nav, "Todos"));
   });
+  $$("[data-scroll-target]").forEach(button => button.addEventListener("click", () => {
+    const target = document.getElementById(button.dataset.scrollTarget);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
 
   // carrinho -> abre PDV
   $("#cartButton").addEventListener("click", () => navigate("pdv"));
