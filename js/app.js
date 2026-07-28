@@ -1452,7 +1452,7 @@ function getShippingData() {
   if (deliveryType === "local") {
     if (localQuoteIsCurrent && localShippingQuote.status === "found") {
       shippingValue = localShippingQuote.value;
-    } else if (hasLocalAddress || localQuoteIsCurrent) {
+    } else {
       shippingValue = 0;
     }
   }
@@ -1633,12 +1633,13 @@ function renderCart() {
   }
 
   box.innerHTML = cart.map((i, idx) => `
-    <div class="cart-row">
+    <div class="cart-row public-cart-row">
       <div class="info">
         <div class="name">${i.name}</div>
-        <div class="meta">Tam: ${i.size} · Cor: ${i.color} · Qtd: ${i.qty}</div>
+        <div class="meta">Tam: ${i.size} · Cor: ${i.color}</div>
         <div class="sub">${money(i.price * i.qty)}</div>
       </div>
+      <div class="qty-control"><button data-public-minus="${idx}" type="button">−</button><span>${i.qty}</span><button data-public-plus="${idx}" type="button">+</button></div>
       <button class="cart-remove" data-cart="${idx}" type="button" aria-label="Remover">&times;</button>
     </div>
   `).join("");
@@ -1650,8 +1651,18 @@ function renderCart() {
       updateCartBadge();
     })
   );
+  $$('[data-public-minus]', box).forEach(button => button.addEventListener("click", () => alterarQuantidadeCarrinhoPublico(Number(button.dataset.publicMinus), -1)));
+  $$('[data-public-plus]', box).forEach(button => button.addEventListener("click", () => alterarQuantidadeCarrinhoPublico(Number(button.dataset.publicPlus), 1)));
 
   updateCartTotals();
+}
+
+function alterarQuantidadeCarrinhoPublico(index, delta) {
+  const item = cart[index]; if (!item) return;
+  const produto = products.find(p => Number(p.id) === Number(item.id));
+  const estoque = Number(produto?.sizes?.[item.size] || 0);
+  if (delta > 0 && item.qty >= estoque) return showToast("Quantidade limitada ao estoque disponível.");
+  item.qty += delta; if (item.qty <= 0) cart.splice(index, 1); renderCart(); updateCartBadge();
 }
 
 function updateCartBadge() {
@@ -1661,36 +1672,29 @@ function updateCartBadge() {
 
 async function checkout() {
   if (!cart.length) { showToast("Adicione itens ao carrinho primeiro"); return; }
-
   const shipping = getShippingData();
-  const payload = montarPayloadVendaApi(shipping);
-
-  if (payload && !usuarioLogado()) {
-    abrirLoginAdmin(() => checkout());
-    return;
-  }
-
-  if (payload) {
-    try {
-      const vendaApi = await enviarVendaParaApi(payload);
-      finalizarVendaMockada(shipping, vendaApi, { aplicarBaixaLocal: false, registrarMovimentacaoLocal: false });
-      await Promise.allSettled([
-        carregarProdutosDaApi(),
-        carregarEstoqueDaApi(),
-        carregarMovimentacoesDaApi(),
-      ]);
-      showToast("Venda finalizada com sucesso");
-      return;
-    } catch (error) {
-      console.info("API de vendas indisponivel. Finalizando venda no fluxo mockado.", error);
-    }
-  } else {
-    console.info("Venda sem variacao_id valido. Finalizando venda no fluxo mockado.");
-  }
-
-  finalizarVendaMockada(shipping);
-  showToast("Venda finalizada com sucesso");
+  const nome = $("#publicCustomerName").value.trim(), telefone = $("#publicCustomerPhone").value.trim();
+  const local = shipping.deliveryType === "local";
+  const error = $("#publicCheckoutError"); error.textContent = "";
+  if (!nome || !telefone) return error.textContent = "Informe nome e telefone/WhatsApp.";
+  if (local && localShippingQuote?.status !== "found") return error.textContent = "Calcule o frete local antes de finalizar.";
+  if (local && (!["#customerCity","#customerDistrict","#publicAddress","#publicAddressNumber"].every(id => $(id).value.trim()))) return error.textContent = "Preencha cidade, bairro, endereço e número.";
+  const itens = cart.map(item => ({ produto_id:Number(item.productId || item.id), variacao_id:Number(item.variacao_id), quantidade:Number(item.qty), preco_unitario:Number(item.price) }));
+  if (itens.some(item => !item.variacao_id)) return error.textContent = "Uma variação do carrinho não está disponível. Remova-a e adicione novamente.";
+  const payload = { cliente:{ nome,telefone,email:$("#publicCustomerEmail").value.trim()||null }, itens, tipo_entrega:local?"entrega_local":"retirada", forma_pagamento:$("input[name='publicPayment']:checked").value, frete:shipping.shippingValue, observacoes:$("#publicOrderNotes").value.trim()||null };
+  if (local) payload.entrega={ destinatario_nome:nome,destinatario_telefone:telefone,estado:shipping.state,cidade:shipping.city,bairro:shipping.district,endereco:$("#publicAddress").value.trim(),numero:$("#publicAddressNumber").value.trim(),complemento:$("#publicComplement").value.trim()||null,referencia:$("#publicReference").value.trim()||null };
+  const button=$("#btnCheckout"); button.disabled=true; button.textContent="Enviando pedido...";
+  try {
+    const response=await fetch(`${API_BASE_URL}/public/checkout`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.message||"Não foi possível finalizar o pedido.");
+    cart=[];localShippingQuote=null;renderCart();updateCartBadge();$("#publicCheckoutContent").hidden=true;const mensagem=encodeURIComponent(`Olá! Acabei de fazer o pedido #${data.venda_id} pelo site.`);$("#publicOrderSuccess").hidden=false;$("#publicOrderSuccess").innerHTML=`<div class="success-mark">✓</div><h3>Pedido recebido com sucesso!</h3><p>Número do pedido: <strong>#${data.venda_id}</strong></p><p>A loja entrará em contato para confirmar o pagamento e a entrega.</p><a class="btn btn-pink" href="https://wa.me/5511999990000?text=${mensagem}" target="_blank" rel="noopener">Chamar no WhatsApp</a><button class="btn btn-ghost" id="publicContinueShopping" type="button">Continuar comprando</button>`;$("#publicContinueShopping").onclick=fecharCheckoutPublico;
+    await carregarProdutosDaApi();
+  } catch(err) { error.textContent=err.message||"Backend indisponível. Tente novamente."; }
+  finally { button.disabled=false;button.textContent="Finalizar pedido"; }
 }
+
+function abrirCheckoutPublico() { $("#publicCheckoutContent").hidden=false;$("#publicOrderSuccess").hidden=true;$("#publicCheckoutError").textContent="";renderCart();openModal("#publicCheckoutModal"); }
+function fecharCheckoutPublico() { closeModal("#publicCheckoutModal"); }
 
 /* ----------------- PDV ----------------- */
 function renderPdv(filter = "") {
@@ -2368,7 +2372,8 @@ function abrirPreviewComprovante(venda) {
 function imprimirComprovanteVenda(venda) {
   if (venda) { ultimaVendaPdv = venda; $("#receiptPrintArea").innerHTML = montarHtmlComprovanteVenda(venda); }
   if (!ultimaVendaPdv) return showToast("Nenhuma venda disponível para impressão.");
-  window.print();
+  document.body.classList.add("printing-receipt");
+  try { window.print(); } finally { document.body.classList.remove("printing-receipt"); }
 }
 
 async function buscarVendaParaReimpressao(event) {
@@ -2495,6 +2500,7 @@ function renderizarCodigosBarrasEtiquetas(container) {
 function prepararAreaEtiquetas() { const formato=$("#labelsPrintSize").value; const html=htmlEtiquetasSelecionadas(); [$("#labelsPreviewArea"),$("#labelsPrintArea")].forEach(area=>{area.className=`${area.id === "labelsPrintArea" ? "labels-print-area " : ""}labels-sheet labels-size-${formato}`;area.innerHTML=html;renderizarCodigosBarrasEtiquetas(area);}); }
 function abrirPreviewEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para visualizar."); prepararAreaEtiquetas(); renderizarCodigosBarrasEtiquetas($("#labelsPreviewArea")); openModal("#labelsPreviewModal"); }
 function imprimirEtiquetas() { if (!etiquetasSelecionadas.length) return showToast("Adicione ao menos uma etiqueta para imprimir."); prepararAreaEtiquetas(); renderizarCodigosBarrasEtiquetas($("#labelsPrintArea")); document.body.classList.add("printing-labels"); try { window.print(); } finally { document.body.classList.remove("printing-labels"); } }
+function fecharPreviewEtiquetas() { closeModal("#labelsPreviewModal"); $("#labelsPrintArea").innerHTML=""; }
 
 function abrirModalMovimentacaoCaixa(tipo) { if(!pdvCaixa)return showToast("Não há caixa aberto."); $("#cashMoveForm").reset(); $("#cashMoveType").value=tipo; $("#cashMoveTitle").textContent=tipo==="reforco"?"Reforço de caixa":"Sangria de caixa"; openModal("#cashMoveModal"); }
 async function salvarMovimentacaoCaixa(event) { event.preventDefault(); const valor=valorPdv("#cashMoveValue"); if(valor<=0)return $("#cashMoveError").textContent="Informe um valor positivo."; const response=await fetchAdmin(`/caixas/${pdvCaixa.id}/movimentacoes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:$("#cashMoveType").value,valor,forma_pagamento:$("#cashMovePayment").value,descricao:$("#cashMoveDescription").value.trim()})});const data=await response?.json().catch(()=>({}));if(!response?.ok)return $("#cashMoveError").textContent=data.message||"Não foi possível registrar.";closeModal("#cashMoveModal");showToast("Movimentação registrada");await carregarCaixaAberto();}
@@ -2629,8 +2635,15 @@ function init() {
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
   }));
 
-  // carrinho -> abre PDV
-  $("#cartButton").addEventListener("click", () => navigate("pdv"));
+  // carrinho público
+  $("#cartButton").addEventListener("click", abrirCheckoutPublico);
+  $("#publicCheckoutClose").addEventListener("click", fecharCheckoutPublico);
+  $("#publicCheckoutModal").addEventListener("click", event => { if (event.target.id === "publicCheckoutModal") fecharCheckoutPublico(); });
+  $("#deliveryType").addEventListener("change", () => { const local=$("#deliveryType").value==="local"; $("#localShippingWrap").classList.toggle("show",local); if(!local){localShippingQuote=null;setShippingStatus("");} updateCartTotals(); });
+  ["#customerCity","#customerDistrict","#customerState"].forEach(id => $(id).addEventListener("input", resetLocalShippingQuote));
+  $("#customerState").addEventListener("input", event => { event.target.value=event.target.value.toUpperCase(); });
+  $("#btnCalculateShipping").addEventListener("click", calcularFreteBairro);
+  $("#btnCheckout").addEventListener("click", checkout);
   $("#btnLogout").addEventListener("click", logoutAdmin);
   $("#btnAdminAccess").addEventListener("click", () => usuarioAdministrador() ? navigate("gestao") : abrirLoginAdmin(() => navigate("gestao")));
 
@@ -2740,8 +2753,9 @@ function init() {
   $("#labelsPreviewButton").addEventListener("click", abrirPreviewEtiquetas);
   $("#labelsPrintButton").addEventListener("click", imprimirEtiquetas);
   $("#labelsPreviewPrint").addEventListener("click", imprimirEtiquetas);
-  $("#labelsPreviewClose").addEventListener("click", () => closeModal("#labelsPreviewModal"));
-  $("#labelsPreviewCancel").addEventListener("click", () => closeModal("#labelsPreviewModal"));
+  $("#labelsPreviewClose").addEventListener("click", fecharPreviewEtiquetas);
+  $("#labelsPreviewCancel").addEventListener("click", fecharPreviewEtiquetas);
+  $("#labelsPreviewModal").addEventListener("click", event => { if(event.target.id==="labelsPreviewModal") fecharPreviewEtiquetas(); });
   $("#labelsPrintSize").addEventListener("change", () => { if ($("#labelsPreviewModal").classList.contains("open")) prepararAreaEtiquetas(); });
 
   // marca "Início" como ativo
