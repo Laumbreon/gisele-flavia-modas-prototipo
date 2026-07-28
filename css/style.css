@@ -2217,6 +2217,8 @@ body:has(#productModal.open) { overflow:hidden; }
 .shop-photo-fallback.is-visible { display:grid; }
 .shop-photo-fallback>span { font-size:22px; opacity:.55; }
 .detail-visual-empty,.detail-visual-fallback { flex-direction:column; gap:8px; color:var(--text-muted); font:500 13px/1.4 'Poppins',sans-serif; }
+.detail-media-stage .detail-visual-fallback { display:none; pointer-events:none; }
+.detail-media-stage.media-error .detail-visual-fallback { display:flex; }
 .detail-visual-empty>span,.detail-visual-fallback>span { font-size:26px; opacity:.55; }
 .current-media-visual { position:relative; display:grid; place-items:center; aspect-ratio:4/5; overflow:hidden; border-radius:9px; color:var(--text-muted); background:#f7f7f7; font-size:11px; text-align:center; }
 .current-media-visual img,.current-media-visual video { grid-area:1/1; height:100%; }

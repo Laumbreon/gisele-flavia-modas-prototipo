@@ -1038,14 +1038,14 @@ function mediaAlt(media, p) {
 function renderMediaStage(media, p, color) {
   if (media?.tipo === "video") {
     const poster = mediaUrl(mainProductImage(p)?.url || "");
-    return `<video class="detail-media-main" controls preload="metadata" ${poster ? `poster="${poster}"` : ""}>
+    return `<video class="detail-media-main" controls preload="metadata" onloadeddata="this.closest('.detail-media-stage').classList.remove('media-error')" ${poster ? `poster="${escaparHtml(poster)}"` : ""}>
       <source src="${mediaUrl(media.url)}" />
       Seu navegador n?o suporta v?deo HTML5.
     </video>`;
   }
 
   if (media?.tipo === "imagem") {
-    return `<img class="detail-media-main" src="${escaparHtml(resolverUrlMidia(media.url))}" alt="${escaparHtml(mediaAlt(media, p))}" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
+    return `<img class="detail-media-main" src="${escaparHtml(resolverUrlMidia(media.url))}" alt="${escaparHtml(mediaAlt(media, p))}" onload="this.hidden=false;this.closest('.detail-media-stage').classList.remove('media-error')" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
       <div class="detail-visual detail-visual-fallback"><span aria-hidden="true">&#128247;</span><strong>Foto não cadastrada</strong></div>`;
   }
 
@@ -1055,7 +1055,7 @@ function renderMediaStage(media, p, color) {
 function renderMediaThumb(media, index, active) {
   const videoMark = media.tipo === "video" ? `<span class="media-play">Play</span>` : "";
   const preview = media.tipo === "imagem"
-    ? `<img src="${escaparHtml(resolverUrlMidia(media.url))}" alt="${escaparHtml(media.titulo || `Foto ${index + 1}`)}" onerror="this.hidden=true;this.parentElement.classList.add('media-thumb-error')" />`
+    ? `<img src="${escaparHtml(resolverUrlMidia(media.url))}" alt="${escaparHtml(media.titulo || `Foto ${index + 1}`)}" onload="this.hidden=false;this.parentElement.classList.remove('media-thumb-error')" onerror="this.hidden=true;this.parentElement.classList.add('media-thumb-error')" />`
     : `<span class="media-video-thumb">Vídeo</span>`;
 
   return `<button class="detail-media-thumb ${active ? "active" : ""}" type="button" data-detail-media="${index}" aria-label="Ver mídia ${index + 1}">
@@ -1136,7 +1136,7 @@ function shopCard(p) {
       <span class="shop-tag ${status}">${statusLabel(status)}</span>
       ${promoTag}
       ${mediaBadge}
-      ${mainImage ? `<span class="shop-photo-fallback"><span aria-hidden="true">&#128247;</span>Foto não cadastrada</span><img class="shop-thumb-img" src="${escaparHtml(resolverUrlMidia(mainImage.url))}" alt="${escaparHtml(mediaAlt(mainImage, p))}" loading="lazy" onerror="this.hidden=true;this.previousElementSibling.classList.add('is-visible')" />` : '<span class="shop-photo-fallback is-visible"><span aria-hidden="true">&#128247;</span>Foto não cadastrada</span>'}
+      ${mainImage ? `<span class="shop-photo-fallback"><span aria-hidden="true">&#128247;</span>Foto não cadastrada</span><img class="shop-thumb-img" src="${escaparHtml(resolverUrlMidia(mainImage.url))}" alt="${escaparHtml(mediaAlt(mainImage, p))}" loading="lazy" onload="this.hidden=false;this.previousElementSibling.classList.remove('is-visible')" onerror="this.hidden=true;this.previousElementSibling.classList.add('is-visible')" />` : '<span class="shop-photo-fallback is-visible"><span aria-hidden="true">&#128247;</span>Foto não cadastrada</span>'}
     </div>
     <div class="shop-body">
       <span class="shop-cat">${p.category}</span>
