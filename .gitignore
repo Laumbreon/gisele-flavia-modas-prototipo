@@ -5,11 +5,3 @@ backend/uploads/*
 !backend/uploads/produtos/
 !backend/uploads/produtos/.gitkeep
 
-.env
-backend/.env
-
-.DS_Store
-*.log
-npm-debug.log*
-
-.vscode/
