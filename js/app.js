@@ -5,7 +5,10 @@
 
 /* ----------------- DADOS MOCKADOS ----------------- */
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
-const API_BASE_URL = "http://localhost:3001/api";
+const API_BASE_URL =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3001/api"
+    : "/api";
 const AUTH_STORAGE_KEY = "gfm_admin_auth";
 const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas", "pedidos-site", "fiscal"]);
 const ADMIN_PIN_SESSION_KEY = "adminPinOk";
@@ -19,7 +22,7 @@ const CATEGORY_GRADIENTS = {
   Conjuntos: "linear-gradient(135deg, #c4006a, #063F2B)",
 };
 
-let products = [
+const produtosDemoDesativados = [
   {
     id: 1,
     name: "Vestido Floral Midi",
@@ -118,6 +121,7 @@ let products = [
     ],
   },
 ];
+let products = [];
 
 const suppliers = [
   { id: 1, name: "Rosa Bella Atacado", segment: "Vestidos e saias", city: "São Paulo, SP", contact: "Marina Costa", phone: "(11) 98888-1200", status: "Ativo", delivery: "5 a 7 dias", lastOrder: "Coleção Primavera", rating: "Premium" },
@@ -129,12 +133,13 @@ const suppliers = [
 let clientesApiRows = null;
 let estoqueApiRows = null;
 
-let stockMovements = [
+const movimentacoesDemoDesativadas = [
   { id: 1, date: "2026-06-12T09:30:00", product: "Vestido Floral Midi", type: "Entrada", quantity: 8, reason: "Compra fornecedor", responsible: "Gisele" },
   { id: 2, date: "2026-06-13T14:15:00", product: "Saia Plissada", type: "Ajuste", quantity: 1, reason: "Conferência de estoque", responsible: "Flávia" },
   { id: 3, date: "2026-06-14T16:40:00", product: "Blusa Canelada", type: "Saída", quantity: 2, reason: "Venda balcão", responsible: "Gisele" },
   { id: 4, date: "2026-06-15T10:05:00", product: "Conjunto Alfaiataria", type: "Entrada", quantity: 5, reason: "Reposição coleção", responsible: "Flávia" },
 ];
+let stockMovements = [];
 
 let sales = [];        // histórico de vendas
 let cart = [];         // carrinho público da vitrine
@@ -150,6 +155,7 @@ let freightStatusFilter = "todos";
 let freightDeactivateConfirmId = null;
 let maquininhas = [];
 let adminPinValue = "";
+let productFilesSelected = [];
 let pendingPinAction = null;
 let pdvCart = [];
 let pdvCaixa = null;
@@ -522,6 +528,7 @@ function adaptarProdutoApi(produto) {
     colors: colors.length ? colors : ["Único"],
     sizes,
     midias: Array.isArray(produto.midias) ? produto.midias : [],
+    medidas: Array.isArray(produto.medidas) ? produto.medidas : [],
     ativo: produto.ativo !== false,
     apiVariacoes: variacoes,
   };
@@ -553,8 +560,6 @@ async function carregarProdutosDaApi() {
         if (!Array.isArray(data)) throw new Error("Resposta inv?lida de produtos");
 
         const produtosApi = data.map(adaptarProdutoApi).filter(p => p.id && p.ativo);
-        if (!produtosApi.length) throw new Error("Nenhum produto v?lido retornado pela API");
-
         products = produtosApi;
         atualizarProdutosNaTela();
         return;
@@ -989,6 +994,7 @@ function productMedia(p) {
     ? [...p.midias].sort((a, b) => Number(b.principal) - Number(a.principal) || (a.ordem || 0) - (b.ordem || 0) || a.id - b.id)
     : [];
 }
+function mediaUrl(url) { const value=String(url||"");return value.startsWith("/uploads/")?`${API_BASE_URL.replace(/\/api$/,"")}${value}`:value; }
 
 function mainProductImage(p) {
   const midias = productMedia(p);
@@ -1000,30 +1006,30 @@ function productHasVideo(p) {
 }
 
 function mediaAlt(media, p) {
-  return media?.titulo || p.name;
+  return media?.alt_text || media?.titulo || p.name;
 }
 
 function renderMediaStage(media, p, color) {
   if (media?.tipo === "video") {
-    const poster = mainProductImage(p)?.url || "";
+    const poster = mediaUrl(mainProductImage(p)?.url || "");
     return `<video class="detail-media-main" controls preload="metadata" ${poster ? `poster="${poster}"` : ""}>
-      <source src="${media.url}" type="video/mp4" />
+      <source src="${mediaUrl(media.url)}" />
       Seu navegador n?o suporta v?deo HTML5.
     </video>`;
   }
 
   if (media?.tipo === "imagem") {
-    return `<img class="detail-media-main" src="${media.url}" alt="${mediaAlt(media, p)}" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
-      <div class="detail-visual detail-visual-fallback" style="background:${colorGradient(color)}"><span>${p.name.charAt(0)}</span><strong>${color}</strong></div>`;
+    return `<img class="detail-media-main" src="${mediaUrl(media.url)}" alt="${mediaAlt(media, p)}" onerror="this.closest('.detail-media-stage').classList.add('media-error');this.hidden=true" />
+      <div class="detail-visual detail-visual-fallback"><strong>Sem foto cadastrada</strong></div>`;
   }
 
-  return `<div class="detail-visual" style="background:${colorGradient(color)}"><span>${p.name.charAt(0)}</span><strong>${color}</strong></div>`;
+  return `<div class="detail-visual"><strong>Sem foto cadastrada</strong></div>`;
 }
 
 function renderMediaThumb(media, index, active) {
   const videoMark = media.tipo === "video" ? `<span class="media-play">Play</span>` : "";
   const preview = media.tipo === "imagem"
-    ? `<img src="${media.url}" alt="${media.titulo || `Mídia ${index + 1}`}" onerror="this.hidden=true" />`
+    ? `<img src="${mediaUrl(media.url)}" alt="${media.titulo || `Foto ${index + 1}`}" onerror="this.hidden=true" />`
     : `<span class="media-video-thumb">Vídeo</span>`;
 
   return `<button class="detail-media-thumb ${active ? "active" : ""}" type="button" data-detail-media="${index}" aria-label="Ver mídia ${index + 1}">
@@ -1107,9 +1113,7 @@ function shopCard(p) {
       <span class="shop-tag ${status}">${statusLabel(status)}</span>
       ${promoTag}
       ${mediaBadge}
-      ${mainImage ? `<img class="shop-thumb-img" src="${mainImage.url}" alt="${mediaAlt(mainImage, p)}" loading="lazy" onerror="this.hidden=true" />` : ""}
-      <span class="thumb-letter">${p.name.charAt(0)}</span>
-      <span class="thumb-color-label">${selectedColor}</span>
+      ${mainImage ? `<span class="shop-photo-fallback">Sem foto cadastrada</span><img class="shop-thumb-img" src="${mediaUrl(mainImage.url)}" alt="${mediaAlt(mainImage, p)}" loading="lazy" onerror="this.hidden=true" />` : '<span class="shop-photo-fallback">Sem foto cadastrada</span>'}
     </div>
     <div class="shop-body">
       <span class="shop-cat">${p.category}</span>
@@ -1188,37 +1192,11 @@ function bindBuyButtons(ctx) {
 }
 
 function productDescription(p) {
-  return `Peça versátil da Gisele Flávia Modas, pensada para valorizar a silhueta com conforto, acabamento delicado e presença elegante no dia a dia.`;
+  return p.description || "";
 }
 
-function fabricComposition(p) {
-  const byCategory = {
-    Vestidos: "96% viscose premium, 4% elastano",
-    Blusas: "92% algodão penteado, 8% elastano",
-    Calças: "88% poliéster alfaiataria, 12% elastano",
-    Saias: "95% poliéster leve, 5% elastano",
-    Conjuntos: "90% crepe alfaiataria, 10% elastano",
-  };
-  return byCategory[p.category] || "90% poliéster, 10% elastano";
-}
-
-function measurementRows() {
-  const rows = [
-    { size: "Único", bust: 82, waist: 64, hip: 90, length: 88 },
-    { size: "P", bust: 88, waist: 70, hip: 96, length: 90 },
-    { size: "M", bust: 94, waist: 76, hip: 102, length: 92 },
-    { size: "G", bust: 102, waist: 84, hip: 110, length: 94 },
-    { size: "GG", bust: 110, waist: 92, hip: 118, length: 96 },
-  ];
-  return rows.map(r => `
-    <tr>
-      <td>${r.size}</td>
-      <td>${r.bust} cm</td>
-      <td>${r.waist} cm</td>
-      <td>${r.hip} cm</td>
-      <td>${r.length} cm</td>
-    </tr>
-  `).join("");
+function measurementRows(rows=[]) {
+  return rows.map(r => `<tr><td>${escaparHtml(r.tamanho||"—")}</td><td>${escaparHtml(r.busto||"—")}</td><td>${escaparHtml(r.cintura||"—")}</td><td>${escaparHtml(r.quadril||"—")}</td><td>${escaparHtml(r.comprimento||"—")}</td><td>${escaparHtml(r.observacao||"")}</td></tr>`).join("");
 }
 
 function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
@@ -1253,7 +1231,7 @@ function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
         <span class="shop-cat">${p.category}</span>
         <h2>${p.name}</h2>
         <div class="detail-price">${money(p.price)}</div>
-        <p class="detail-description">${productDescription(p)}</p>
+        ${productDescription(p)?`<p class="detail-description">${escaparHtml(productDescription(p))}</p>`:""}
         <div class="detail-block">
           <h4>Cores disponíveis</h4>
           <div class="detail-chips">${colorChips}</div>
@@ -1264,24 +1242,14 @@ function openProductDetailModal(id, selectedColor = "", selectedSize = "") {
         </div>
       </div>
     </div>
-    <div class="detail-section">
+    ${p.medidas?.length?`<div class="detail-section">
       <h4>Tabela de medidas</h4>
       <table class="detail-measures">
-        <thead><tr><th>Tam.</th><th>Busto</th><th>Cintura</th><th>Quadril</th><th>Comp.</th></tr></thead>
-        <tbody>${measurementRows()}</tbody>
+        <thead><tr><th>Tam.</th><th>Busto</th><th>Cintura</th><th>Quadril</th><th>Comp.</th><th>Observação</th></tr></thead>
+        <tbody>${measurementRows(p.medidas)}</tbody>
       </table>
-    </div>
-    <div class="detail-section detail-info-grid">
-      <div>
-        <h4>Composição</h4>
-        <p>${fabricComposition(p)}</p>
-      </div>
-      <div>
-        <h4>Cuidados com a peça</h4>
-        <p>Lavar à mão ou em ciclo delicado, secar à sombra, não usar alvejante e passar em temperatura baixa.</p>
-      </div>
-    </div>
-    <p class="detail-note">As medidas são aproximadas e podem variar conforme o modelo.</p>
+    </div>`:""}
+    <p class="detail-note">As informações podem variar conforme o modelo. Consulte a loja em caso de dúvida.</p>
     <div class="modal-foot">
       <button type="button" class="btn btn-ghost" id="detailCancel">Fechar</button>
       <button type="button" class="btn btn-pink" id="detailAdd" ${size ? "" : "disabled"}>Adicionar ao carrinho</button>
@@ -1304,12 +1272,13 @@ function closeProductDetailModal() {
 function renderHome() {
   // destaques: 4 primeiros disponíveis
   const featured = products.filter(p => productStatus(p) !== "zero").slice(0, 4);
-  $("#featuredGrid").innerHTML = featured.map(shopCard).join("");
+  const vazio = `<div class="catalog-empty"><strong>Nenhum produto cadastrado ainda.</strong><span>A loja está preparando novidades para você.</span></div>`;
+  $("#featuredGrid").innerHTML = featured.length ? featured.map(shopCard).join("") : vazio;
   bindBuyButtons($("#featuredGrid"));
 
   // novidades: os últimos cadastrados
   const news = [...products].slice(-4).reverse();
-  $("#newsGrid").innerHTML = news.map(shopCard).join("");
+  $("#newsGrid").innerHTML = news.length ? news.map(shopCard).join("") : vazio;
   bindBuyButtons($("#newsGrid"));
 }
 
@@ -1339,7 +1308,7 @@ function renderCatalog() {
   const list = filteredProducts();
   const grid = $("#catalogGrid");
   if (!list.length) {
-    grid.innerHTML = `<p class="empty-note">Nenhum produto nesta categoria.</p>`;
+    grid.innerHTML = `<div class="catalog-empty"><strong>Nenhum produto cadastrado ainda.</strong><span>A loja está preparando novidades para você.</span></div>`;
     return;
   }
   grid.innerHTML = list.map(shopCard).join("");
@@ -1822,6 +1791,17 @@ function renderDashboard() {
 /* ----------------- GESTÃO: TABELA DE ESTOQUE ----------------- */
 function renderStockTable() {
   const table = $("#stockTable");
+  if (Array.isArray(estoqueApiRows)) {
+    const categorias=[...new Set(estoqueApiRows.map(r=>r.categoria).filter(Boolean))].sort();const categoriaAtual=$("#stockV2Category").value;$("#stockV2Category").innerHTML='<option value="">Todas as categorias</option>'+categorias.map(c=>`<option ${c===categoriaAtual?'selected':''}>${escaparHtml(c)}</option>`).join('');
+    const termo=$("#stockV2Search").value.trim().toLowerCase(),statusFiltro=$("#stockV2Status").value,categoriaFiltro=$("#stockV2Category").value;const filtrados=estoqueApiRows.filter(r=>!termo||[r.produto_nome,r.sku,r.codigo_barras,r.codigo_interno,r.cor,r.tamanho].some(v=>String(v||'').toLowerCase().includes(termo))).filter(r=>!categoriaFiltro||r.categoria===categoriaFiltro).filter(r=>!statusFiltro||r.status===statusFiltro);
+    const produtosTotal=new Set(estoqueApiRows.map(r=>r.produto_id)).size,baixos=estoqueApiRows.filter(r=>r.status==='baixo').length,zerados=estoqueApiRows.filter(r=>r.status==='zerado').length;$("#stockV2Summary").innerHTML=[["Produtos",produtosTotal],["Variações",estoqueApiRows.length],["Estoque baixo",baixos],["Zerados",zerados]].map(([l,v])=>`<div><span>${l}</span><strong>${v}</strong></div>`).join('');
+    const header = `<thead><tr><th>Produto</th><th>Variação</th><th>Estoque</th><th>Status</th><th>Ações</th></tr></thead>`;
+    const rows = filtrados.map(row => `<tr data-stock-detail="${row.variacao_id}"><td data-label="Produto"><strong>${escaparHtml(row.produto_nome)}</strong><small>${escaparHtml(row.categoria||"—")}</small></td><td data-label="Variação">${escaparHtml([row.tamanho,row.cor].filter(Boolean).join(" / "))}</td><td data-label="Estoque"><strong>${row.quantidade} un.</strong></td><td data-label="Status"><span class="tag-status ${row.status==='zerado'?'tag-zero':row.status==='baixo'?'tag-low':''}">${row.status==='zerado'?'Zerado':row.status==='baixo'?'Baixo':'Normal'}</span></td><td data-label="Ações"><div class="stock-actions"><button class="btn btn-ghost btn-sm" data-detail-button="${row.variacao_id}" type="button">Ver detalhes</button><button class="btn btn-pink btn-sm" data-stock-move="${row.variacao_id}" data-stock-label="${escaparHtml(row.produto_nome)} — ${escaparHtml(row.tamanho)}/${escaparHtml(row.cor)}" type="button">Movimentar</button></div></td></tr>`).join("");
+    table.innerHTML=header+`<tbody>${rows||'<tr><td colspan="5">Nenhuma variação encontrada.</td></tr>'}</tbody>`;
+    $$('[data-stock-move]',table).forEach(b=>b.addEventListener("click",()=>abrirMovimentoEstoque(b)));
+    $$('[data-detail-button]',table).forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();abrirDetalheEstoque(Number(b.dataset.detailButton));}));$$('[data-stock-detail]',table).forEach(row=>row.addEventListener("click",e=>{if(!e.target.closest('button'))abrirDetalheEstoque(Number(row.dataset.stockDetail));}));
+    return;
+  }
   const stockProducts = estoqueParaGestao();
   const header = `
     <thead>
@@ -2795,6 +2775,28 @@ function closeModal(sel) {
   m.setAttribute("aria-hidden", "true");
 }
 
+/* ----------------- CADASTRO DE PRODUTOS E ESTOQUE V2 ----------------- */
+function htmlVariacaoProduto(v={}) { const codigo=v.codigo_barras||v.sku||v.codigo_interno||"";return `<div class="product-v2-item" data-variation-id="${v.id||""}"><div class="form-grid"><div class="form-row"><label>Tamanho</label><input class="pv-size" list="productSizes" maxlength="10" value="${escaparHtml(v.tamanho||"")}" required /><datalist id="productSizes"><option value="PP"><option value="P"><option value="M"><option value="G"><option value="GG"><option value="Único"></datalist></div><div class="form-row"><label>Cor</label><input class="pv-color" maxlength="60" value="${escaparHtml(v.cor||"")}" required /></div><div class="form-row"><label>Quantidade inicial</label><input class="pv-stock" type="number" min="0" step="1" value="${v.quantidade_estoque??0}" ${v.id?'disabled':''} /></div><div class="form-row"><label>Estoque mínimo</label><input class="pv-min" type="number" min="0" step="1" value="${v.estoque_minimo??0}" /></div></div><label class="form-check"><input class="pv-active" type="checkbox" ${v.ativo===false?'':'checked'} /> Variação ativa</label><details class="product-advanced"><summary>${codigo?`Código: ${escaparHtml(codigo)}`:'Código gerado automaticamente'}</summary><p>O código de barras será criado após salvar.</p><div class="form-grid"><div class="form-row"><label>SKU</label><input class="pv-sku" maxlength="80" value="${escaparHtml(v.sku||"")}" /></div><div class="form-row"><label>Código de barras</label><input class="pv-barcode" maxlength="80" value="${escaparHtml(v.codigo_barras||"")}" /></div><input class="pv-price" type="hidden" value="${v.preco_venda??""}" /><input class="pv-promo" type="hidden" value="${v.preco_promocional??""}" /></div></details><button class="link-btn pv-remove" type="button">${v.id?'Inativar/remover':'Remover linha'}</button></div>`; }
+function htmlMidiaProduto(m={}) { return `<div class="product-v2-item" data-media-id="${m.id||""}"><div class="form-grid"><div class="form-row"><label>Caminho ou URL da imagem</label><input class="pm-url" value="${escaparHtml(m.url||"")}" required placeholder="assets/produtos/nome-da-foto.jpg" /></div><div class="form-row"><label>Texto alternativo opcional</label><input class="pm-alt" maxlength="180" value="${escaparHtml(m.alt_text||m.titulo||"")}" /></div></div><label class="form-check"><input class="pm-main" name="product-main-media" type="radio" ${m.principal?'checked':''} /> Imagem principal</label><button class="link-btn pm-remove" type="button">Remover imagem</button><div class="product-media-preview-wrap">${m.url?`<img class="product-media-preview" src="${escaparHtml(m.url)}" alt="Prévia" onerror="this.remove()" />`:''}<span>Imagem não encontrada</span></div></div>`; }
+function htmlMedidaProduto(m={}){return `<div class="product-v2-item" data-measure-id="${m.id||''}"><div class="form-grid"><div class="form-row"><label>Tamanho</label><input class="measure-size" value="${escaparHtml(m.tamanho||'')}" /></div><div class="form-row"><label>Busto</label><input class="measure-bust" value="${escaparHtml(m.busto||'')}" placeholder="Ex.: 88 cm" /></div><div class="form-row"><label>Cintura</label><input class="measure-waist" value="${escaparHtml(m.cintura||'')}" /></div><div class="form-row"><label>Quadril</label><input class="measure-hip" value="${escaparHtml(m.quadril||'')}" /></div><div class="form-row"><label>Comprimento</label><input class="measure-length" value="${escaparHtml(m.comprimento||'')}" /></div><div class="form-row"><label>Observação</label><input class="measure-note" value="${escaparHtml(m.observacao||'')}" /></div></div><button class="link-btn measure-remove" type="button">Remover medida</button></div>`;}
+function tamanhoArquivo(bytes){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
+function renderArquivosProduto(){const area=$("#productFilesPreview");area.innerHTML=productFilesSelected.map((item,index)=>`<div class="product-file-card ${item.principal?'principal':''}">${item.file.type.startsWith('image/')?`<img src="${item.preview}" alt="Prévia">`:`<video src="${item.preview}" controls playsinline preload="metadata"></video>`}<div><strong>${escaparHtml(item.file.name)}</strong><span>${item.file.type.startsWith('image/')?'Foto':'Vídeo'} · ${tamanhoArquivo(item.file.size)}</span></div>${item.file.type.startsWith('image/')?`<button class="btn btn-ghost btn-sm" data-file-main="${index}" type="button">${item.principal?'Foto principal':'Definir como principal'}</button>`:''}<button class="link-btn" data-file-remove="${index}" type="button">Remover</button></div>`).join('');$$('[data-file-remove]',area).forEach(b=>b.onclick=()=>{URL.revokeObjectURL(productFilesSelected[Number(b.dataset.fileRemove)].preview);productFilesSelected.splice(Number(b.dataset.fileRemove),1);if(!productFilesSelected.some(x=>x.principal)){const first=productFilesSelected.find(x=>x.file.type.startsWith('image/'));if(first)first.principal=true;}renderArquivosProduto();});$$('[data-file-main]',area).forEach(b=>b.onclick=()=>{productFilesSelected.forEach(x=>x.principal=false);productFilesSelected[Number(b.dataset.fileMain)].principal=true;renderArquivosProduto();});}
+function selecionarArquivosProduto(event){const allowed=new Set(['image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm']);const novos=[...event.target.files];for(const file of novos){if(!allowed.has(file.type)){showToast('Esse tipo de arquivo não é aceito. Use JPG, PNG, WEBP, MP4, MOV ou WEBM.');continue;}if(file.type.startsWith('image/')&&file.size>10*1024*1024||file.type.startsWith('video/')&&file.size>80*1024*1024){showToast(`${file.name} excede o limite permitido.`);continue;}if(productFilesSelected.length>=12){showToast('Selecione no máximo 12 arquivos por produto.');break;}productFilesSelected.push({file,preview:URL.createObjectURL(file),principal:false});}if(!productFilesSelected.some(x=>x.principal)){const first=productFilesSelected.find(x=>x.file.type.startsWith('image/'));if(first)first.principal=true;}event.target.value='';renderArquivosProduto();}
+function renderGaleriaAtualProduto(produtoId,midias=[]){const area=$("#productCurrentGallery");area.innerHTML=midias.length?`<h4>Fotos e vídeos atuais</h4><div class="current-gallery-grid">${midias.map(m=>`<article>${m.tipo==='imagem'?`<img src="${mediaUrl(m.url)}" alt="${escaparHtml(m.alt_text||'Foto')}">`:'<video src="'+mediaUrl(m.url)+'" controls playsinline preload="metadata"></video>'}<span>${m.tipo==='imagem'?'Foto':'Vídeo'}${m.principal?' · Principal':''}</span>${m.tipo==='imagem'&&!m.principal?`<button class="btn btn-ghost btn-sm" data-current-main="${m.id}" type="button">Definir como principal</button>`:''}<button class="link-btn" data-current-delete="${m.id}" type="button">Excluir</button></article>`).join('')}</div>`:'';$$('[data-current-main]',area).forEach(b=>b.onclick=async()=>{const r=await fetchAdmin(`/produtos/${produtoId}/midias/${b.dataset.currentMain}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({principal:true})});if(r?.ok)openProductModal(produtoId);else showToast('Não foi possível definir a foto principal.');});$$('[data-current-delete]',area).forEach(b=>b.onclick=async()=>{if(!confirm('Excluir esta foto ou vídeo?'))return;const r=await fetchAdmin(`/produtos/${produtoId}/midias/${b.dataset.currentDelete}`,{method:'DELETE'});if(r?.ok)openProductModal(produtoId);else showToast('Não foi possível excluir o arquivo.');});}
+function bindMedidasProduto(){$$('.measure-remove',$("#productMeasuresEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.measureId)item.dataset.remove='true';item.hidden=true;});}
+function dadosMedidaEditor(item,index){return{tamanho:$('.measure-size',item).value.trim(),busto:$('.measure-bust',item).value.trim(),cintura:$('.measure-waist',item).value.trim(),quadril:$('.measure-hip',item).value.trim(),comprimento:$('.measure-length',item).value.trim(),observacao:$('.measure-note',item).value.trim(),ordem:index};}
+function bindEditorProduto(){ $$('.pv-remove',$("#productVariationsEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.variationId)item.dataset.remove='true';else item.remove();item.hidden=true;}); $$('.pm-remove',$("#productMediaEditor")).forEach(b=>b.onclick=()=>{const item=b.closest('.product-v2-item');if(item.dataset.mediaId)item.dataset.remove='true';else item.remove();item.hidden=true;});$$('.pm-url',$("#productMediaEditor")).forEach(input=>input.oninput=()=>{const wrap=input.closest('.product-v2-item').querySelector('.product-media-preview-wrap');wrap.innerHTML=input.value.trim()?`<img class="product-media-preview" src="${escaparHtml(input.value.trim())}" alt="Prévia" onerror="this.remove()"><span>Imagem não encontrada</span>`:'<span>Sem foto cadastrada</span>';});const radios=$$('.pm-main',$("#productMediaEditor"));if(radios.length&&!radios.some(r=>r.checked))radios[0].checked=true; }
+async function openProductModal(id = null) { const form=$("#productForm");form.reset();productFilesSelected.forEach(x=>URL.revokeObjectURL(x.preview));productFilesSelected=[];renderArquivosProduto();$("#productFormError").textContent="";$("#productVariationsEditor").innerHTML="";$("#productMediaEditor").innerHTML="";$("#productMeasuresEditor").innerHTML="";$("#productCurrentGallery").innerHTML="";if(id){const response=await fetchAdmin(`/produtos/${id}`),raw=await response?.json().catch(()=>({}));if(!response?.ok)return showToast(raw.message||"Não foi possível abrir o produto.");const p=adaptarProdutoApi(raw);$("#modalTitle").textContent="Editar produto";$("#fId").value=p.id;$("#fName").value=p.name;$("#fCategory").value=p.category;$("#fPrice").value=p.price;$("#fPromoPrice").value=p.oldPrice??"";$("#fDescription").value=p.description||"";$("#fActive").checked=p.ativo;$("#productVariationsEditor").innerHTML=p.apiVariacoes.map(htmlVariacaoProduto).join("");$("#productMeasuresEditor").innerHTML=p.medidas.map(htmlMedidaProduto).join("");renderGaleriaAtualProduto(p.id,p.midias);}else{$("#modalTitle").textContent="Novo produto";$("#fId").value="";$("#productVariationsEditor").innerHTML=htmlVariacaoProduto({tamanho:"M",cor:"Único"});}bindEditorProduto();bindMedidasProduto();openModal("#productModal"); }
+function dadosVariacaoEditor(item){return{tamanho:$('.pv-size',item).value.trim(),cor:$('.pv-color',item).value.trim(),sku:$('.pv-sku',item).value.trim()||null,codigo_barras:$('.pv-barcode',item).value.trim()||null,preco_venda:$('.pv-price',item).value||null,preco_promocional:$('.pv-promo',item).value||null,quantidade_inicial:$('.pv-stock',item).disabled?undefined:Number($('.pv-stock',item).value||0),estoque_minimo:Number($('.pv-min',item).value||0),ativo:$('.pv-active',item).checked};}
+async function handleProductSubmit(e) { e.preventDefault();const status=$("#productFormError");status.textContent="Salvando...";const id=Number($("#fId").value)||null;const variationItems=$$('.product-v2-item',$("#productVariationsEditor"));const mediaItems=$$('.product-v2-item',$("#productMediaEditor"));const body={nome:$("#fName").value.trim(),categoria:$("#fCategory").value.trim(),descricao:$("#fDescription").value.trim(),preco:Number($("#fPrice").value),preco_promocional:$("#fPromoPrice").value||null,ativo:$("#fActive").checked,variacoes:id?[]:variationItems.filter(x=>!x.hidden).map(dadosVariacaoEditor)};try{let response=await fetchAdmin(id?`/produtos/${id}`:"/produtos",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),data=await response?.json().catch(()=>({}));if(!response?.ok)throw new Error(data.message||"Não foi possível salvar o produto.");const produtoId=id||data.id;if(id)for(const item of variationItems){const vid=Number(item.dataset.variationId);if(item.dataset.remove==='true'&&vid){const r=await fetchAdmin(`/produtos/${id}/variacoes/${vid}`,{method:"DELETE"});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao remover variação.");}else if(!item.hidden){const payload=dadosVariacaoEditor(item),r=await fetchAdmin(vid?`/produtos/${id}/variacoes/${vid}`:`/produtos/${id}/variacoes`,{method:vid?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao salvar variação.");}}for(const item of mediaItems){const mid=Number(item.dataset.mediaId);if(item.dataset.remove==='true'&&mid){const r=await fetchAdmin(`/produtos/${produtoId}/midias/${mid}`,{method:"DELETE"});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao remover imagem.");}else if(!item.hidden){const payload={url:$('.pm-url',item).value.trim(),alt_text:$('.pm-alt',item).value.trim(),titulo:$('.pm-alt',item).value.trim(),principal:$('.pm-main',item).checked};const r=await fetchAdmin(mid?`/produtos/${produtoId}/midias/${mid}`:`/produtos/${produtoId}/midias`,{method:mid?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||"Falha ao salvar imagem.");}}closeModal("#productModal");showToast(id?"Produto atualizado.":"Produto cadastrado.");await carregarProdutosDaApi();await carregarEstoqueDaApi();if(typeof carregarProdutosEtiquetas==="function")carregarProdutosEtiquetas();}catch(error){status.textContent=error.message||"Backend indisponível.";} }
+async function handleProductSubmitV3(event){event.preventDefault();const status=$("#productFormError"),id=Number($("#fId").value)||null,variacoes=$$('.product-v2-item',$("#productVariationsEditor")),links=$$('.product-v2-item',$("#productMediaEditor")),medidas=$$('.product-v2-item',$("#productMeasuresEditor"));status.textContent="Salvando produto...";const body={nome:$("#fName").value.trim(),categoria:$("#fCategory").value.trim(),descricao:$("#fDescription").value.trim(),preco:Number($("#fPrice").value),preco_promocional:$("#fPromoPrice").value||null,ativo:$("#fActive").checked,variacoes:id?[]:variacoes.filter(x=>!x.hidden).map(dadosVariacaoEditor)};try{const response=await fetchAdmin(id?`/produtos/${id}`:'/produtos',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await response?.json().catch(()=>({}));if(!response?.ok)throw new Error(data.message||'Não foi possível salvar o produto.');const produtoId=id||data.id;if(id)for(const item of variacoes){const variacaoId=Number(item.dataset.variationId),remove=item.dataset.remove==='true';const r=await fetchAdmin(remove&&variacaoId?`/produtos/${produtoId}/variacoes/${variacaoId}`:variacaoId?`/produtos/${produtoId}/variacoes/${variacaoId}`:`/produtos/${produtoId}/variacoes`,{method:remove&&variacaoId?'DELETE':variacaoId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:remove?undefined:JSON.stringify(dadosVariacaoEditor(item))});if(!r?.ok)throw new Error((await r?.json().catch(()=>({}))).message||'Falha ao salvar uma variação.');}for(const item of links.filter(x=>!x.hidden)){const payload={url:$('.pm-url',item).value.trim(),alt_text:$('.pm-alt',item).value.trim(),principal:$('.pm-main',item).checked};const r=await fetchAdmin(`/produtos/${produtoId}/midias`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||'Falha ao salvar um link.');}
+    for(let index=0;index<medidas.length;index+=1){const item=medidas[index],medidaId=Number(item.dataset.measureId);if(item.dataset.remove==='true'&&medidaId){await fetchAdmin(`/produtos/${produtoId}/medidas/${medidaId}`,{method:'DELETE'});continue;}if(item.hidden)continue;const payload=dadosMedidaEditor(item,index);if(!Object.values(payload).some(Boolean))continue;const r=await fetchAdmin(medidaId?`/produtos/${produtoId}/medidas/${medidaId}`:`/produtos/${produtoId}/medidas`,{method:medidaId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r?.ok)throw new Error((await r.json().catch(()=>({}))).message||'Falha ao salvar as medidas.');}
+    if(productFilesSelected.length){status.textContent="Enviando fotos e vídeos...";const formData=new FormData();productFilesSelected.forEach(item=>formData.append('arquivos',item.file));formData.append('principal_indice',String(productFilesSelected.findIndex(item=>item.principal)));const upload=await fetchAdmin(`/produtos/${produtoId}/midias/upload`,{method:'POST',body:formData}),uploadData=await upload?.json().catch(()=>({}));if(!upload?.ok){status.textContent=`Produto salvo, mas algumas fotos/vídeos não foram enviados. ${uploadData.message||'Tente adicionar novamente.'}`;await carregarProdutosDaApi();await carregarEstoqueDaApi();return;}}
+    closeModal('#productModal');showToast('Produto salvo com sucesso.');await carregarProdutosDaApi();await carregarEstoqueDaApi();if(typeof carregarProdutosEtiquetas==='function')carregarProdutosEtiquetas();}catch(error){status.textContent=error.message||'Backend indisponível.';}}
+function abrirMovimentoEstoque(button){$("#stockMoveVariationId").value=button.dataset.stockMove;$("#stockMoveTitle").textContent=`Movimentar — ${button.dataset.stockLabel}`;$("#stockMoveForm").reset();$("#stockMoveError").textContent="";openModal("#stockMoveModal");}
+async function salvarMovimentoEstoque(event){event.preventDefault();const status=$("#stockMoveError");status.textContent="Salvando...";const id=$("#stockMoveVariationId").value;try{const response=await fetchAdmin(`/estoque/${id}/movimentar`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tipo:$("#stockMoveType").value,quantidade:Number($("#stockMoveQuantity").value),motivo:$("#stockMoveReason").value.trim(),observacoes:$("#stockMoveNotes").value.trim()})}),data=await response?.json().catch(()=>({}));if(!response?.ok)throw new Error(data.message||"Não foi possível atualizar o estoque.");closeModal("#stockMoveModal");showToast(data.message);await carregarEstoqueDaApi();}catch(error){status.textContent=error.message;}}
+async function abrirDetalheEstoque(variacaoId){const row=estoqueApiRows?.find(r=>Number(r.variacao_id)===Number(variacaoId));if(!row)return;$("#stockDetailTitle").textContent=row.produto_nome;$("#stockDetailBody").innerHTML='<p class="shipping-status">Carregando detalhes...</p>';openModal("#stockDetailModal");try{const [produtoResponse,movResponse]=await Promise.all([fetchAdmin(`/produtos/${row.produto_id}`),fetchAdmin(`/movimentacoes?produto_id=${row.produto_id}`)]),produto=await produtoResponse?.json().catch(()=>({})),movimentos=movResponse?.ok?await movResponse.json():[];const imagem=(produto.midias||[]).find(m=>m.tipo==='imagem'&&m.principal)||(produto.midias||[]).find(m=>m.tipo==='imagem');const preco=row.preco_promocional??row.preco_venda??produto.preco??0;$("#stockDetailBody").innerHTML=`<div class="stock-detail-head"><div class="stock-detail-image">${imagem?`<img src="${escaparHtml(imagem.url)}" alt="${escaparHtml(imagem.alt_text||produto.nome)}"><span>Imagem não encontrada</span>`:'<span>Sem foto cadastrada</span>'}</div><div><span class="shop-cat">${escaparHtml(produto.categoria||row.categoria||'')}</span><h3>${escaparHtml(produto.nome||row.produto_nome)}</h3><p>${escaparHtml(produto.descricao||'Sem descrição cadastrada.')}</p></div></div><div class="stock-detail-grid">${[["Variação",[row.tamanho,row.cor].filter(Boolean).join(' / ')],["SKU",row.sku||'—'],["Código de barras",row.codigo_barras||row.sku||'—'],["Preço",formatarMoeda(preco)],["Estoque atual",`${row.quantidade} un.`],["Estoque mínimo",`${row.estoque_minimo||0} un.`],["Status",row.status]].map(([l,v])=>`<div><span>${l}</span><strong>${escaparHtml(v)}</strong></div>`).join('')}</div><h4>Últimas movimentações</h4><div class="stock-detail-moves">${(movimentos||[]).slice(0,5).map(m=>`<div><strong>${escaparHtml(m.tipo)}</strong><span>${m.quantidade} un. · ${escaparHtml(m.motivo||'')}</span><small>${new Date(m.created_at).toLocaleString('pt-BR')}</small></div>`).join('')||'<p class="empty-note">Nenhuma movimentação registrada.</p>'}</div><div class="site-order-actions"><button class="btn btn-pink" id="stockDetailMove" type="button">Entrada / Saída / Ajustar</button><button class="btn btn-ghost" id="stockDetailEdit" type="button">Editar produto e variação</button><button class="btn btn-ghost" id="stockDetailLabels" type="button">Ir para etiquetas</button><button class="btn btn-ghost" id="stockDetailPdv" type="button">Buscar no PDV</button></div>`;$("#stockDetailMove").onclick=()=>{closeModal("#stockDetailModal");abrirMovimentoEstoque({dataset:{stockMove:row.variacao_id,stockLabel:`${row.produto_nome} — ${row.tamanho}/${row.cor}`}});};$("#stockDetailEdit").onclick=()=>{closeModal("#stockDetailModal");openProductModal(Number(row.produto_id));};$("#stockDetailLabels").onclick=()=>{closeModal("#stockDetailModal");navigate('etiquetas');};$("#stockDetailPdv").onclick=()=>{closeModal("#stockDetailModal");navigate('pdv');setTimeout(()=>{$("#pdvStoreSearch").value=row.sku||row.codigo_barras||row.produto_nome;$("#pdvSearchForm").requestSubmit();},0);};}catch(error){$("#stockDetailBody").innerHTML=`<p class="login-error">${escaparHtml(error.message||'Não foi possível carregar os detalhes.')}</p>`;}}
+
 /* ----------------- INICIALIZAÇÃO ----------------- */
 function init() {
   buildStoryNav();
@@ -2886,12 +2888,26 @@ function init() {
 
   // CRUD de produto
   $("#btnAddProduct").addEventListener("click", () => openProductModal());
-  $("#productForm").addEventListener("submit", handleProductSubmit);
+  $("#btnQuickVariation").addEventListener("click", () => { const id=Number(prompt("Informe o ID do produto que receberá a nova variação:")); if(id) openProductModal(id).then(()=>{$("#productVariationsEditor").insertAdjacentHTML("beforeend",htmlVariacaoProduto());bindEditorProduto();}); });
+  $("#addProductVariation").addEventListener("click", () => { $("#productVariationsEditor").insertAdjacentHTML("beforeend", htmlVariacaoProduto()); bindEditorProduto(); });
+  $("#addProductMedia").addEventListener("click", () => { $("#productMediaEditor").insertAdjacentHTML("beforeend", htmlMidiaProduto()); bindEditorProduto(); });
+  $("#productForm").addEventListener("submit", handleProductSubmitV3);
+  $("#chooseProductFiles").addEventListener("click", () => $("#productFiles").click());
+  $("#productFiles").addEventListener("change", selecionarArquivosProduto);
+  $("#addProductMeasure").addEventListener("click", () => { $("#productMeasuresEditor").insertAdjacentHTML("beforeend",htmlMedidaProduto());bindMedidasProduto(); });
   $("#modalClose").addEventListener("click", () => closeModal("#productModal"));
   $("#modalCancel").addEventListener("click", () => closeModal("#productModal"));
   $("#productModal").addEventListener("click", (e) => {
     if (e.target.id === "productModal") closeModal("#productModal");
   });
+  $("#stockMoveForm").addEventListener("submit", salvarMovimentoEstoque);
+  $("#stockMoveClose").addEventListener("click", () => closeModal("#stockMoveModal"));
+  $("#stockMoveCancel").addEventListener("click", () => closeModal("#stockMoveModal"));
+  $("#stockDetailClose").addEventListener("click", () => closeModal("#stockDetailModal"));
+  $("#stockDetailBody").addEventListener("error", event => { if (event.target.matches("img")) event.target.remove(); }, true);
+  $("#stockV2Search").addEventListener("input", renderStockTable);
+  $("#stockV2Category").addEventListener("change", renderStockTable);
+  $("#stockV2Status").addEventListener("change", renderStockTable);
 
   // relatórios
   $("#btnAddFreight").addEventListener("click", () => {

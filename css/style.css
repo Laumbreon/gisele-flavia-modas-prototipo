@@ -2137,6 +2137,46 @@ video.detail-media-main { object-fit: contain; }
 .btn-danger { border:1px solid #fecaca; background:#fff; color:#b91c1c; }
 .site-order-print-area { display:none; }
 
+/* Cadastro de Produtos e Estoque V2 */
+.product-v2-modal { width:min(1040px,calc(100vw - 40px)); max-height:calc(100vh - 40px); }
+.product-v2-form { display:grid; gap:18px; }
+.product-step { display:flex; align-items:center; gap:12px; padding:13px 15px; border:1px solid rgba(248,0,128,.14); border-radius:14px; background:#fff7fb; }
+.product-step>span { display:grid; place-items:center; width:30px; height:30px; border-radius:50%; color:#fff; background:#F80080; font-weight:800; }
+.product-step strong,.product-step small { display:block; }
+.product-step small { margin-top:2px; color:var(--text-muted); }
+.product-v2-list { display:grid; gap:12px; }
+.product-v2-item { position:relative; padding:16px; border:1px solid var(--pink-light); border-radius:14px; background:#fff; box-shadow:var(--shadow-sm); }
+.product-v2-item>.link-btn { margin-top:10px; }
+.product-media-preview { display:block; width:92px; height:92px; margin-top:12px; border-radius:12px; object-fit:cover; background:#f7f7f7; }
+.product-media-preview-wrap { display:grid; place-items:center; width:112px; min-height:112px; margin-top:12px; border:1px dashed var(--pink-light); border-radius:12px; color:var(--text-muted); background:#fffafd; font-size:11px; text-align:center; }
+.product-media-preview-wrap .product-media-preview { grid-area:1/1; width:100%; height:110px; margin:0; }
+.product-media-preview-wrap img+span,.stock-detail-image img+span { display:none; }
+.product-advanced { padding:10px 12px; border:1px solid var(--pink-light); border-radius:12px; background:#fffafd; }
+.product-advanced summary { cursor:pointer; color:var(--pink-brand); font-weight:700; }
+.product-advanced p { margin:8px 0; color:var(--text-muted); font-size:12px; }
+.stock-v2-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:14px 0; }
+.stock-v2-summary>div { display:flex; justify-content:space-between; align-items:center; padding:13px; border:1px solid var(--pink-light); border-radius:13px; background:#fffafd; }
+.stock-v2-summary span { color:var(--text-muted); font-size:12px; }.stock-v2-summary strong { color:var(--pink-brand); font-size:20px; }
+.stock-v2-filters { display:grid; grid-template-columns:minmax(220px,1fr) minmax(150px,.35fr) minmax(140px,.3fr); gap:10px; margin-bottom:12px; }
+.stock-v2-filters input,.stock-v2-filters select { width:100%; min-height:42px; border:1px solid var(--border); border-radius:10px; padding:9px 11px; box-sizing:border-box; }
+#stockTable tbody tr[data-stock-detail] { cursor:pointer; }#stockTable tbody tr[data-stock-detail]:hover td { background:#fffafd; }
+.stock-detail-modal { width:min(820px,calc(100vw - 30px)); }.stock-detail-head { display:grid; grid-template-columns:150px 1fr; gap:18px; align-items:center; }.stock-detail-image { display:grid; place-items:center; width:150px; height:150px; border-radius:14px; overflow:hidden; color:var(--text-muted); background:#fff5fa; text-align:center; }.stock-detail-image img { grid-area:1/1; width:100%; height:100%; object-fit:cover; }.stock-detail-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:18px 0; }.stock-detail-grid>div { display:grid; gap:4px; padding:12px; border:1px solid var(--pink-light); border-radius:11px; }.stock-detail-grid span,.stock-detail-moves small { color:var(--text-muted); font-size:11px; }.stock-detail-moves { display:grid; gap:8px; }.stock-detail-moves>div { display:grid; grid-template-columns:100px 1fr auto; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); }
+.catalog-empty { grid-column:1/-1; display:grid; place-items:center; gap:5px; min-height:150px; padding:24px; border:1px dashed var(--pink-light); border-radius:16px; color:var(--text-muted); background:#fffafd; text-align:center; }.catalog-empty strong { color:var(--green-brand); font-size:17px; }
+.stock-table td small { display:block; margin-top:3px; color:var(--text-muted); }
+.product-file-button { width:100%; min-height:52px; font-size:15px; }
+.product-files-preview,.current-gallery-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; }
+.product-file-card,.current-gallery-grid article { display:grid; gap:8px; padding:10px; border:1px solid var(--pink-light); border-radius:13px; background:#fff; }
+.product-file-card.principal { border-color:#F80080; box-shadow:0 0 0 2px rgba(248,0,128,.08); }
+.product-file-card img,.product-file-card video,.current-gallery-grid img,.current-gallery-grid video { width:100%; aspect-ratio:4/5; border-radius:9px; object-fit:cover; object-position:center top; background:#f5f5f5; }
+.product-file-card strong,.product-file-card span,.current-gallery-grid span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.product-file-card span,.current-gallery-grid span { color:var(--text-muted); font-size:11px; }
+.product-current-gallery>h4 { margin:6px 0 10px; }
+.shop-thumb { aspect-ratio:4/5; min-height:0; }
+.shop-thumb-img { object-fit:cover!important; object-position:center top; }
+.shop-photo-fallback { position:absolute; inset:0; display:grid; place-items:center; padding:20px; color:var(--text-muted); background:#fff7fb; text-align:center; }
+.detail-media-main { object-position:center top; }
+.detail-media-thumbs { overflow-x:auto; scrollbar-width:thin; }
+@media (max-width:768px){.product-v2-modal{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}.product-v2-item{padding:12px}.product-v2-form{gap:14px}.stock-v2-summary{grid-template-columns:1fr 1fr}.stock-v2-filters{grid-template-columns:1fr}.stock-detail-head{grid-template-columns:1fr}.stock-detail-image{width:100%;height:190px}.stock-detail-grid{grid-template-columns:1fr 1fr}.stock-detail-moves>div{grid-template-columns:1fr}.product-files-preview,.current-gallery-grid{grid-template-columns:1fr 1fr}}
+
 /* ===================== POLIMENTO UX/UI GERAL V1 ===================== */
 .screen > .section-head:first-child { margin-bottom: 26px; }
 .section-title { letter-spacing: -.35px; }

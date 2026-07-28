@@ -233,13 +233,17 @@
         <div class="panel-head">
           <h3>Estoque de produtos</h3>
           <div class="panel-actions">
+            <button class="btn btn-ghost btn-sm" id="btnQuickVariation" type="button">Cadastrar variação</button>
             <button class="link-btn" data-nav="movimentacoes" type="button">Movimentações</button>
+            <button class="link-btn" data-nav="etiquetas" type="button">Códigos e Etiquetas</button>
             <button class="btn btn-pink btn-sm" id="btnAddProduct" type="button">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Adicionar produto</span>
             </button>
           </div>
         </div>
+        <div class="stock-v2-summary" id="stockV2Summary"></div>
+        <div class="stock-v2-filters"><input id="stockV2Search" type="search" placeholder="Buscar produto, código, cor ou tamanho" /><select id="stockV2Category"><option value="">Todas as categorias</option></select><select id="stockV2Status"><option value="">Todos os status</option><option value="normal">Normal</option><option value="baixo">Baixo</option><option value="zerado">Zerado</option></select></div>
         <div class="stock-table-wrap">
           <table class="stock-table" id="stockTable"></table>
         </div>
@@ -465,47 +469,25 @@
 
   <!-- ===================== MODAL PRODUTO ===================== -->
   <div class="modal-overlay" id="productModal" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal product-v2-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-head">
         <h3 id="modalTitle">Adicionar produto</h3>
         <button class="modal-close" id="modalClose" type="button" aria-label="Fechar">&times;</button>
       </div>
-      <form id="productForm" class="modal-body">
+      <form id="productForm" class="modal-body product-v2-form">
         <input type="hidden" id="fId" />
-        <div class="form-row">
-          <label for="fName">Nome do produto</label>
-          <input type="text" id="fName" required placeholder="Ex.: Vestido Floral Midi" />
-        </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="fCategory">Categoria</label>
-            <select id="fCategory" required>
-              <option value="Vestidos">Vestidos</option>
-              <option value="Blusas">Blusas</option>
-              <option value="Calças">Calças</option>
-              <option value="Saias">Saias</option>
-              <option value="Conjuntos">Conjuntos</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="fPrice">Preço (R$)</label>
-            <input type="number" id="fPrice" step="0.01" min="0" required placeholder="129.90" />
-          </div>
-        </div>
-        <div class="form-row">
-          <label for="fColors">Cores (separadas por vírgula)</label>
-          <input type="text" id="fColors" placeholder="Rosa, Verde, Preto" />
-        </div>
-        <div class="form-row">
-          <label>Estoque por tamanho</label>
-          <div class="size-grid">
-            <div class="size-input"><span>Único</span><input type="number" id="fÚnico" min="0" value="0" /></div>
-            <div class="size-input"><span>P</span><input type="number" id="fP" min="0" value="0" /></div>
-            <div class="size-input"><span>M</span><input type="number" id="fM" min="0" value="0" /></div>
-            <div class="size-input"><span>G</span><input type="number" id="fG" min="0" value="0" /></div>
-            <div class="size-input"><span>GG</span><input type="number" id="fGG" min="0" value="0" /></div>
-          </div>
-        </div>
+        <div class="product-step"><span>1</span><div><strong>Dados do produto</strong><small>Informações exibidas no catálogo e no PDV.</small></div></div>
+        <div class="form-grid"><div class="form-row"><label for="fName">Nome do produto</label><input type="text" id="fName" maxlength="140" required placeholder="Ex.: Vestido Floral Midi" /></div><div class="form-row"><label for="fCategory">Categoria</label><input id="fCategory" maxlength="80" required list="productCategories" placeholder="Ex.: Vestidos" /><datalist id="productCategories"><option value="Vestidos"><option value="Blusas"><option value="Calças"><option value="Saias"><option value="Conjuntos"></datalist></div><div class="form-row"><label for="fPrice">Preço base (R$)</label><input type="number" id="fPrice" step="0.01" min="0" required /></div></div>
+        <details class="product-advanced"><summary>Promoções futuras</summary><p>Promoções serão configuradas em uma próxima etapa. Por enquanto, os descontos continuam no carrinho/PDV.</p><input type="hidden" id="fPromoPrice" /></details>
+        <div class="form-row"><label for="fDescription">Descrição</label><textarea id="fDescription" rows="3"></textarea></div><label class="form-check"><input id="fActive" type="checkbox" checked /> Produto ativo no catálogo</label>
+        <div class="product-step"><span>2</span><div><strong>Variações</strong><small>Informe tamanho, cor e estoque. Os códigos serão gerados automaticamente após salvar o produto. Você poderá imprimir etiquetas depois.</small></div></div><div id="productVariationsEditor" class="product-v2-list"></div><button class="btn btn-ghost btn-sm" id="addProductVariation" type="button">Adicionar outra variação</button>
+        <div class="product-step"><span>3</span><div><strong>Fotos e vídeos do produto</strong><small>Escolha fotos ou vídeos do seu computador ou celular. Pode usar arquivos recebidos pelo WhatsApp ou baixados do Instagram.</small></div></div>
+        <input id="productFiles" type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" hidden />
+        <button class="btn btn-pink product-file-button" id="chooseProductFiles" type="button">+ Adicionar fotos/vídeos</button><p class="section-sub">Você pode selecionar vários arquivos. A primeira foto será a principal. Vídeos aparecem nos detalhes do produto.</p><div id="productFilesPreview" class="product-files-preview"></div>
+        <div id="productCurrentGallery" class="product-current-gallery"></div>
+        <details class="product-advanced"><summary>Adicionar por link ou caminho avançado</summary><p>Use apenas se o arquivo já estiver publicado ou na pasta assets/produtos.</p><div id="productMediaEditor" class="product-v2-list"></div><button class="btn btn-ghost btn-sm" id="addProductMedia" type="button">Adicionar por link ou caminho</button></details>
+        <details class="product-advanced"><summary>Medidas da peça (opcional)</summary><p>Preencha somente se quiser mostrar medidas para as clientes. Se deixar vazio, essa parte não aparece no site.</p><div id="productMeasuresEditor" class="product-v2-list"></div><button class="btn btn-ghost btn-sm" id="addProductMeasure" type="button">Adicionar medida</button></details>
+        <p class="login-error" id="productFormError"></p>
         <div class="modal-foot">
           <button type="button" class="btn btn-ghost" id="modalCancel">Cancelar</button>
           <button type="submit" class="btn btn-pink">Salvar produto</button>
@@ -513,6 +495,9 @@
       </form>
     </div>
   </div>
+
+  <div class="modal-overlay" id="stockMoveModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3 id="stockMoveTitle">Movimentar estoque</h3><button class="modal-close" id="stockMoveClose" type="button">&times;</button></div><form class="modal-body" id="stockMoveForm"><input id="stockMoveVariationId" type="hidden" /><div class="form-grid"><div class="form-row"><label for="stockMoveType">Tipo</label><select id="stockMoveType"><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajustar saldo final</option></select></div><div class="form-row"><label for="stockMoveQuantity">Quantidade</label><input id="stockMoveQuantity" type="number" min="0" step="1" required /></div></div><div class="form-row"><label for="stockMoveReason">Motivo</label><input id="stockMoveReason" maxlength="160" required placeholder="Ex.: Compra do fornecedor" /></div><div class="form-row"><label for="stockMoveNotes">Observações</label><textarea id="stockMoveNotes" rows="3"></textarea></div><p class="login-error" id="stockMoveError"></p><div class="modal-foot"><button class="btn btn-ghost" id="stockMoveCancel" type="button">Cancelar</button><button class="btn btn-pink" type="submit">Salvar movimentação</button></div></form></div></div>
+  <div class="modal-overlay" id="stockDetailModal" aria-hidden="true"><div class="modal stock-detail-modal" role="dialog" aria-modal="true"><div class="modal-head"><h3 id="stockDetailTitle">Detalhes do estoque</h3><button class="modal-close" id="stockDetailClose" type="button">&times;</button></div><div class="modal-body" id="stockDetailBody"></div></div></div>
 
   <!-- ===================== MODAL ADICIONAR AO CARRINHO ===================== -->
   <div class="modal-overlay" id="buyModal" aria-hidden="true">

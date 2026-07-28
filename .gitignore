@@ -1,5 +1,9 @@
 node_modules/
 backend/node_modules/
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/produtos/
+!backend/uploads/produtos/.gitkeep
 
 .env
 backend/.env
