@@ -1,0 +1,18 @@
+const express=require("express");
+const controller=require("../controllers/fiscal.controller");
+const permissoes=require("../middlewares/permissoes.middleware");
+const adminPin=require("../middlewares/fiscal-pin.middleware");
+const router=express.Router();
+const ver=permissoes(["fiscal.ver","fiscal.gerenciar","configuracoes.editar"]);
+const gerir=permissoes(["fiscal.gerenciar","configuracoes.editar"]);
+router.get("/config",ver,controller.obterConfig);
+router.put("/config",gerir,adminPin,controller.salvarConfig);
+router.get("/produtos",ver,controller.listarProdutos);
+router.get("/produtos/:produto_id",ver,controller.obterProduto);
+router.put("/produtos/:produto_id",gerir,adminPin,controller.salvarProduto);
+router.get("/documentos",ver,controller.listarDocumentos);
+router.get("/documentos/:id",ver,controller.obterDocumento);
+router.post("/vendas/:venda_id/preparar",gerir,adminPin,controller.prepararVenda);
+router.post("/documentos/:id/marcar-pronto",gerir,adminPin,controller.marcarPronto);
+router.post("/documentos/:id/marcar-erro",gerir,adminPin,controller.marcarErro);
+module.exports=router;

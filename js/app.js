@@ -7,7 +7,7 @@
 const TAMANHOS = ["Único", "P", "M", "G", "GG"];
 const API_BASE_URL = "http://localhost:3001/api";
 const AUTH_STORAGE_KEY = "gfm_admin_auth";
-const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas", "pedidos-site"]);
+const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas", "pedidos-site", "fiscal"]);
 const ADMIN_PIN_SESSION_KEY = "adminPinOk";
 
 // Gradientes por categoria (placeholder visual com CSS)
@@ -161,6 +161,8 @@ let variacoesEtiquetas = [];
 let etiquetasSelecionadas = [];
 let pedidosSite = [];
 let pedidoSiteAtual = null;
+let fiscalProdutos = [];
+let fiscalDocumentos = [];
 
 const DELIVERY_OPTIONS = {
   retirada: { label: "Retirada na loja", price: 0 },
@@ -253,6 +255,8 @@ function podeVerPedidosSite() {
 function podeOperarPedidosSite() {
   return usuarioLogado() && (usuarioAdministrador() || temPermissao("vendas.criar") || temPermissao("configuracoes.editar"));
 }
+function podeVerFiscal() { return usuarioLogado() && (usuarioAdministrador() || temPermissao("fiscal.ver") || temPermissao("fiscal.gerenciar") || temPermissao("configuracoes.editar")); }
+function podeGerenciarFiscal() { return usuarioLogado() && (usuarioAdministrador() || temPermissao("fiscal.gerenciar") || temPermissao("configuracoes.editar")); }
 
 function getAuthHeaders(extraHeaders = {}) {
   return {
@@ -292,6 +296,7 @@ function atualizarAuthUi() {
   $$(".pdv-only").forEach(element => { element.hidden = !podeAcessarPdv(); });
   $$(".labels-only").forEach(element => { element.hidden = !podeAcessarEtiquetas(); });
   $$(".orders-only").forEach(element => { element.hidden = !podeVerPedidosSite(); });
+  $$(".fiscal-only").forEach(element => { element.hidden = !podeGerenciarFiscal(); });
   if ($("#storyTrack")) buildStoryNav();
 }
 
@@ -390,7 +395,7 @@ async function handleLoginSubmit(event) {
       usuario: data.usuario,
       permissoes: data.permissoes || [],
     });
-    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("relatorios.ver") && !temPermissao("configuracoes.editar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
+    if (!usuarioAdministrador() && !temPermissao("pdv.acessar") && !temPermissao("vendas.criar") && !temPermissao("relatorios.ver") && !temPermissao("configuracoes.editar") && !temPermissao("fiscal.ver") && !temPermissao("fiscal.gerenciar") && !temPermissao("produtos.editar") && !temPermissao("etiquetas.imprimir")) {
       limparLogin();
       throw new Error("Usuário sem permissão para acessar áreas administrativas.");
     }
@@ -918,7 +923,8 @@ function navigate(screen, category = "Todos") {
     if (usuarioLogado()) { showToast("Você não tem permissão para acessar Pedidos do Site."); return; }
     abrirLoginAdmin(() => navigate(screen, category)); return;
   }
-  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas", "pedidos-site"].includes(screen) && !usuarioAdministrador()) {
+  if (screen === "fiscal" && !podeGerenciarFiscal()) { if(usuarioLogado()){showToast("Você não tem permissão para acessar a área fiscal.");return;} abrirLoginAdmin(()=>navigate(screen));return; }
+  if (ADMIN_SCREENS.has(screen) && !["pdv", "etiquetas", "pedidos-site", "fiscal"].includes(screen) && !usuarioAdministrador()) {
     abrirLoginAdmin(() => navigate(screen, category));
     return;
   }
@@ -933,7 +939,7 @@ function navigate(screen, category = "Todos") {
 
   // marca link da navbar ativo
   $$(".nav-link").forEach(b => b.classList.remove("active"));
-  const navMap = { home: "home", catalogo: "catalogo", pdv: "pdv", gestao: "gestao", movimentacoes: "movimentacoes", fornecedores: "fornecedores", maquininhas: "maquininhas", etiquetas: "etiquetas", "pedidos-site": "pedidos-site" };
+  const navMap = { home: "home", catalogo: "catalogo", pdv: "pdv", gestao: "gestao", movimentacoes: "movimentacoes", fornecedores: "fornecedores", maquininhas: "maquininhas", etiquetas: "etiquetas", "pedidos-site": "pedidos-site", fiscal:"fiscal" };
   const activeNav = $(`.nav-link[data-nav="${navMap[screen]}"]`);
   if (activeNav) activeNav.classList.add("active");
 
@@ -954,6 +960,7 @@ function navigate(screen, category = "Todos") {
   if (screen === "etiquetas") iniciarEtiquetas();
   if (screen === "checkout-publico") renderCart();
   if (screen === "pedidos-site") carregarPedidosSite();
+  if (screen === "fiscal") iniciarFiscal();
   if (screen === "movimentacoes") renderMovements();
   if (screen === "fornecedores") renderSuppliers();
 
@@ -2191,6 +2198,26 @@ function imprimirPedidoSite(pedido) {
   try { window.print(); } finally { document.body.classList.remove("printing-site-order"); }
 }
 
+/* ----------------- NOTA FISCAL — PREPARAÇÃO V1 ----------------- */
+function valorFiscal(id){return $(id)?.value?.trim()||null;}
+function preencherConfigFiscal(c={}){const map={"#fiscalRazaoSocial":"razao_social","#fiscalNomeFantasia":"nome_fantasia","#fiscalCnpj":"cnpj","#fiscalIe":"inscricao_estadual","#fiscalIm":"inscricao_municipal","#fiscalRegime":"regime_tributario","#fiscalCrt":"crt","#fiscalCep":"cep","#fiscalEstado":"estado","#fiscalCidade":"cidade","#fiscalBairro":"bairro","#fiscalEndereco":"endereco","#fiscalNumero":"numero","#fiscalComplemento":"complemento","#fiscalProvedor":"provedor_fiscal","#fiscalSerieNfce":"serie_nfce","#fiscalNumeroNfce":"proximo_numero_nfce","#fiscalSerieNfe":"serie_nfe","#fiscalNumeroNfe":"proximo_numero_nfe","#fiscalObservacoes":"observacoes"};Object.entries(map).forEach(([id,key])=>{$(id).value=c?.[key]??"";});$("#fiscalAmbiente").value=c?.ambiente_fiscal||"homologacao";$("#fiscalEmitirNfce").checked=Boolean(c?.emitir_nfce);$("#fiscalEmitirNfe").checked=Boolean(c?.emitir_nfe);atualizarBadgeAmbienteFiscal();}
+function atualizarBadgeAmbienteFiscal(){const producao=$("#fiscalAmbiente").value==="producao";const badge=$("#fiscalEnvironmentBadge");badge.textContent=producao?"Produção — atenção":"Homologação";badge.className=`fiscal-environment ${producao?"production":""}`;}
+async function carregarConfigFiscal(){try{const r=await fetchAdmin("/fiscal/config"),d=await r?.json().catch(()=>null);if(!r?.ok)throw new Error(d?.message||"Falha ao carregar configuração.");preencherConfigFiscal(d||{});}catch(e){$("#fiscalConfigStatus").textContent=e.message;}}
+function payloadConfigFiscal(){return{razao_social:valorFiscal("#fiscalRazaoSocial"),nome_fantasia:valorFiscal("#fiscalNomeFantasia"),cnpj:valorFiscal("#fiscalCnpj"),inscricao_estadual:valorFiscal("#fiscalIe"),inscricao_municipal:valorFiscal("#fiscalIm"),regime_tributario:valorFiscal("#fiscalRegime"),crt:valorFiscal("#fiscalCrt"),cep:valorFiscal("#fiscalCep"),estado:valorFiscal("#fiscalEstado"),cidade:valorFiscal("#fiscalCidade"),bairro:valorFiscal("#fiscalBairro"),endereco:valorFiscal("#fiscalEndereco"),numero:valorFiscal("#fiscalNumero"),complemento:valorFiscal("#fiscalComplemento"),ambiente_fiscal:$("#fiscalAmbiente").value,provedor_fiscal:valorFiscal("#fiscalProvedor"),serie_nfce:valorFiscal("#fiscalSerieNfce"),proximo_numero_nfce:valorFiscal("#fiscalNumeroNfce"),serie_nfe:valorFiscal("#fiscalSerieNfe"),proximo_numero_nfe:valorFiscal("#fiscalNumeroNfe"),emitir_nfce:$("#fiscalEmitirNfce").checked,emitir_nfe:$("#fiscalEmitirNfe").checked,observacoes:valorFiscal("#fiscalObservacoes")};}
+function salvarConfigFiscal(event){event.preventDefault();comPin(async pin=>{const s=$("#fiscalConfigStatus");s.textContent="Salvando...";const r=await fetchAdmin("/fiscal/config",{method:"PUT",headers:{"Content-Type":"application/json","X-Admin-Pin":pin},body:JSON.stringify(payloadConfigFiscal())}),d=await r?.json().catch(()=>({}));s.textContent=r?.ok?"Configuração fiscal salva. Nenhuma nota foi emitida.":d.message||"Não foi possível salvar.";if(r?.ok)preencherConfigFiscal(d);});}
+function renderProdutosFiscais(){const termo=$("#fiscalProductsSearch").value.trim().toLowerCase();const list=fiscalProdutos.filter(p=>[p.produto,p.categoria,p.sku,p.codigo_barras,p.codigo_interno].some(v=>String(v||"").toLowerCase().includes(termo)));$("#fiscalProductsTable").innerHTML=`<thead><tr><th>Produto</th><th>Variação</th><th>Código</th><th>NCM</th><th>CFOP</th><th>CSOSN/CST</th><th>Status</th><th></th></tr></thead><tbody>${list.map(p=>`<tr><td data-label="Produto"><strong>${escaparHtml(p.produto)}</strong><small>${escaparHtml(p.categoria||"—")}</small></td><td data-label="Variação">${escaparHtml([p.tamanho,p.cor].filter(Boolean).join(" / ")||"Geral")}</td><td data-label="Código">${escaparHtml(p.codigo_barras||p.sku||p.codigo_interno||"—")}</td><td data-label="NCM">${escaparHtml(p.ncm||"—")}</td><td data-label="CFOP">${escaparHtml(p.cfop||"—")}</td><td data-label="Tributação">${escaparHtml(p.csosn||p.cst_icms||"—")}</td><td data-label="Status"><span class="fiscal-status ${p.status_fiscal}">${p.status_fiscal}</span></td><td data-label="Ação"><button class="btn btn-ghost btn-sm" data-fiscal-product="${p.produto_id}" data-fiscal-variation="${p.produto_variacao_id||""}" type="button">Editar</button></td></tr>`).join("")||'<tr><td colspan="8">Nenhum produto encontrado.</td></tr>'}</tbody>`;$$('[data-fiscal-product]').forEach(b=>b.addEventListener("click",()=>abrirFiscalProduto(b)));}
+async function carregarProdutosFiscais(){const s=$("#fiscalProductsStatus");s.textContent="Carregando...";try{const r=await fetchAdmin("/fiscal/produtos"),d=await r?.json().catch(()=>({}));if(!r?.ok)throw new Error(d.message);fiscalProdutos=Array.isArray(d)?d:[];renderProdutosFiscais();s.textContent=`${fiscalProdutos.length} variação(ões).`;}catch(e){s.textContent=e.message||"Backend indisponível.";}}
+function abrirFiscalProduto(button){const p=fiscalProdutos.find(x=>Number(x.produto_id)===Number(button.dataset.fiscalProduct)&&String(x.produto_variacao_id||"")===String(button.dataset.fiscalVariation||""));if(!p)return;$("#fiscalProductId").value=p.produto_id;$("#fiscalVariationId").value=p.produto_variacao_id||"";$("#fiscalProductTitle").textContent=`Fiscal — ${p.produto}${p.tamanho?` (${p.tamanho}/${p.cor})`:""}`;[["#fiscalNcm","ncm"],["#fiscalCest","cest"],["#fiscalCfop","cfop"],["#fiscalOrigem","origem"],["#fiscalUnidade","unidade_comercial"],["#fiscalCsosn","csosn"],["#fiscalCstIcms","cst_icms"],["#fiscalCstPis","cst_pis"],["#fiscalCstCofins","cst_cofins"]].forEach(([id,k])=>$(id).value=p[k]||"");$("#fiscalProductError").textContent="";openModal("#fiscalProductModal");}
+function salvarFiscalProduto(event){event.preventDefault();comPin(async pin=>{const id=$("#fiscalProductId").value,b={produto_variacao_id:Number($("#fiscalVariationId").value)||null,ncm:valorFiscal("#fiscalNcm"),cest:valorFiscal("#fiscalCest"),cfop:valorFiscal("#fiscalCfop"),origem:valorFiscal("#fiscalOrigem"),unidade_comercial:valorFiscal("#fiscalUnidade")||"UN",csosn:valorFiscal("#fiscalCsosn"),cst_icms:valorFiscal("#fiscalCstIcms"),cst_pis:valorFiscal("#fiscalCstPis"),cst_cofins:valorFiscal("#fiscalCstCofins")};const r=await fetchAdmin(`/fiscal/produtos/${id}`,{method:"PUT",headers:{"Content-Type":"application/json","X-Admin-Pin":pin},body:JSON.stringify(b)}),d=await r?.json().catch(()=>({}));if(!r?.ok)return $("#fiscalProductError").textContent=d.message||"Não foi possível salvar.";closeModal("#fiscalProductModal");showToast("Fiscal do produto salvo.");await carregarProdutosFiscais();});}
+function statusFiscalClasse(s){return["pronto","emitido"].includes(s)?"complete":["erro","cancelado"].includes(s)?"error":"draft";}
+function renderDocumentosFiscais(){$("#fiscalDocsTable").innerHTML=`<thead><tr><th>Documento</th><th>Venda</th><th>Tipo</th><th>Status</th><th>Ambiente</th><th>Total</th><th>Data</th><th></th></tr></thead><tbody>${fiscalDocumentos.map(d=>`<tr><td>#${d.id}</td><td>#${d.venda_id}</td><td>${String(d.tipo_documento).toUpperCase()}</td><td><span class="fiscal-doc-status ${statusFiscalClasse(d.status)}">${escaparHtml(d.status)}</span></td><td>${escaparHtml(d.ambiente)}</td><td>${formatarMoeda(d.total)}</td><td>${new Date(d.created_at).toLocaleString("pt-BR")}</td><td><button class="btn btn-ghost btn-sm" data-fiscal-doc="${d.id}" type="button">Ver rascunho</button></td></tr>`).join("")||'<tr><td colspan="8">Nenhum documento fiscal preparado.</td></tr>'}</tbody>`;$$('[data-fiscal-doc]').forEach(b=>b.addEventListener("click",()=>abrirDocumentoFiscal(Number(b.dataset.fiscalDoc))));}
+async function carregarDocumentosFiscais(){const s=$("#fiscalDocsStatus");s.textContent="Carregando...";try{const r=await fetchAdmin("/fiscal/documentos"),d=await r?.json().catch(()=>({}));if(!r?.ok)throw new Error(d.message);fiscalDocumentos=Array.isArray(d)?d:[];renderDocumentosFiscais();s.textContent=`${fiscalDocumentos.length} documento(s).`;}catch(e){s.textContent=e.message||"Backend indisponível.";}}
+function prepararNotaFiscalVenda(vendaId){comPin(async pin=>{const r=await fetchAdmin(`/fiscal/vendas/${vendaId}/preparar`,{method:"POST",headers:{"Content-Type":"application/json","X-Admin-Pin":pin}}),d=await r?.json().catch(()=>({}));if(!r?.ok)return showToast(d.message||"Não foi possível preparar a nota.");showToast(`Rascunho fiscal #${d.id} preparado. Nenhuma nota foi emitida.`);await carregarDocumentosFiscais();});}
+function prepararNotaFiscalForm(event){event.preventDefault();prepararNotaFiscalVenda(Number($("#fiscalSaleId").value));}
+async function abrirDocumentoFiscal(id){const r=await fetchAdmin(`/fiscal/documentos/${id}`),d=await r?.json().catch(()=>({}));if(!r?.ok)return showToast(d.message||"Documento não encontrado.");const alertas=d.payload_json?.alertas||[];$("#fiscalDocumentTitle").textContent=`Rascunho fiscal #${d.id}`;$("#fiscalDocumentDetail").innerHTML=`<div class="fiscal-doc-head"><span class="fiscal-doc-status ${statusFiscalClasse(d.status)}">${escaparHtml(d.status)}</span><strong>Venda #${d.venda_id} · ${formatarMoeda(d.total)}</strong></div>${alertas.length?`<div class="fiscal-alerts"><strong>Alertas para corrigir</strong><ul>${alertas.map(a=>`<li>${escaparHtml(a)}</li>`).join("")}</ul></div>`:'<div class="admin-notice">Rascunho sem alertas básicos.</div>'}<pre class="fiscal-json">${escaparHtml(JSON.stringify(d.payload_json,null,2))}</pre><div class="modal-foot"><button class="btn btn-ghost" id="fiscalMarkError" type="button">Marcar erro</button><button class="btn btn-pink" id="fiscalMarkReady" type="button">Marcar pronto</button></div>`;openModal("#fiscalDocumentModal");$("#fiscalMarkReady").onclick=()=>alterarDocumentoFiscal(id,"marcar-pronto");$("#fiscalMarkError").onclick=()=>alterarDocumentoFiscal(id,"marcar-erro",{mensagem_erro:"Erro registrado manualmente."});}
+function alterarDocumentoFiscal(id,action,body={}){comPin(async pin=>{const r=await fetchAdmin(`/fiscal/documentos/${id}/${action}`,{method:"POST",headers:{"Content-Type":"application/json","X-Admin-Pin":pin},body:JSON.stringify(body)}),d=await r?.json().catch(()=>({}));if(!r?.ok)return showToast(d.message||"Não foi possível atualizar.");closeModal("#fiscalDocumentModal");showToast("Status fiscal atualizado.");await carregarDocumentosFiscais();});}
+function iniciarFiscal(){carregarConfigFiscal();carregarProdutosFiscais();carregarDocumentosFiscais();}
+
 /* ----------------- RELATÓRIOS ----------------- */
 function reportTypeLabel(type) {
   return { vendas: "Vendas", estoque: "Estoque", movimentacoes: "Movimentações" }[type] || "Vendas";
@@ -2669,7 +2696,7 @@ async function carregarUsuariosAdmin() {
 
 function categoriaPermissao(permissao) {
   const prefixo = String(permissao).split(".")[0];
-  return ({ admin:"Admin",configuracoes:"Admin",funcionarios:"Admin",pdv:"PDV",vendas:"PDV",caixa:"Caixa",produtos:"Produtos",etiquetas:"Produtos",estoque:"Estoque",fornecedores:"Fornecedores",relatorios:"Relatórios",maquininhas:"Maquininhas",mercado_pago:"Mercado Pago" })[prefixo] || "Admin";
+  return ({ admin:"Admin",configuracoes:"Admin",funcionarios:"Admin",pdv:"PDV",vendas:"PDV",caixa:"Caixa",produtos:"Produtos",etiquetas:"Produtos",estoque:"Estoque",fornecedores:"Fornecedores",relatorios:"Relatórios",maquininhas:"Maquininhas",mercado_pago:"Mercado Pago",fiscal:"Fiscal" })[prefixo] || "Admin";
 }
 function agruparPermissoesUsuario(permissoes) { return permissoes.reduce((grupos, permissao) => { const categoria=categoriaPermissao(permissao); (grupos[categoria] ||= []).push(permissao); return grupos; }, {}); }
 function rotuloPermissao(permissao) { return String(permissao).split(".").map(parte => parte.replaceAll("_", " ")).join(" · "); }
@@ -2821,6 +2848,19 @@ function init() {
   $("#siteOrdersSearch").addEventListener("keydown", event => { if (event.key === "Enter") carregarPedidosSite(); });
   $("#siteOrderClose").addEventListener("click", () => closeModal("#siteOrderModal"));
   $("#siteOrderModal").addEventListener("click", event => { if (event.target.id === "siteOrderModal") closeModal("#siteOrderModal"); });
+
+  // preparação fiscal
+  $$("[data-fiscal-tab]").forEach(button => button.addEventListener("click", () => { $$("[data-fiscal-tab]").forEach(b=>b.classList.toggle("active",b===button)); $$(".fiscal-tab-panel").forEach(p=>p.classList.remove("active")); $(`#fiscalTab${button.dataset.fiscalTab[0].toUpperCase()+button.dataset.fiscalTab.slice(1)}`).classList.add("active"); }));
+  $("#fiscalAmbiente").addEventListener("change", atualizarBadgeAmbienteFiscal);
+  $("#fiscalConfigForm").addEventListener("submit", salvarConfigFiscal);
+  $("#fiscalProductsRefresh").addEventListener("click", carregarProdutosFiscais);
+  $("#fiscalProductsSearch").addEventListener("input", renderProdutosFiscais);
+  $("#fiscalDocsRefresh").addEventListener("click", carregarDocumentosFiscais);
+  $("#fiscalPrepareForm").addEventListener("submit", prepararNotaFiscalForm);
+  $("#fiscalProductForm").addEventListener("submit", salvarFiscalProduto);
+  $("#fiscalProductClose").addEventListener("click",()=>closeModal("#fiscalProductModal"));
+  $("#fiscalProductCancel").addEventListener("click",()=>closeModal("#fiscalProductModal"));
+  $("#fiscalDocumentClose").addEventListener("click",()=>closeModal("#fiscalDocumentModal"));
 
   // CRUD de produto
   $("#btnAddProduct").addEventListener("click", () => openProductModal());
