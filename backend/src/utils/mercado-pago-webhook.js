@@ -9,7 +9,7 @@ function validarAssinaturaWebhookMercadoPago(req) {
   const partes = Object.fromEntries(assinatura.split(",").map(parte => parte.trim().split("=", 2)));
   const ts = partes.ts;
   const v1 = partes.v1;
-  const dataId = req.query?.["data.id"] ?? req.body?.data?.id ?? (String(req.query?.topic || req.query?.type || "").toLowerCase() === "payment" ? req.query?.id : null);
+  const dataId = req.query?.["data.id"] ?? req.query?.data_id ?? req.query?.data?.id ?? req.body?.data?.id ?? (String(req.query?.topic || req.query?.type || "").toLowerCase() === "payment" ? req.query?.id : null);
   if (!ts || !v1 || !dataId || !requestId) return { valida: false, configurada: true, motivo: "Cabeçalhos de assinatura incompletos." };
 
   const manifesto = `id:${String(dataId).toLowerCase()};request-id:${requestId};ts:${ts};`;

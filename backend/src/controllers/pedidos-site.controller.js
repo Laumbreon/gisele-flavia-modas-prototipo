@@ -41,13 +41,20 @@ async function listarPedidosSite(req, res) {
               v.total, v.forma_pagamento, v.status_pagamento, v.status_entrega,
               v.canal_venda, v.origem_venda, v.status, v.created_at,
               COALESCE(ve.tipo_entrega, 'retirada') AS tipo_entrega,
-              ve.bairro, ve.cidade
+              ve.bairro, ve.cidade,
+              mp.status AS mercado_pago_status, mp.payment_id AS mercado_pago_payment_id,
+              mp.preference_id AS mercado_pago_preference_id, mp.date_approved AS mercado_pago_date_approved,
+              mp.resultado_processamento AS mercado_pago_resultado
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
        LEFT JOIN LATERAL (
          SELECT tipo_entrega, bairro, cidade FROM venda_entregas
          WHERE venda_id = v.id ORDER BY id DESC LIMIT 1
        ) ve ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT status,payment_id,preference_id,date_approved,resultado_processamento
+         FROM mercado_pago_pagamentos WHERE venda_id=v.id ORDER BY created_at DESC LIMIT 1
+       ) mp ON TRUE
        WHERE ${filtros.join(" AND ")}
        ORDER BY v.created_at DESC
        LIMIT 200`,
@@ -68,12 +75,13 @@ async function buscarPedidoCompleto(executor, id, lock = false) {
     [id]
   );
   if (!vendaResult.rows[0]) return null;
-  const [itens, entrega, pagamentos] = await Promise.all([
+  const [itens, entrega, pagamentos, mercadoPago] = await Promise.all([
     executor.query("SELECT * FROM itens_venda WHERE venda_id = $1 ORDER BY id", [id]),
     executor.query("SELECT * FROM venda_entregas WHERE venda_id = $1 ORDER BY id DESC LIMIT 1", [id]),
     executor.query("SELECT * FROM pagamentos_venda WHERE venda_id = $1 ORDER BY id", [id]),
+    executor.query("SELECT * FROM mercado_pago_pagamentos WHERE venda_id=$1 ORDER BY created_at DESC LIMIT 1", [id]),
   ]);
-  return { ...vendaResult.rows[0], itens: itens.rows, entrega: entrega.rows[0] || null, pagamentos: pagamentos.rows };
+  return { ...vendaResult.rows[0], itens: itens.rows, entrega: entrega.rows[0] || null, pagamentos: pagamentos.rows, mercado_pago: mercadoPago.rows[0] || null };
 }
 
 async function detalharPedidoSite(req, res) {
