@@ -32,10 +32,17 @@ async function checkoutPublico(req, res) {
   try {
     await client.query("BEGIN");
     let clienteId = null;
-    const existente = await client.query(`SELECT id FROM clientes WHERE telefone = $1 OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2)) ORDER BY id LIMIT 1`, [texto(cliente.telefone), texto(cliente.email)]);
-    if (existente.rows[0]) {
+    const autenticadoId=Number(req.cliente?.cliente_id)||null;
+    const existente = autenticadoId
+      ? await client.query(`SELECT id,senha_hash FROM clientes WHERE id=$1 AND ativo=TRUE FOR UPDATE`,[autenticadoId])
+      : await client.query(`SELECT id,senha_hash FROM clientes WHERE telefone = $1 OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2)) ORDER BY CASE WHEN $2::text IS NOT NULL AND LOWER(email)=LOWER($2) THEN 0 ELSE 1 END,id LIMIT 1 FOR UPDATE`, [texto(cliente.telefone), texto(cliente.email)]);
+    if (autenticadoId && !existente.rows[0]) throw Object.assign(new Error("Sua conta não está disponível. Entre novamente."),{statusCode:401});
+    if (!autenticadoId && existente.rows[0]?.senha_hash) {
+      const visitante=await client.query(`INSERT INTO clientes (nome,telefone,whatsapp,email,ativo) VALUES ($1,$2,$2,NULL,TRUE) RETURNING id`,[texto(cliente.nome),texto(cliente.telefone)]);
+      clienteId=visitante.rows[0].id;
+    } else if (existente.rows[0]) {
       clienteId = existente.rows[0].id;
-      await client.query(`UPDATE clientes SET nome=$1, telefone=$2, whatsapp=$2, email=COALESCE($3,email), updated_at=NOW() WHERE id=$4`, [texto(cliente.nome), texto(cliente.telefone), texto(cliente.email), clienteId]);
+      if(autenticadoId||!existente.rows[0].senha_hash)await client.query(`UPDATE clientes SET nome=$1, telefone=$2, whatsapp=$2, email=COALESCE($3,email), updated_at=NOW() WHERE id=$4`, [texto(cliente.nome), texto(cliente.telefone), autenticadoId?null:texto(cliente.email), clienteId]);
     } else {
       const criado = await client.query(`INSERT INTO clientes (nome,telefone,whatsapp,email,ativo) VALUES ($1,$2,$2,$3,TRUE) RETURNING id`, [texto(cliente.nome), texto(cliente.telefone), texto(cliente.email)]);
       clienteId = criado.rows[0].id;
@@ -76,7 +83,7 @@ async function checkoutPublico(req, res) {
     res.status(201).json({ ok:true,venda_id:vendaId,total,status_pagamento:"pendente",mensagem:"Pedido recebido com sucesso." });
   } catch (error) {
     await client.query("ROLLBACK");
-    if (error.statusCode === 400) return res.status(400).json({ message:error.message });
+    if (error.statusCode === 400 || error.statusCode === 401) return res.status(error.statusCode).json({ message:error.message });
     console.error("Erro no checkout público:", error);
     res.status(500).json({ message:"Não foi possível receber o pedido agora." });
   } finally { client.release(); }

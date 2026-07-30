@@ -1,0 +1,11 @@
+const express=require("express");
+const controller=require("../controllers/clientes-auth.controller");
+const { authClienteMiddleware }=require("../middlewares/auth-cliente.middleware");
+const router=express.Router();
+router.post("/cadastro",controller.cadastro);
+router.post("/login",controller.login);
+router.post("/esqueci-senha",controller.esqueciSenha);
+router.post("/redefinir-senha",controller.redefinirSenha);
+router.get("/me",authClienteMiddleware,controller.me);
+router.get("/me/pedidos",authClienteMiddleware,controller.meusPedidos);
+module.exports=router;

@@ -23,6 +23,8 @@ const usuariosRoutes = require("./src/routes/usuarios.routes");
 const pedidosSiteRoutes = require("./src/routes/pedidos-site.routes");
 const fiscalRoutes = require("./src/routes/fiscal.routes");
 const mercadoPagoRoutes = require("./src/routes/mercado-pago.routes");
+const clientesAuthRoutes = require("./src/routes/clientes-auth.routes");
+const { authClienteOpcional } = require("./src/middlewares/auth-cliente.middleware");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -32,10 +34,11 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads"), { fallthrough: false, index: false }));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/clientes-auth", clientesAuthRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/public/produtos", publicProdutosRoutes);
-app.use("/api/public/checkout", publicCheckoutRoutes);
+app.use("/api/public/checkout", authClienteOpcional, publicCheckoutRoutes);
 app.use("/api/public/frete-bairro", fretesBairroRoutes.publicRouter);
 app.use("/api/produtos", authMiddleware, produtosRoutes);
 app.use("/api/clientes", authMiddleware, clientesRoutes);

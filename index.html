@@ -38,6 +38,10 @@
       </nav>
 
       <div class="topbar-actions">
+        <div class="customer-account-actions" id="customerAccountActions">
+          <button class="btn btn-ghost btn-sm" id="customerLoginOpen" type="button">Entrar</button>
+          <button class="btn btn-pink btn-sm" id="customerRegisterOpen" type="button">Criar conta</button>
+        </div>
         <button class="btn btn-ghost btn-logout" id="btnLogout" type="button" hidden>Sair</button>
         <a class="btn btn-instagram" href="https://www.instagram.com/gisele_flavia_modas?igsh=MWppZWkycTRsMW1naQ==" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
@@ -142,6 +146,7 @@
 
             <div class="checkout-card">
               <h3 class="checkout-section-title">Seus dados</h3>
+              <div class="checkout-customer-session" id="checkoutCustomerSession"></div>
               <div class="form-row checkout-name-field"><label for="publicCustomerName">Nome</label><input id="publicCustomerName" required /></div>
               <div class="form-grid"><div class="form-row"><label for="publicCustomerPhone">WhatsApp/telefone</label><input id="publicCustomerPhone" required /></div><div class="form-row"><label for="publicCustomerEmail">E-mail opcional</label><input id="publicCustomerEmail" type="email" /></div></div>
             </div>
@@ -587,6 +592,44 @@
       </form>
     </div>
   </div>
+
+  <div class="modal-overlay" id="customerAuthModal" aria-hidden="true">
+    <div class="modal login-modal customer-auth-modal" role="dialog" aria-modal="true" aria-labelledby="customerAuthTitle">
+      <div class="modal-head"><h3 id="customerAuthTitle">Entrar na sua conta</h3><button class="modal-close" id="customerAuthClose" type="button" aria-label="Fechar">&times;</button></div>
+      <div class="customer-auth-tabs" id="customerAuthTabs"><button class="active" id="customerLoginTab" type="button">Entrar</button><button id="customerRegisterTab" type="button">Criar conta</button></div>
+      <form class="modal-body" id="customerLoginForm">
+        <p class="login-sub">Acesse seus dados e acompanhe seus pedidos.</p>
+        <div class="form-row"><label for="customerLoginEmail">E-mail</label><input id="customerLoginEmail" type="email" autocomplete="email" required /></div>
+        <div class="form-row"><label for="customerLoginPassword">Senha</label><input id="customerLoginPassword" type="password" autocomplete="current-password" required /></div>
+        <button class="customer-forgot-link link-btn" id="customerForgotOpen" type="button">Esqueci minha senha</button>
+        <p class="login-error" id="customerLoginError" role="alert"></p><button class="btn btn-pink btn-block" type="submit">Entrar</button>
+      </form>
+      <form class="modal-body" id="customerForgotForm" hidden>
+        <p class="login-sub">Enviaremos um código para seu e-mail cadastrado.</p>
+        <div class="form-row"><label for="customerForgotEmail">E-mail</label><input id="customerForgotEmail" type="email" autocomplete="email" required /></div>
+        <p class="login-error" id="customerForgotError" role="alert"></p>
+        <button class="btn btn-pink btn-block" type="submit">Enviar código</button><button class="link-btn customer-auth-back" data-customer-auth-back type="button">Voltar para entrar</button>
+      </form>
+      <form class="modal-body" id="customerResetForm" hidden>
+        <input id="customerResetEmail" type="hidden" />
+        <p class="login-sub">Digite o código de 6 dígitos recebido por e-mail e escolha uma nova senha.</p>
+        <div class="form-row"><label for="customerResetCode">Código</label><input id="customerResetCode" class="customer-reset-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></div>
+        <div class="form-grid"><div class="form-row"><label for="customerResetPassword">Nova senha</label><input id="customerResetPassword" type="password" minlength="6" autocomplete="new-password" required /></div><div class="form-row"><label for="customerResetConfirm">Confirmar nova senha</label><input id="customerResetConfirm" type="password" minlength="6" autocomplete="new-password" required /></div></div>
+        <p class="login-error" id="customerResetError" role="alert"></p>
+        <button class="btn btn-pink btn-block" type="submit">Redefinir senha</button><button class="link-btn customer-auth-back" id="customerResetResend" type="button">Reenviar código</button>
+      </form>
+      <form class="modal-body" id="customerRegisterForm" hidden>
+        <p class="login-sub">Crie sua conta para agilizar as próximas compras.</p>
+        <div class="form-row"><label for="customerRegisterName">Nome</label><input id="customerRegisterName" maxlength="120" autocomplete="name" required /></div>
+        <div class="form-grid"><div class="form-row"><label for="customerRegisterEmail">E-mail</label><input id="customerRegisterEmail" type="email" autocomplete="email" required /></div><div class="form-row"><label for="customerRegisterPhone">Telefone</label><input id="customerRegisterPhone" maxlength="30" autocomplete="tel" required /></div></div>
+        <div class="form-row"><label for="customerRegisterCpf">CPF opcional</label><input id="customerRegisterCpf" maxlength="20" inputmode="numeric" /></div>
+        <div class="form-grid"><div class="form-row"><label for="customerRegisterPassword">Senha</label><input id="customerRegisterPassword" type="password" minlength="6" autocomplete="new-password" required /></div><div class="form-row"><label for="customerRegisterConfirm">Confirmar senha</label><input id="customerRegisterConfirm" type="password" minlength="6" autocomplete="new-password" required /></div></div>
+        <p class="login-error" id="customerRegisterError" role="alert"></p><button class="btn btn-pink btn-block" type="submit">Criar minha conta</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="customerOrdersModal" aria-hidden="true"><div class="modal customer-orders-modal" role="dialog" aria-modal="true" aria-labelledby="customerOrdersTitle"><div class="modal-head"><h3 id="customerOrdersTitle">Meus pedidos</h3><button class="modal-close" id="customerOrdersClose" type="button">&times;</button></div><div class="modal-body" id="customerOrdersList"></div></div></div>
 
   <div class="modal-overlay" id="pinModal" aria-hidden="true"><div class="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="pinTitle"><div class="modal-head"><h3 id="pinTitle">PIN administrativo</h3><button class="modal-close" id="pinClose" type="button">&times;</button></div><form id="pinForm" class="modal-body"><p class="login-sub">Confirme o PIN para continuar nesta área sensível.</p><div class="form-row"><label for="adminPin">PIN</label><input type="password" id="adminPin" required autocomplete="off" /></div><p class="login-error" id="pinError"></p><div class="modal-foot"><button type="button" class="btn btn-ghost" id="pinCancel">Cancelar</button><button class="btn btn-pink" type="submit">Validar</button></div></form></div></div>
 

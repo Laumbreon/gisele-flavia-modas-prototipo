@@ -12,6 +12,8 @@ const API_BASE_URL =
     ? "http://localhost:3001/api"
     : "/api";
 const AUTH_STORAGE_KEY = "gfm_admin_auth";
+const CLIENT_TOKEN_KEY = "clienteToken";
+const CLIENT_DATA_KEY = "gfm_cliente_data";
 const ADMIN_SCREENS = new Set(["pdv", "gestao", "movimentacoes", "fornecedores", "historico", "maquininhas", "etiquetas", "pedidos-site", "fiscal"]);
 const ADMIN_PIN_SESSION_KEY = "adminPinOk";
 
@@ -150,6 +152,7 @@ let nextProductId = 9;
 let nextSaleId = 1;
 let nextMovementId = 5;
 let adminSession = carregarSessaoAdmin();
+let clienteSession = carregarSessaoCliente();
 let pendingAdminAction = null;
 let localShippingQuote = null;
 let fretesBairro = [];
@@ -235,6 +238,7 @@ function salvarSessaoAdmin(session) {
   adminSession = session;
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
   atualizarAuthUi();
+  validarSessaoCliente();
 }
 
 function usuarioLogado() {
@@ -273,6 +277,23 @@ function getAuthHeaders(extraHeaders = {}) {
     ...(adminSession?.token ? { Authorization: `Bearer ${adminSession.token}` } : {}),
   };
 }
+
+function carregarSessaoCliente(){try{const token=localStorage.getItem(CLIENT_TOKEN_KEY),cliente=JSON.parse(localStorage.getItem(CLIENT_DATA_KEY)||"null");return token&&cliente?{token,cliente}:null;}catch{localStorage.removeItem(CLIENT_TOKEN_KEY);localStorage.removeItem(CLIENT_DATA_KEY);return null;}}
+function clienteLogado(){return Boolean(clienteSession?.token&&clienteSession?.cliente);}
+function salvarSessaoCliente(token,cliente){clienteSession={token,cliente};localStorage.setItem(CLIENT_TOKEN_KEY,token);localStorage.setItem(CLIENT_DATA_KEY,JSON.stringify(cliente));atualizarClienteUi();preencherCheckoutCliente();}
+function logoutCliente(){clienteSession=null;localStorage.removeItem(CLIENT_TOKEN_KEY);localStorage.removeItem(CLIENT_DATA_KEY);atualizarClienteUi();showToast("Você saiu da sua conta.");}
+function atualizarClienteUi(){const area=$("#customerAccountActions");if(!area)return;if(clienteLogado()){const primeiro=escaparHtml(String(clienteSession.cliente.nome||"Cliente").split(" ")[0]);area.innerHTML=`<span class="customer-greeting">Olá, <strong>${primeiro}</strong></span><button class="btn btn-ghost btn-sm" id="customerOrdersOpen" type="button">Meus pedidos</button><button class="link-btn" id="customerLogout" type="button">Sair</button>`;$("#customerOrdersOpen").onclick=abrirMeusPedidos;$("#customerLogout").onclick=logoutCliente;}else{area.innerHTML='<button class="btn btn-ghost btn-sm" id="customerLoginOpen" type="button">Entrar</button><button class="btn btn-pink btn-sm" id="customerRegisterOpen" type="button">Criar conta</button>';$("#customerLoginOpen").onclick=()=>abrirAuthCliente("login");$("#customerRegisterOpen").onclick=()=>abrirAuthCliente("cadastro");}const session=$("#checkoutCustomerSession");if(session)session.innerHTML=clienteLogado()?`<span>Comprando como <strong>${escaparHtml(clienteSession.cliente.nome)}</strong>.</span><button class="link-btn" type="button" id="checkoutCustomerLogout">Sair</button>`:`<span>Você pode comprar como visitante ou <button class="link-btn" type="button" id="checkoutCustomerLogin">entrar para reaproveitar seus dados</button>.</span>`;$("#checkoutCustomerLogin")?.addEventListener("click",()=>abrirAuthCliente("login"));$("#checkoutCustomerLogout")?.addEventListener("click",logoutCliente);}
+function preencherCheckoutCliente(){if(!clienteLogado())return;const c=clienteSession.cliente;if($("#publicCustomerName"))$("#publicCustomerName").value=c.nome||"";if($("#publicCustomerPhone"))$("#publicCustomerPhone").value=c.telefone||"";if($("#publicCustomerEmail"))$("#publicCustomerEmail").value=c.email||"";}
+function alternarAuthCliente(tipo){const ids={login:"#customerLoginForm",cadastro:"#customerRegisterForm",recuperar:"#customerForgotForm",codigo:"#customerResetForm"};Object.values(ids).forEach(id=>$(id).hidden=id!==ids[tipo]);$("#customerAuthTabs").hidden=["recuperar","codigo"].includes(tipo);$("#customerAuthTitle").textContent={login:"Entrar na sua conta",cadastro:"Criar sua conta",recuperar:"Recuperar senha",codigo:"Digite o código"}[tipo]||"Conta da cliente";$("#customerLoginTab").classList.toggle("active",tipo==="login");$("#customerRegisterTab").classList.toggle("active",tipo==="cadastro");}
+function abrirAuthCliente(tipo="login"){alternarAuthCliente(tipo);["#customerLoginError","#customerRegisterError","#customerForgotError","#customerResetError"].forEach(id=>$(id).textContent="");openModal("#customerAuthModal");const foco={login:"#customerLoginEmail",cadastro:"#customerRegisterName",recuperar:"#customerForgotEmail",codigo:"#customerResetCode"};setTimeout(()=>$(foco[tipo])?.focus(),50);}
+async function enviarAuthCliente(path,payload,errorSelector){const error=$(errorSelector);error.textContent="";try{const response=await fetch(`${API_BASE_URL}/clientes-auth/${path}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.message||"Não foi possível continuar.");salvarSessaoCliente(data.token,data.cliente);closeModal("#customerAuthModal");showToast(data.message||"Bem-vinda!");}catch(err){error.textContent=err.message||"Backend indisponível.";}}
+function loginCliente(event){event.preventDefault();return enviarAuthCliente("login",{email:$("#customerLoginEmail").value.trim(),senha:$("#customerLoginPassword").value},"#customerLoginError");}
+function cadastrarCliente(event){event.preventDefault();return enviarAuthCliente("cadastro",{nome:$("#customerRegisterName").value.trim(),email:$("#customerRegisterEmail").value.trim(),telefone:$("#customerRegisterPhone").value.trim(),cpf:$("#customerRegisterCpf").value.trim()||null,senha:$("#customerRegisterPassword").value,confirmarSenha:$("#customerRegisterConfirm").value},"#customerRegisterError");}
+async function solicitarCodigoCliente(event){event?.preventDefault();const email=$("#customerForgotEmail").value.trim(),error=$("#customerForgotError"),button=$("#customerForgotForm button[type='submit']");error.textContent="";button.disabled=true;try{const response=await fetch(`${API_BASE_URL}/clientes-auth/esqueci-senha`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email})}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.message||"Não foi possível enviar o código.");$("#customerResetEmail").value=email;$("#customerResetCode").value="";alternarAuthCliente("codigo");showToast(data.message);}catch(err){error.textContent=err.message||"Backend indisponível.";}finally{button.disabled=false;}}
+async function redefinirSenhaCliente(event){event.preventDefault();const error=$("#customerResetError"),button=$("#customerResetForm button[type='submit']"),email=$("#customerResetEmail").value;error.textContent="";button.disabled=true;try{const response=await fetch(`${API_BASE_URL}/clientes-auth/redefinir-senha`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,codigo:$("#customerResetCode").value.trim(),novaSenha:$("#customerResetPassword").value,confirmarSenha:$("#customerResetConfirm").value})}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.message||"Não foi possível redefinir a senha.");clienteSession=null;localStorage.removeItem(CLIENT_TOKEN_KEY);localStorage.removeItem(CLIENT_DATA_KEY);atualizarClienteUi();$("#customerLoginEmail").value=email;$("#customerLoginPassword").value="";alternarAuthCliente("login");showToast(data.message);setTimeout(()=>$("#customerLoginPassword").focus(),50);}catch(err){error.textContent=err.message||"Backend indisponível.";}finally{button.disabled=false;}}
+function reenviarCodigoCliente(){$("#customerForgotEmail").value=$("#customerResetEmail").value;alternarAuthCliente("recuperar");solicitarCodigoCliente();}
+async function validarSessaoCliente(){if(!clienteLogado())return atualizarClienteUi();try{const response=await fetch(`${API_BASE_URL}/clientes-auth/me`,{headers:{Authorization:`Bearer ${clienteSession.token}`}}),data=await response.json().catch(()=>({}));if(!response.ok)throw new Error();clienteSession.cliente=data.cliente;localStorage.setItem(CLIENT_DATA_KEY,JSON.stringify(data.cliente));}catch{clienteSession=null;localStorage.removeItem(CLIENT_TOKEN_KEY);localStorage.removeItem(CLIENT_DATA_KEY);}atualizarClienteUi();}
+async function abrirMeusPedidos(){const area=$("#customerOrdersList");area.innerHTML='<p class="shipping-status">Carregando seus pedidos...</p>';openModal("#customerOrdersModal");try{const response=await fetch(`${API_BASE_URL}/clientes-auth/me/pedidos`,{headers:{Authorization:`Bearer ${clienteSession.token}`}}),pedidos=await response.json().catch(()=>[]);if(!response.ok)throw new Error(pedidos.message||"Não foi possível carregar seus pedidos.");area.innerHTML=pedidos.length?pedidos.map(p=>`<article class="customer-order-card"><div><strong>Pedido #${p.id}</strong><span>${new Date(p.created_at).toLocaleString("pt-BR")}</span></div><div class="customer-order-status"><span>${escaparHtml(p.status_pagamento||"pendente")}</span><span>${escaparHtml(p.status_entrega||"sem entrega")}</span></div><ul>${(p.itens||[]).map(i=>`<li>${Number(i.quantidade)}× ${escaparHtml(i.produto)} <small>${escaparHtml([i.tamanho,i.cor].filter(Boolean).join(" / "))}</small></li>`).join("")}</ul><b>${formatarMoeda(p.total)}</b></article>`).join(""):'<p class="empty-note">Você ainda não fez pedidos com esta conta.</p>';}catch(error){area.innerHTML=`<p class="login-error">${escaparHtml(error.message)}</p>`;}}
 
 async function fetchAdmin(path, options = {}) {
   if (!usuarioLogado()) return null;
@@ -1708,7 +1729,8 @@ async function checkout() {
   if (local) payload.entrega={ destinatario_nome:nome,destinatario_telefone:telefone,estado:shipping.state,cidade:shipping.city,bairro:shipping.district,endereco:$("#publicAddress").value.trim(),numero:$("#publicAddressNumber").value.trim(),complemento:$("#publicComplement").value.trim()||null,referencia:$("#publicReference").value.trim()||null };
   const button=$("#btnCheckout"); button.disabled=true; button.textContent="Enviando pedido...";
   try {
-    const response=await fetch(`${API_BASE_URL}/public/checkout`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const data=await response.json().catch(()=>({}));
+    const headers={"Content-Type":"application/json",...(clienteSession?.token?{Authorization:`Bearer ${clienteSession.token}`}:{})};
+    const response=await fetch(`${API_BASE_URL}/public/checkout`,{method:"POST",headers,body:JSON.stringify(payload)}); const data=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data.message||"Não foi possível finalizar o pedido.");
     cart=[];localShippingQuote=null;renderCart();updateCartBadge();$("#publicCheckoutContent").hidden=true;const mensagem=encodeURIComponent(`Olá! Acabei de fazer o pedido #${data.venda_id} pelo site.`);$("#publicOrderSuccess").hidden=false;$("#publicOrderSuccess").innerHTML=`<div class="success-mark">✓</div><h3>Pedido recebido com sucesso!</h3><p>Número do pedido: <strong>#${data.venda_id}</strong></p><p>A loja entrará em contato para confirmar o pagamento e a entrega.</p><a class="btn btn-pink" href="https://wa.me/5511999990000?text=${mensagem}" target="_blank" rel="noopener">Chamar no WhatsApp</a><button class="btn btn-ghost" id="publicContinueShopping" type="button">Continuar comprando</button>`;$("#publicContinueShopping").onclick=fecharCheckoutPublico;
     if (["cartao", "pix"].includes(payload.forma_pagamento)) {
@@ -1724,6 +1746,8 @@ function abrirCheckoutPublico() {
   $("#publicOrderSuccess").hidden = true;
   $("#publicCheckoutError").textContent = "";
   renderCart();
+  preencherCheckoutCliente();
+  atualizarClienteUi();
   navigate("checkout-publico");
 }
 function fecharCheckoutPublico() { navigate("catalogo"); }
@@ -2907,6 +2931,23 @@ function init() {
   $("#btnCheckout").addEventListener("click", checkout);
   $("#btnLogout").addEventListener("click", logoutAdmin);
   $("#btnAdminAccess").addEventListener("click", () => usuarioAdministrador() ? navigate("gestao") : abrirLoginAdmin(() => navigate("gestao")));
+
+  // conta da cliente (separada do acesso administrativo)
+  $("#customerLoginOpen")?.addEventListener("click",()=>abrirAuthCliente("login"));
+  $("#customerRegisterOpen")?.addEventListener("click",()=>abrirAuthCliente("cadastro"));
+  $("#customerLoginTab").addEventListener("click",()=>alternarAuthCliente("login"));
+  $("#customerRegisterTab").addEventListener("click",()=>alternarAuthCliente("cadastro"));
+  $("#customerLoginForm").addEventListener("submit",loginCliente);
+  $("#customerRegisterForm").addEventListener("submit",cadastrarCliente);
+  $("#customerForgotOpen").addEventListener("click",()=>{$("#customerForgotEmail").value=$("#customerLoginEmail").value.trim();alternarAuthCliente("recuperar");});
+  $("#customerForgotForm").addEventListener("submit",solicitarCodigoCliente);
+  $("#customerResetForm").addEventListener("submit",redefinirSenhaCliente);
+  $("#customerResetResend").addEventListener("click",reenviarCodigoCliente);
+  $$('[data-customer-auth-back]').forEach(button=>button.addEventListener("click",()=>alternarAuthCliente("login")));
+  $("#customerResetCode").addEventListener("input",event=>{event.target.value=event.target.value.replace(/\D/g,"").slice(0,6);});
+  $("#customerAuthClose").addEventListener("click",()=>closeModal("#customerAuthModal"));
+  $("#customerAuthModal").addEventListener("click",event=>{if(event.target.id==="customerAuthModal")closeModal("#customerAuthModal");});
+  $("#customerOrdersClose").addEventListener("click",()=>closeModal("#customerOrdersModal"));
 
   // login administrativo
   $("#loginForm").addEventListener("submit", handleLoginSubmit);

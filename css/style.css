@@ -1834,6 +1834,22 @@ video.detail-media-main { object-fit: contain; }
 .modal-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
 
 .login-modal { max-width: 460px; }
+.customer-account-actions { display:flex; align-items:center; gap:7px; }
+.customer-greeting { max-width:130px; overflow:hidden; color:var(--green-brand); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.customer-auth-modal { width:min(520px,calc(100vw - 24px)); }
+.customer-auth-tabs { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:0 22px; padding:5px; border-radius:12px; background:#f8fafc; }
+.customer-auth-tabs button { min-height:38px; border:0; border-radius:9px; background:transparent; color:var(--text-muted); font-weight:700; cursor:pointer; }
+.customer-auth-tabs button.active { background:#fff; color:var(--pink-brand); box-shadow:var(--shadow-sm); }
+.customer-forgot-link { display:block; width:max-content; margin:-3px 0 12px auto; font-size:12px; }
+.customer-auth-back { display:block; margin:15px auto 0; }
+.customer-reset-code { text-align:center; font-size:25px; font-weight:800; letter-spacing:9px; color:var(--pink-brand); }
+.checkout-customer-session { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; padding:10px 12px; border:1px solid var(--pink-light); border-radius:11px; background:var(--pink-soft); color:var(--text-muted); font-size:12px; }
+.customer-orders-modal { width:min(700px,calc(100vw - 24px)); max-height:88vh; overflow:hidden; }
+.customer-orders-modal .modal-body { display:grid; gap:12px; max-height:calc(88vh - 70px); overflow-y:auto; }
+.customer-order-card { display:grid; grid-template-columns:1fr auto; gap:10px; padding:16px; border:1px solid var(--border); border-radius:13px; background:#fff; }
+.customer-order-card>div:first-child { display:grid; gap:3px; }.customer-order-card>div:first-child span { color:var(--text-muted); font-size:11px; }
+.customer-order-status { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px; }.customer-order-status span { padding:4px 7px; border-radius:999px; background:var(--pink-soft); color:var(--pink-deep); font-size:10px; font-weight:700; }
+.customer-order-card ul { grid-column:1/-1; margin:0; padding:10px 0 0 18px; border-top:1px solid var(--border); color:var(--text-dark); font-size:12px; }.customer-order-card li+li { margin-top:5px; }.customer-order-card li small { color:var(--text-muted); }.customer-order-card>b { color:var(--pink-brand); }
 .login-sub {
   color: var(--text-muted);
   font-size: 14px;

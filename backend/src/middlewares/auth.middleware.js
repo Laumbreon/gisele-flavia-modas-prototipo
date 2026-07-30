@@ -14,6 +14,9 @@ function authMiddleware(req, res, next) {
 
   try {
     req.usuario = jwt.verify(token, getJwtSecret());
+    if (req.usuario.tipo === "cliente" || req.usuario.cliente_id) {
+      return res.status(403).json({ message: "Conta de cliente não possui acesso administrativo." });
+    }
     next();
   } catch (error) {
     return res.status(401).json({ message: "Token inválido ou expirado." });
