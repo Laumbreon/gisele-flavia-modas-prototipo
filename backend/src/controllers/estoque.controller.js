@@ -1,12 +1,15 @@
 ﻿const { query } = require("../config/db");
 
 async function listarEstoque(req, res) {
+  const filtro=String(req.query.produtos||"ativos").toLowerCase();
+  if(!["ativos","arquivados","todos"].includes(filtro))return res.status(400).json({message:"Filtro de produtos inválido."});
   try {
     const result = await query(`
       SELECT
         p.id AS produto_id,
         p.nome AS produto_nome,
         p.categoria,
+        p.status AS produto_status,
         pv.id AS variacao_id,
         pv.cor,
         pv.tamanho,
@@ -16,18 +19,20 @@ async function listarEstoque(req, res) {
         pv.preco_venda,
         pv.preco_promocional,
         pv.ativo AS variacao_ativa,
-        e.quantidade,
-        e.quantidade_minima AS estoque_minimo,
+        COALESCE(e.quantidade,0)::int AS quantidade,
+        COALESCE(e.quantidade_minima,0)::int AS estoque_minimo,
         CASE
+          WHEN pv.id IS NULL THEN 'sem_variacao'
           WHEN e.quantidade <= 0 THEN 'zerado'
           WHEN e.quantidade <= e.quantidade_minima THEN 'baixo'
           ELSE 'normal'
         END AS status
-      FROM estoque e
-      INNER JOIN produto_variacoes pv ON pv.id = e.produto_variacao_id
-      INNER JOIN produtos p ON p.id = pv.produto_id
+      FROM produtos p
+      LEFT JOIN produto_variacoes pv ON pv.produto_id = p.id
+      LEFT JOIN estoque e ON e.produto_variacao_id = pv.id
+      WHERE ($1='todos' OR $1='ativos' AND p.status='ativo' OR $1='arquivados' AND p.status<>'ativo')
       ORDER BY p.nome ASC, pv.cor ASC, pv.tamanho ASC;
-    `);
+    `,[filtro]);
 
     res.json(result.rows);
   } catch (error) {

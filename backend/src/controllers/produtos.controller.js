@@ -83,8 +83,17 @@ function produtosSql(whereClause = "", somenteVariacoesAtivas = false) {
 }
 
 async function listarProdutos(req, res) {
+  const status = String(req.query.status || "ativos").toLowerCase();
+  const filtros = {
+    ativos: "WHERE p.status = 'ativo'",
+    arquivados: "WHERE p.status <> 'ativo'",
+    todos: "",
+  };
+  if (!Object.prototype.hasOwnProperty.call(filtros, status)) {
+    return res.status(400).json({ message: "Filtro de produtos inválido." });
+  }
   try {
-    const result = await query(produtosSql());
+    const result = await query(produtosSql(filtros[status]));
     res.json(result.rows);
   } catch (error) {
     console.error("Erro ao listar produtos:", error);
@@ -282,9 +291,11 @@ async function buscarProdutoPorCodigo(req, res) {
         FROM produto_variacoes pv
         INNER JOIN produtos p ON p.id = pv.produto_id
         LEFT JOIN estoque e ON e.produto_variacao_id = pv.id
-        WHERE UPPER(pv.sku) = UPPER($1)
+        WHERE p.status = 'ativo'
+          AND pv.ativo = TRUE
+          AND (UPPER(pv.sku) = UPPER($1)
            OR UPPER(pv.codigo_barras) = UPPER($1)
-           OR UPPER(pv.codigo_interno) = UPPER($1)
+           OR UPPER(pv.codigo_interno) = UPPER($1))
         LIMIT 1;
       `,
       [codigo]
@@ -409,8 +420,39 @@ async function atualizarVariacao(req, res) {
   const produtoId = inteiroPositivo(req.params.id), id = inteiroPositivo(req.params.variacao_id); if (!produtoId || !id) return res.status(400).json({ message: "Variação inválida." });
   const b = req.body || {}, tamanho = textoV2(b.tamanho, 30), cor = textoV2(b.cor, 60); if (!tamanho || !cor) return res.status(400).json({ message: "Tamanho e cor são obrigatórios." });
   if (b.preco_venda !== "" && b.preco_venda != null && numeroNaoNegativo(b.preco_venda) === null || b.preco_promocional !== "" && b.preco_promocional != null && numeroNaoNegativo(b.preco_promocional) === null) return res.status(400).json({ message: "Informe preços válidos e não negativos." });
-  try { const result = await query(`UPDATE produto_variacoes SET tamanho=$3,cor=$4,sku=COALESCE(NULLIF($5,''),sku),codigo_barras=COALESCE(NULLIF($6,''),codigo_barras),codigo_interno=COALESCE(NULLIF($7,''),codigo_interno),preco_venda=$8,preco_promocional=$9,ativo=$10,updated_at=NOW() WHERE id=$1 AND produto_id=$2 RETURNING *`, [id, produtoId, tamanho, cor, textoV2(b.sku,80), textoV2(b.codigo_barras,80), textoV2(b.codigo_interno,80), b.preco_venda === "" || b.preco_venda == null ? null : numeroNaoNegativo(b.preco_venda), b.preco_promocional === "" || b.preco_promocional == null ? null : numeroNaoNegativo(b.preco_promocional), b.ativo !== false]); if (!result.rows[0]) return res.status(404).json({ message: "Variação não encontrada." }); const minimo=numeroNaoNegativo(b.estoque_minimo??0);if(minimo===null||!Number.isInteger(minimo))return res.status(400).json({message:"Estoque mínimo inválido."});await query("UPDATE estoque SET quantidade_minima=$2,updated_at=NOW() WHERE produto_variacao_id=$1",[id,minimo]);res.json(result.rows[0]); }
-  catch (error) { res.status(error.code === "23505" ? 409 : 500).json({ message: error.code === "23505" ? "Código ou combinação tamanho/cor já cadastrada." : "Não foi possível atualizar a variação." }); }
+  const minimo=numeroNaoNegativo(b.estoque_minimo??0);
+  const estoqueInformado=b.quantidade_estoque??b.quantidade_atual;
+  const novoEstoque=estoqueInformado===undefined?null:numeroNaoNegativo(estoqueInformado);
+  if(minimo===null||!Number.isInteger(minimo)||novoEstoque!==null&&!Number.isInteger(novoEstoque))return res.status(400).json({message:"Informe estoques inteiros e não negativos."});
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const atual=(await client.query(`SELECT pv.*,e.quantidade FROM produto_variacoes pv INNER JOIN estoque e ON e.produto_variacao_id=pv.id WHERE pv.id=$1 AND pv.produto_id=$2 FOR UPDATE OF pv,e`,[id,produtoId])).rows[0];
+    if(!atual)throw Object.assign(new Error("Variação não encontrada."),{statusCode:404});
+    const result=await client.query(`UPDATE produto_variacoes SET tamanho=$3,cor=$4,sku=COALESCE(NULLIF($5,''),sku),codigo_barras=COALESCE(NULLIF($6,''),codigo_barras),codigo_interno=COALESCE(NULLIF($7,''),codigo_interno),preco_venda=$8,preco_promocional=$9,ativo=$10,updated_at=NOW() WHERE id=$1 AND produto_id=$2 RETURNING *`,[id,produtoId,tamanho,cor,textoV2(b.sku,80),textoV2(b.codigo_barras,80),textoV2(b.codigo_interno,80),b.preco_venda===""||b.preco_venda==null?null:numeroNaoNegativo(b.preco_venda),b.preco_promocional===""||b.preco_promocional==null?null:numeroNaoNegativo(b.preco_promocional),b.ativo!==false]);
+    const saldoAnterior=Number(atual.quantidade||0),saldoFinal=novoEstoque===null?saldoAnterior:novoEstoque;
+    await client.query(`INSERT INTO estoque (produto_variacao_id,quantidade,quantidade_minima) VALUES ($1,$2,$3) ON CONFLICT (produto_variacao_id) DO UPDATE SET quantidade=EXCLUDED.quantidade,quantidade_minima=EXCLUDED.quantidade_minima,updated_at=NOW()`,[id,saldoFinal,minimo]);
+    if(saldoFinal!==saldoAnterior)await client.query(`INSERT INTO movimentacoes_estoque (produto_id,produto_variacao_id,tipo,quantidade,motivo,responsavel,observacoes) VALUES ($1,$2,'ajuste',$3,'Ajuste no cadastro do produto',$4,$5)`,[produtoId,id,Math.abs(saldoFinal-saldoAnterior),req.usuario?.nome||"Gestão",`Saldo anterior: ${saldoAnterior}. Novo saldo: ${saldoFinal}.`]);
+    await client.query("COMMIT");
+    res.json({...result.rows[0],quantidade_estoque:saldoFinal,estoque_minimo:minimo,estoque_alterado:saldoFinal!==saldoAnterior});
+  } catch(error) { await client.query("ROLLBACK");res.status(error.statusCode||(error.code==="23505"?409:500)).json({message:error.code==="23505"?"Código ou combinação tamanho/cor já cadastrada.":error.message||"Não foi possível atualizar a variação."}); }
+  finally { client.release(); }
+}
+
+async function alterarStatusProduto(req,res,status,mensagem){
+  const id=inteiroPositivo(req.params.id);if(!id)return res.status(400).json({message:"Produto inválido."});
+  const client=await pool.connect();try{await client.query("BEGIN");const row=(await client.query("SELECT id,nome,status FROM produtos WHERE id=$1 FOR UPDATE",[id])).rows[0];if(!row)throw Object.assign(new Error("Produto não encontrado."),{statusCode:404});const produto=(await client.query("UPDATE produtos SET status=$2,updated_at=NOW() WHERE id=$1 RETURNING id,nome,status",[id,status])).rows[0];await client.query("COMMIT");res.json({ok:true,message:mensagem,produto});}catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.message||"Não foi possível atualizar o produto."});}finally{client.release();}
+}
+const arquivarProduto=(req,res)=>alterarStatusProduto(req,res,"inativo","Produto arquivado. Ele não aparece mais na loja nem no PDV.");
+const restaurarProduto=(req,res)=>alterarStatusProduto(req,res,"ativo","Produto restaurado e disponível novamente.");
+
+async function excluirProduto(req,res){
+  const id=inteiroPositivo(req.params.id);if(!id)return res.status(400).json({message:"Produto inválido."});
+  const client=await pool.connect();try{await client.query("BEGIN");const produto=(await client.query("SELECT id,nome FROM produtos WHERE id=$1 FOR UPDATE",[id])).rows[0];if(!produto)throw Object.assign(new Error("Produto não encontrado."),{statusCode:404});
+    const vinculos=(await client.query(`SELECT EXISTS(SELECT 1 FROM itens_venda WHERE produto_id=$1 OR produto_variacao_id IN (SELECT id FROM produto_variacoes WHERE produto_id=$1)) AS vendas,EXISTS(SELECT 1 FROM movimentacoes_estoque WHERE produto_id=$1 OR produto_variacao_id IN (SELECT id FROM produto_variacoes WHERE produto_id=$1)) AS movimentos,EXISTS(SELECT 1 FROM produto_fiscal WHERE produto_id=$1) AS fiscal`,[id])).rows[0];
+    if(vinculos.vendas||vinculos.movimentos||vinculos.fiscal){await client.query("UPDATE produtos SET status='inativo',updated_at=NOW() WHERE id=$1",[id]);await client.query("COMMIT");return res.json({ok:true,excluido:false,arquivado:true,message:"Este produto possui histórico e foi arquivado com segurança, sem apagar vendas, estoque ou dados fiscais."});}
+    await client.query("DELETE FROM produtos WHERE id=$1",[id]);await client.query("COMMIT");res.json({ok:true,excluido:true,arquivado:false,message:"Produto excluído definitivamente. Os arquivos físicos de fotos e vídeos foram preservados."});
+  }catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.message||"Não foi possível excluir o produto."});}finally{client.release();}
 }
 
 async function excluirVariacao(req, res) {
@@ -494,6 +536,9 @@ module.exports = {
   buscarProdutoPorCodigo,
   criarProduto,
   atualizarProduto,
+  arquivarProduto,
+  restaurarProduto,
+  excluirProduto,
   criarVariacao,
   atualizarVariacao,
   excluirVariacao,
