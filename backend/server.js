@@ -1,5 +1,6 @@
 ﻿const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, ".env") });
+const fs = require("fs");
 
 const express = require("express");
 const cors = require("cors");
@@ -54,6 +55,19 @@ app.use("/api/pedidos-site", authMiddleware, pedidosSiteRoutes);
 app.use("/api/fiscal", authMiddleware, fiscalRoutes);
 // O webhook do Mercado Pago é público; as demais rotas aplicam autenticação no próprio router.
 app.use("/api/mercado-pago", mercadoPagoRoutes);
+
+// Entrega o frontend e seus arquivos de estilo e comportamento.
+// As rotas /api e /uploads acima continuam tendo prioridade.
+const frontendDirectory = path.resolve(__dirname, "../frontend");
+const frontendIndex = path.join(frontendDirectory, "index.html");
+if (fs.existsSync(frontendIndex)) {
+  app.use(express.static(frontendDirectory, { index: false }));
+
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/") || req.method !== "GET") return next();
+    return res.sendFile(frontendIndex);
+  });
+}
 
 app.use((req, res) => {
   res.status(404).json({ message: "Rota não encontrada" });
