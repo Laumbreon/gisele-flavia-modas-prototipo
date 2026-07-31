@@ -60,8 +60,12 @@ app.use("/api/mercado-pago", mercadoPagoRoutes);
 // As rotas /api e /uploads acima continuam tendo prioridade.
 const frontendDirectory = path.resolve(__dirname, "../frontend");
 const frontendIndex = path.join(frontendDirectory, "index.html");
+const catalogAssetsDirectory = path.resolve(__dirname, "../assets");
 if (fs.existsSync(frontendIndex)) {
   app.use(express.static(frontendDirectory, { index: false }));
+  if (fs.existsSync(catalogAssetsDirectory)) {
+    app.use("/assets", express.static(catalogAssetsDirectory, { index: false }));
+  }
 
   app.get("*", (req, res, next) => {
     if (req.path.startsWith("/api/") || req.method !== "GET") return next();
