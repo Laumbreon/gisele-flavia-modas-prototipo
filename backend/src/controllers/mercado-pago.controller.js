@@ -256,8 +256,7 @@ async function buscarPagamentoVenda(req, res) {
   catch { res.status(500).json({ message: "Não foi possível buscar o link de pagamento." }); }
 }
 
-async function criarPreferencia(req, res) {
-  const id = idValido(req.params.venda_id); if (!id) return res.status(400).json({ message: "Venda inválida." });
+async function criarOuObterPreferenciaVenda(id) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -267,25 +266,33 @@ async function criarPreferencia(req, res) {
     if (venda.status_pagamento === "pago") throw Object.assign(new Error("Este pedido já está pago."), { statusCode: 409 });
     if (["cancelada", "cancelado"].includes(venda.status) || venda.status_pagamento === "cancelado") throw Object.assign(new Error("Pedido cancelado não pode receber link de pagamento."), { statusCode: 409 });
     const existente = (await client.query("SELECT * FROM mercado_pago_pagamentos WHERE venda_id=$1 AND status IN ('criado','pending','pendente','in_process','processando','authorized') ORDER BY id DESC LIMIT 1", [id])).rows[0];
-    if (existente) { await client.query("COMMIT"); return responderPreferencia(res, existente); }
+    if (existente) { await client.query("COMMIT"); return formatarPreferencia(existente); }
     const config = (await client.query("SELECT * FROM mercado_pago_config ORDER BY id LIMIT 1")).rows[0] || { ambiente: process.env.MERCADO_PAGO_ENV || "sandbox", ativo: false };
     if (!config.ativo) throw Object.assign(new Error("A integração Mercado Pago está desativada na configuração."), { statusCode: 409 });
     const itens = (await client.query("SELECT * FROM itens_venda WHERE venda_id=$1 ORDER BY id", [id])).rows;
     if (!itens.length) throw Object.assign(new Error("A venda não possui itens para pagamento."), { statusCode: 400 });
     const mp = await criarPreferenciaPagamentoVenda({ ...venda, itens, config });
     const saved = await client.query(`INSERT INTO mercado_pago_pagamentos (venda_id,preference_id,init_point,sandbox_init_point,external_reference,status,valor,payload_json,resposta_json,resultado_processamento) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,'link_gerado') RETURNING *`, [id, mp.preference_id, mp.init_point, mp.sandbox_init_point, mp.payload.external_reference, venda.total, mp.payload, mp.resposta]);
-    await client.query("COMMIT"); responderPreferencia(res, saved.rows[0]);
+    await client.query("COMMIT"); return formatarPreferencia(saved.rows[0]);
   } catch (error) {
     await client.query("ROLLBACK");
-    if (error.statusCode) return res.status(error.statusCode).json({ message: error.message });
-    console.error("Erro ao criar preferência Mercado Pago:", error); res.status(500).json({ message: "Não foi possível gerar o link Mercado Pago." });
+    throw error;
   } finally { client.release(); }
 }
 
-function responderPreferencia(res, row) {
+function formatarPreferencia(row) {
   const ambiente = String(process.env.MERCADO_PAGO_ENV || "sandbox").toLowerCase();
   const url = ["production","producao"].includes(ambiente) ? row.init_point : (row.sandbox_init_point || row.init_point);
-  return res.json({ ok: true, venda_id: row.venda_id, preference_id: row.preference_id, payment_id: row.payment_id, payment_status: row.payment_status || row.status, init_point: row.init_point, sandbox_init_point: row.sandbox_init_point, url_pagamento: url, status: row.status });
+  return { ok: true, venda_id: row.venda_id, preference_id: row.preference_id, payment_id: row.payment_id, payment_status: row.payment_status || row.status, init_point: row.init_point, sandbox_init_point: row.sandbox_init_point, url_pagamento: url, status: row.status, ambiente };
 }
 
-module.exports = { obterConfig, salvarConfig, buscarPagamentoVenda, criarPreferencia, receberWebhook, sincronizarPagamento, listarLogs, aplicarPagamentoMercadoPago };
+async function criarPreferencia(req, res) {
+  const id = idValido(req.params.venda_id); if (!id) return res.status(400).json({ message: "Venda inválida." });
+  try { res.json(await criarOuObterPreferenciaVenda(id)); }
+  catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ message: error.message });
+    console.error("Erro ao criar preferência Mercado Pago:", error); res.status(500).json({ message: "Não foi possível gerar o link Mercado Pago." });
+  }
+}
+
+module.exports = { obterConfig, salvarConfig, buscarPagamentoVenda, criarPreferencia, criarOuObterPreferenciaVenda, receberWebhook, sincronizarPagamento, listarLogs, aplicarPagamentoMercadoPago };

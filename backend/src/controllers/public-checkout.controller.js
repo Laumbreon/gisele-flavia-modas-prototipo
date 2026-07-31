@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
 
 function erroValidacao(message) { const error = new Error(message); error.statusCode = 400; return error; }
 function texto(value) { const result = String(value || "").trim(); return result || null; }
@@ -80,7 +81,14 @@ async function checkoutPublico(req, res) {
       await client.query(`INSERT INTO venda_entregas (venda_id,tipo_entrega,status_entrega,valor_frete,destinatario_nome,destinatario_telefone,estado,cidade,bairro,endereco,numero,complemento,referencia,observacoes) VALUES ($1,'entrega_local','pendente',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [vendaId,frete,texto(entrega.destinatario_nome)||texto(cliente.nome),texto(entrega.destinatario_telefone)||texto(cliente.telefone),texto(entrega.estado)||"SP",texto(entrega.cidade),texto(entrega.bairro),texto(entrega.endereco),texto(entrega.numero),texto(entrega.complemento),texto(entrega.referencia),texto(req.body.observacoes)]);
     }
     await client.query("COMMIT");
-    res.status(201).json({ ok:true,venda_id:vendaId,total,status_pagamento:"pendente",mensagem:"Pedido recebido com sucesso." });
+    let mercadoPago={disponivel:false,status:"nao_aplicavel",message:"Forma de pagamento sem link Mercado Pago."};
+    if(["pix","cartao"].includes(formaPagamento)){
+      try{
+        const preferencia=await criarOuObterPreferenciaVenda(vendaId),paymentLink=preferencia.url_pagamento||preferencia.sandbox_init_point||preferencia.init_point;
+        mercadoPago=paymentLink?{disponivel:true,status:"link_gerado",preference_id:preferencia.preference_id,payment_link:paymentLink,ambiente:preferencia.ambiente}:{disponivel:false,status:"erro",message:"Pedido criado, mas não foi possível gerar o link de pagamento agora."};
+      }catch(error){console.error(`Mercado Pago automático indisponível para venda #${vendaId}:`,error.code||error.message);mercadoPago={disponivel:false,status:error.statusCode===409?"indisponivel":"erro",message:"Pedido criado, mas não foi possível gerar o link de pagamento agora."};}
+    }
+    res.status(201).json({ ok:true,venda_id:vendaId,total,status_pagamento:"pendente",mensagem:"Pedido recebido com sucesso.",mercado_pago:mercadoPago });
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.statusCode === 400 || error.statusCode === 401) return res.status(error.statusCode).json({ message:error.message });
