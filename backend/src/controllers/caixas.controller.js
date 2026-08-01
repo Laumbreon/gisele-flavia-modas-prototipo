@@ -1,4 +1,5 @@
 const { pool, query } = require("../config/db");
+const { importarVendasSitePendentes } = require("../services/caixa-site.service");
 
 const FORMAS_PAGAMENTO = ["dinheiro", "pix", "debito", "credito"];
 const TIPOS_MOVIMENTACAO_MANUAL = ["entrada", "saida", "sangria", "reforco"];
@@ -87,6 +88,8 @@ async function abrirCaixa(req, res) {
       `,
       [usuarioId(req), valorInicial, normalizeOptional(req.body.observacoes_abertura)]
     );
+
+    await importarVendasSitePendentes(client, result.rows[0].id, usuarioId(req));
 
     await client.query("COMMIT");
     res.status(201).json(result.rows[0]);

@@ -1,6 +1,7 @@
 const { pool } = require("../config/db");
 const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
 const { consultarPagamento, cancelarPagamentoPendente } = require("../services/mercado-pago.service");
+const { registrarVendaSiteNoCaixa } = require("../services/caixa-site.service");
 
 const FORMAS_PAGAMENTO = new Set(["pix", "dinheiro", "cartao"]);
 const STATUS_ENTREGA = new Set(["pendente", "separando", "pronto_retirada", "saiu_entrega", "entregue", "cancelado"]);
@@ -128,6 +129,7 @@ async function confirmarPagamento(req, res) {
        VALUES ($1, NULL, NULL, $2, $3, 'pago', $4)`,
       [id, formaConfirmada, pedido.total, observacoes]
     );
+    await registrarVendaSiteNoCaixa(client, { vendaId:id, formaPagamento:formaConfirmada, valor:pedido.total, usuarioId:req.usuario?.id || null });
     await client.query("COMMIT");
     await enviarComprovanteVendaPaga(id);
     res.json({ ok: true, message: "Pagamento confirmado.", pedido_id: id });

@@ -5,6 +5,7 @@ const { criarOrderPoint, consultarOrderPoint } = require("../services/mercado-pa
 const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
 const crypto = require("crypto");
 const { criptografarSegredo, aplicarConfigMercadoPago } = require("../config/mercado-pago-runtime");
+const { registrarVendaSiteNoCaixa, formaCaixa } = require("../services/caixa-site.service");
 
 const idValido = value => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
 const texto = value => { const result = String(value || "").trim(); return result || null; };
@@ -165,6 +166,7 @@ async function aplicarPagamentoMercadoPago(pagamento, { webhook = null, logId = 
 
     const pagamentoJaRegistrado = (await client.query("SELECT id FROM pagamentos_venda WHERE mercado_pago_payment_id=$1 LIMIT 1", [String(pagamento.id)])).rows[0];
     if (venda.status_pagamento === "pago" || pagamentoJaRegistrado) {
+      await registrarVendaSiteNoCaixa(client, { vendaId, formaPagamento: formaCaixa(pagamento.payment_type_id || pagamento.payment_method_id || venda.forma_pagamento), valor: pagamento.total_paid_amount || pagamento.transaction_amount || venda.total });
       await client.query("UPDATE mercado_pago_pagamentos SET resultado_processamento='ja_processado',erro_processamento=NULL WHERE id=$1", [registro.id]);
       await prepararEmissaoFiscalAposPagamento(client, vendaId, { origem: "mercado_pago_approved_idempotente", payment_id: String(pagamento.id) });
       await atualizarLog(client, logId, "processado", "Venda já paga; webhook processado sem duplicar pagamento.", pagamento, vendaId);
@@ -200,6 +202,7 @@ async function aplicarPagamentoMercadoPago(pagamento, { webhook = null, logId = 
        forma_pagamento=$2,updated_at=NOW() WHERE id=$1`,
       [vendaId, formaPagamentoMercadoPago(pagamento)]
     );
+    await registrarVendaSiteNoCaixa(client, { vendaId, formaPagamento: formaCaixa(pagamento.payment_type_id || pagamento.payment_method_id || venda.forma_pagamento), valor });
     await client.query("UPDATE mercado_pago_pagamentos SET status='approved',resultado_processamento='aprovado_processado',erro_processamento=NULL WHERE id=$1", [registro.id]);
     // O checkout público já baixou o estoque na criação do pedido; não baixar novamente aqui.
     await prepararEmissaoFiscalAposPagamento(client, vendaId, { origem: "mercado_pago_approved", payment_id: String(pagamento.id) });
