@@ -3,6 +3,8 @@
   const TOKEN_KEY = "gisele-flavia-customer-token";
   const money = value => Number(value || 0).toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+  let paidOrders = new Set();
+  let loadingOrders = false;
 
   function closeReceipt() { document.querySelector(".customer-receipt-modal")?.remove(); }
 
@@ -36,8 +38,8 @@
     document.querySelectorAll("article").forEach(article => {
       const heading = Array.from(article.querySelectorAll("p")).find(element => /^Pedido #\d+$/.test(element.textContent.trim()));
       if (!heading || article.querySelector(".customer-receipt-button")) return;
-      if (!/\bpago\b|pagamento\s+confirmado/i.test(article.textContent)) return;
       const id = Number(heading.textContent.match(/\d+/)?.[0]); if (!id) return;
+      if (!paidOrders.has(id) && !/pagamento:\s*pago\b|pagamento\s+confirmado/i.test(article.textContent)) return;
       const button = document.createElement("button");
       button.type = "button"; button.className = "customer-receipt-button"; button.textContent = "Ver comprovante";
       button.addEventListener("click", () => openReceipt(id, button));
@@ -45,6 +47,20 @@
     });
   }
 
+  async function loadPaidOrders() {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token || loadingOrders) return enhanceOrders();
+    loadingOrders = true;
+    try {
+      const response = await fetch("/api/clientes-auth/me/pedidos", { headers:{ Authorization:`Bearer ${token}` }, cache:"no-store" });
+      if (response.ok) {
+        const orders = await response.json();
+        paidOrders = new Set((orders || []).filter(order => String(order.status_pagamento).toLowerCase() === "pago").map(order => Number(order.id)));
+      }
+    } finally { loadingOrders = false; enhanceOrders(); }
+  }
+
   new MutationObserver(enhanceOrders).observe(document.documentElement, { childList:true, subtree:true });
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", enhanceOrders, { once:true }); else enhanceOrders();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadPaidOrders, { once:true }); else loadPaidOrders();
+  window.addEventListener("focus", loadPaidOrders);
 })();
