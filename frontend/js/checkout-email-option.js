@@ -27,8 +27,8 @@
       wrapper.innerHTML = '<input type="checkbox" checked style="width:18px;height:18px;margin-top:1px;accent-color:#FE0182"><span>Quero receber por e-mail o comprovante da compra após a confirmação do pagamento.</span>';
       wrapper.querySelector("input").addEventListener("change", event => { window.GiseleEmailReceiptOptIn = event.target.checked; });
     }
-    const actions = submit.parentElement;
-    if (actions && wrapper.parentElement !== actions.parentElement) actions.parentElement.insertBefore(wrapper, actions);
+    const paymentSection = paymentHeading.parentElement;
+    if (paymentSection && wrapper.parentElement !== paymentSection) paymentSection.appendChild(wrapper);
   }
 
   new MutationObserver(installOption).observe(document.documentElement, { childList:true, subtree:true });
