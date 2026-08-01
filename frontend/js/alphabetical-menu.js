@@ -73,7 +73,26 @@
     });
   }
 
-  function arrange() { arrangeDesktop(); arrangeMobile(); }
+  function arrangeFooter() {
+    const heading = Array.from(document.querySelectorAll("footer h4"))
+      .find(item => item.textContent.trim().toLocaleLowerCase("pt-BR") === "categorias");
+    const list = heading?.parentElement?.querySelector("ul");
+    if (!list || !categories.length) return;
+    const signature = categories.join("|");
+    if (list.dataset.alphabeticalMenu === signature) return;
+    const nodes = categories.map(name => {
+      const item = document.createElement("li");
+      const link = categoryLink(name);
+      link.className = "text-sm hover:text-white transition-colors";
+      link.style.color = name === "Promoções" ? "#FE0182" : "#9CA3AF";
+      item.appendChild(link);
+      return item;
+    });
+    list.replaceChildren(...nodes);
+    list.dataset.alphabeticalMenu = signature;
+  }
+
+  function arrange() { arrangeDesktop(); arrangeMobile(); arrangeFooter(); }
 
   async function start() {
     try {
