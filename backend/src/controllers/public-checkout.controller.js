@@ -76,6 +76,9 @@ async function checkoutPublico(req, res) {
       const result = await client.query(`SELECT valor,prazo_estimado FROM fretes_bairro WHERE ativo=TRUE AND LOWER(bairro)=LOWER($1) AND LOWER(cidade)=LOWER($2) AND LOWER(estado)=LOWER($3) LIMIT 1`, [texto(entrega.bairro), texto(entrega.cidade), texto(entrega.estado) || "SP"]);
       if (!result.rows[0]) throw erroValidacao("Este bairro ainda não é atendido para entrega local.");
       frete = dinheiro(result.rows[0].valor);
+      const configuracao = await client.query("SELECT valor FROM configuracoes_loja WHERE chave = 'frete_gratis_minimo' LIMIT 1");
+      const freteGratisMinimo = dinheiro(configuracao.rows[0]?.valor ?? 299);
+      if (subtotal > freteGratisMinimo) frete = 0;
     }
     const total = dinheiro(subtotal + frete);
     const venda = await client.query(`INSERT INTO vendas (cliente_id,usuario_id,subtotal,desconto,frete_valor,total,total_pago,troco,valor_faltante,forma_pagamento,parcelas,canal_venda,origem_venda,tem_entrega,status_pagamento,status_entrega,caixa_id,maquininha_id,status,observacoes) VALUES ($1,NULL,$2,0,$3,$4,0,0,$4,$5,$6,'site','checkout_publico',$7,'pendente',$8,NULL,NULL,'pendente',$9) RETURNING id,total,status_pagamento,parcelas`, [clienteId,subtotal,frete,total,formaPagamento,parcelas,tipoEntrega === "entrega_local",tipoEntrega === "entrega_local" ? "pendente" : "sem_entrega",texto(req.body.observacoes)]);

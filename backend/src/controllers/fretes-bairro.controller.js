@@ -178,13 +178,14 @@ async function calcularFreteBairro(req, res) {
   const bairro = normalizeOptional(req.query.bairro);
   const cidade = normalizeOptional(req.query.cidade);
   const estado = (normalizeOptional(req.query.estado) || "SP").toUpperCase();
+  const subtotal = req.query.subtotal === undefined ? null : toMoneyNumber(req.query.subtotal);
 
   if (!bairro || !cidade) {
     return res.status(400).json({ message: "Informe bairro e cidade para calcular o frete." });
   }
 
   try {
-    const result = await query(
+    const [result, configuracao] = await Promise.all([query(
       `
         SELECT id, bairro, cidade, estado, valor, prazo_estimado
         FROM fretes_bairro
@@ -193,7 +194,7 @@ async function calcularFreteBairro(req, res) {
           AND LOWER(estado) = LOWER($2);
       `,
       [cidade, estado]
-    );
+    ), query("SELECT valor FROM configuracoes_loja WHERE chave = 'frete_gratis_minimo' LIMIT 1")]);
 
     const bairroBusca = normalizeSearch(bairro);
     const frete = result.rows.find(row => normalizeSearch(row.bairro) === bairroBusca);
@@ -202,11 +203,18 @@ async function calcularFreteBairro(req, res) {
       return res.status(404).json({ message: "Bairro não atendido para entrega local." });
     }
 
+    const valorOriginal = Number(frete.valor);
+    const freteGratisMinimo = Number(configuracao.rows[0]?.valor ?? 299);
+    const freteGratis = subtotal !== null && subtotal > freteGratisMinimo;
+
     res.json({
       bairro: frete.bairro,
       cidade: frete.cidade,
       estado: frete.estado,
-      valor: frete.valor,
+      valor: freteGratis ? 0 : valorOriginal,
+      valor_original: valorOriginal,
+      frete_gratis: freteGratis,
+      frete_gratis_minimo: freteGratisMinimo,
       prazo_estimado: frete.prazo_estimado,
     });
   } catch (error) {

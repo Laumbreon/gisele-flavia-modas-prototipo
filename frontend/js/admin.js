@@ -43,6 +43,11 @@
     window.location.replace("/login");
   }
 
+  async function logout() {
+    try { await fetch(`${API}/auth/logout`, { method: "POST" }); }
+    finally { redirectLogin(); }
+  }
+
   async function request(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (state.session?.token) headers.set("Authorization", `Bearer ${state.session.token}`);
@@ -145,6 +150,7 @@
         <article class="card metric accent"><small>Vendas pagas no site</small><strong>${money(paidTotal)}</strong></article>
         <article class="card metric"><small>Produtos ativos</small><strong>${activeProducts}</strong></article>
         <article class="card metric"><small>Pedidos pendentes</small><strong>${pendingOrders}</strong></article>
+        <article class="card metric"><small>Clientes cadastrados</small><strong>${customers.length}</strong></article>
         <article class="card metric"><small>Estoque baixo</small><strong>${lowStock}</strong></article>
       </div>
       <div class="grid-two">
@@ -324,7 +330,17 @@
   async function renderTeam() {
     loading("Carregando equipe...");
     state.users = await request("/usuarios");
-    view.innerHTML = `<div class="page-actions"><div><strong>${state.users.length} usuário(s) administrativo(s)</strong><p>Contas com acesso ao sistema.</p></div></div>${state.users.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastro</th></tr></thead><tbody>${state.users.map((item) => `<tr><td><strong>${escapeHtml(item.nome)}</strong></td><td>${escapeHtml(item.email)}</td><td>${escapeHtml(item.tipo)}</td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativo" : "Inativo"}</span></td><td>${date(item.created_at)}</td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum usuário administrativo cadastrado.")}`;
+    const admins = state.users.filter((item) => ["dona", "super_admin"].includes(item.tipo));
+    view.innerHTML = `<div class="page-actions"><div><strong>${admins.length} de 3 administradores cadastrados</strong><p>Contas com acesso total ao painel.</p></div>${admins.length < 3 ? `<button class="btn" data-action="new-admin">＋ Novo administrador</button>` : `<span class="badge">Limite atingido</span>`}</div>${admins.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th>Ações</th></tr></thead><tbody>${admins.map((item) => `<tr><td><strong>${escapeHtml(item.nome)}</strong></td><td>${escapeHtml(item.email)}${item.protegido ? ` <span class="badge">Protegido</span>` : ""}</td><td>Administrador</td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativo" : "Inativo"}</span></td><td>${date(item.created_at)}</td><td>${item.protegido ? "Não pode ser excluído" : `<button class="btn secondary small" data-action="delete-admin" data-id="${item.id}">Excluir</button>`}</td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum administrador cadastrado.")}`;
+  }
+
+  function adminForm() {
+    return `<form data-form="admin"><div class="field-grid">
+      <div class="field full"><label>Nome</label><input name="nome" minlength="2" maxlength="120" required></div>
+      <div class="field full"><label>E-mail</label><input name="email" type="email" maxlength="160" required></div>
+      <div class="field full"><label>Senha temporária</label><input name="senha" type="password" minlength="8" required autocomplete="new-password"></div>
+      <div class="field full help">O sistema permite no máximo três administradores ativos.</div>
+    </div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn" type="submit">Cadastrar administrador</button></div></form>`;
   }
 
   function formObject(form) {
@@ -349,6 +365,7 @@
       else if (kind === "settings") await submitSettings(form);
       else if (kind === "edit-category") await submitEditCategory(form);
       else if (kind === "pay-order") await submitPayOrder(form);
+      else if (kind === "admin") await submitAdmin(form);
     } catch (error) { toast(error.message, true); }
     finally { if (submit?.isConnected) { submit.disabled = false; submit.textContent = original; } }
   }
@@ -423,6 +440,11 @@
     closeModal(); toast(result.message); await renderOrders();
   }
 
+  async function submitAdmin(form) {
+    await request("/usuarios/administradores", { method: "POST", body: JSON.stringify(formObject(form)) });
+    closeModal(); toast("Administrador cadastrado."); await renderTeam();
+  }
+
   async function handleClick(event) {
     const close = event.target.closest("[data-close-modal]"); if (close) { closeModal(); return; }
     const nav = event.target.closest("[data-nav]"); if (nav) { await navigate(nav.dataset.nav); return; }
@@ -450,6 +472,8 @@
       else if (action === "new-freight") openModal("Novo bairro de entrega", freightForm());
       else if (action === "edit-freight") openModal("Editar frete", freightForm(state.freight.find((item) => item.id === id)));
       else if (action === "delete-freight") await deleteFreight(id);
+      else if (action === "new-admin") openModal("Novo administrador", adminForm());
+      else if (action === "delete-admin") await deleteAdmin(id);
     } catch (error) { toast(error.message, true); }
   }
 
@@ -507,6 +531,12 @@
     await request(`/fretes-bairro/${id}`, { method: "DELETE" }); toast("Frete desativado."); await renderFreight();
   }
 
+  async function deleteAdmin(id) {
+    if (!confirm("Excluir este administrador?")) return;
+    const result = await request(`/usuarios/administradores/${id}`, { method: "DELETE" });
+    toast(result.message); await renderTeam();
+  }
+
   async function handleChange(event) {
     const select = event.target.closest('[data-action="delivery-status"]');
     if (select) {
@@ -517,7 +547,7 @@
 
   function bindEvents() {
     document.querySelectorAll(".nav-item").forEach((button) => button.addEventListener("click", () => navigate(button.dataset.view)));
-    document.getElementById("logoutButton").addEventListener("click", redirectLogin);
+    document.getElementById("logoutButton").addEventListener("click", logout);
     document.getElementById("menuButton").addEventListener("click", (event) => {
       const sidebar = document.getElementById("sidebar");
       const open = sidebar.classList.toggle("open");

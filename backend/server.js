@@ -71,10 +71,6 @@ if (fs.existsSync(frontendIndex)) {
     app.use("/assets", express.static(catalogAssetsDirectory, { index: false }));
   }
 
-  if (fs.existsSync(frontendAdmin)) {
-    app.get("/admin", (req, res) => res.sendFile(frontendAdmin));
-  }
-
   app.get("*", (req, res, next) => {
     if (req.path.startsWith("/api/") || req.method !== "GET") return next();
     return res.sendFile(frontendIndex);
@@ -98,5 +94,3 @@ app.listen(port, () => {
     DB_NAME: process.env.DB_NAME || "gisele_flavia_modas",
   });
 });
-
-

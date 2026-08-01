@@ -89,11 +89,28 @@ async function login(req, res) {
       { expiresIn: getJwtExpiresIn() }
     );
 
+    res.cookie("gisele_admin_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 8 * 60 * 60 * 1000,
+    });
     res.json({ token, usuario: usuarioSeguro, permissoes });
   } catch (error) {
     console.error("Erro ao autenticar usuário:", error);
     res.status(500).json({ message: "Não foi possível autenticar no momento." });
   }
+}
+
+function logout(_req, res) {
+  res.clearCookie("gisele_admin_session", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+  });
+  res.json({ ok: true, message: "Sessão encerrada." });
 }
 
 async function me(req, res) {
@@ -124,5 +141,6 @@ async function me(req, res) {
 
 module.exports = {
   login,
+  logout,
   me,
 };

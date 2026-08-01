@@ -52,7 +52,7 @@ button { cursor: pointer; }
 .btn.secondary:hover { border-color: #d3a4bd; }
 .btn.danger { background: var(--danger); }
 .btn.small { min-height: 32px; padding: 6px 10px; font-size: 12px; }
-.cards { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 16px; }
 .card { padding: 21px; border: 1px solid var(--line); border-radius: 17px; background: var(--paper); box-shadow: 0 8px 25px rgba(66,16,42,.04); }
 .metric small { color: var(--muted); font-weight: 650; }
 .metric strong { display: block; margin-top: 10px; font: 700 31px Georgia,serif; }
