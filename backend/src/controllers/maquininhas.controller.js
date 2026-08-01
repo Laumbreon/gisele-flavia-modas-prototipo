@@ -44,6 +44,7 @@ function validarDados(normalizados) {
   const valores=normalizados.valores;
   if (!valores[0]) return "Nome é obrigatório.";
   if (normalizados.modoPoint && !valores[12]) return "Informe o Terminal ID para ativar o Mercado Pago Point integrado.";
+  if (normalizados.modoPoint && !valores[12].includes("__")) return "Terminal ID inválido. Informe o identificador completo fornecido pelo Mercado Pago, no formato TIPO__SERIAL.";
   return null;
 }
 
