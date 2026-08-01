@@ -185,7 +185,7 @@ async function calcularFreteBairro(req, res) {
   }
 
   try {
-    const [result, configuracao] = await Promise.all([query(
+    const [result, configuracoes] = await Promise.all([query(
       `
         SELECT id, bairro, cidade, estado, valor, prazo_estimado
         FROM fretes_bairro
@@ -194,7 +194,7 @@ async function calcularFreteBairro(req, res) {
           AND LOWER(estado) = LOWER($2);
       `,
       [cidade, estado]
-    ), query("SELECT valor FROM configuracoes_loja WHERE chave = 'frete_gratis_minimo' LIMIT 1")]);
+    ), query("SELECT chave,valor FROM configuracoes_loja WHERE chave = ANY($1::varchar[])", [["frete_gratis_minimo", "frete_promocional_minimo", "frete_promocional_valor"]])]);
 
     const bairroBusca = normalizeSearch(bairro);
     const frete = result.rows.find(row => normalizeSearch(row.bairro) === bairroBusca);
@@ -204,17 +204,25 @@ async function calcularFreteBairro(req, res) {
     }
 
     const valorOriginal = Number(frete.valor);
-    const freteGratisMinimo = Number(configuracao.rows[0]?.valor ?? 299);
-    const freteGratis = subtotal !== null && subtotal > freteGratisMinimo;
+    const regras = Object.fromEntries(configuracoes.rows.map(row => [row.chave, Number(row.valor)]));
+    const freteGratisMinimo = regras.frete_gratis_minimo ?? 0;
+    const fretePromocionalMinimo = regras.frete_promocional_minimo ?? 300;
+    const fretePromocionalValor = regras.frete_promocional_valor ?? 19.99;
+    const fretePromocional = subtotal !== null && fretePromocionalMinimo > 0 && subtotal >= fretePromocionalMinimo;
+    const freteGratis = subtotal !== null && freteGratisMinimo > 0 && subtotal >= freteGratisMinimo;
+    const valorPromocional = fretePromocional ? Math.min(valorOriginal, fretePromocionalValor) : valorOriginal;
 
     res.json({
       bairro: frete.bairro,
       cidade: frete.cidade,
       estado: frete.estado,
-      valor: freteGratis ? 0 : valorOriginal,
+      valor: freteGratis ? 0 : valorPromocional,
       valor_original: valorOriginal,
       frete_gratis: freteGratis,
       frete_gratis_minimo: freteGratisMinimo,
+      frete_promocional: fretePromocional && !freteGratis,
+      frete_promocional_minimo: fretePromocionalMinimo,
+      frete_promocional_valor: fretePromocionalValor,
       prazo_estimado: frete.prazo_estimado,
     });
   } catch (error) {

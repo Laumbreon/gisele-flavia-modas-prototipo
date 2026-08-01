@@ -514,7 +514,9 @@
         <div class="field full"><label>Título principal da home</label><input name="hero_titulo" maxlength="120" required value="${escapeHtml(s.hero_titulo)}"></div>
         <div class="field full"><label>Texto abaixo do título</label><textarea name="hero_subtitulo" maxlength="240" required>${escapeHtml(s.hero_subtitulo)}</textarea></div>
         <div class="field"><label>Instagram</label><input name="instagram_usuario" required value="@${escapeHtml(s.instagram_usuario)}"></div>
-        <div class="field"><label>Frete grátis acima de (R$)</label><input name="frete_gratis_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_gratis_minimo)}"></div>
+        <div class="field"><label>Compra mínima para frete promocional (R$)</label><input name="frete_promocional_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_promocional_minimo)}"></div>
+        <div class="field"><label>Valor do frete promocional (R$)</label><input name="frete_promocional_valor" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_promocional_valor)}"></div>
+        <div class="field"><label>Frete grátis acima de (R$)</label><input name="frete_gratis_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_gratis_minimo)}"><small>Use 0 para desativar o frete grátis.</small></div>
         <div class="field"><label>Parcelas sem juros</label><input name="parcelas_sem_juros" type="number" min="1" max="24" step="1" required value="${escapeHtml(s.parcelas_sem_juros)}"></div>
         <div class="field full"><h3>Seção de categorias</h3></div>
         <div class="field"><label>Título</label><input name="categorias_titulo" maxlength="100" required value="${escapeHtml(s.categorias_titulo)}"></div>

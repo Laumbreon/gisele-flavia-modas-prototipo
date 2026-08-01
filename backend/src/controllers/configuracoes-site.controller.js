@@ -36,6 +36,16 @@ const CONFIGURACOES = {
     limite: 20,
     descricao: "Valor mínimo para comunicação de frete grátis",
   },
+  frete_promocional_minimo: {
+    padrao: "300.00",
+    limite: 20,
+    descricao: "Subtotal mínimo para aplicar o frete promocional",
+  },
+  frete_promocional_valor: {
+    padrao: "19.99",
+    limite: 20,
+    descricao: "Valor do frete promocional",
+  },
   parcelas_sem_juros: {
     padrao: "12",
     limite: 3,
@@ -115,8 +125,8 @@ async function salvarConfiguracoes(req, res) {
     if (chave === "instagram_usuario" && !/^[a-zA-Z0-9._]+$/.test(valor.replace(/^@/, ""))) {
       return res.status(400).json({ message: "Informe um usuário válido do Instagram." });
     }
-    if (chave === "frete_gratis_minimo" && (!Number.isFinite(Number(valor)) || Number(valor) < 0)) {
-      return res.status(400).json({ message: "Informe um valor válido para o frete grátis." });
+    if (["frete_gratis_minimo", "frete_promocional_minimo", "frete_promocional_valor"].includes(chave) && (!Number.isFinite(Number(valor)) || Number(valor) < 0)) {
+      return res.status(400).json({ message: "Informe valores válidos para as regras de frete." });
     }
     if (chave === "parcelas_sem_juros" && (!Number.isInteger(Number(valor)) || Number(valor) < 1 || Number(valor) > 24)) {
       return res.status(400).json({ message: "As parcelas devem estar entre 1 e 24." });
