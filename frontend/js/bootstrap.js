@@ -1,2 +1,2 @@
 await (window.GiseleShoppingReady || Promise.resolve());
-await import("/js/app.js?v=20260801-three-installments");
+await import("/js/app.js?v=20260801-pix-confirmed-only");

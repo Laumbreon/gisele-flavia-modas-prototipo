@@ -25,6 +25,10 @@ function extrairVendaId(externalReference) {
 
 function formaPagamentoMercadoPago() { return "mercado_pago"; }
 
+function ambienteMercadoPagoProducao() {
+  return ["production", "producao"].includes(String(process.env.MERCADO_PAGO_ENV || "sandbox").trim().toLowerCase());
+}
+
 function headersWebhookSeguros(req) {
   return { "x-request-id": texto(req.headers["x-request-id"]), "user-agent": texto(req.headers["user-agent"]), "content-type": texto(req.headers["content-type"]), assinatura_presente: Boolean(req.headers["x-signature"]) };
 }
@@ -121,6 +125,23 @@ async function aplicarPagamentoMercadoPago(pagamento, { webhook = null, logId = 
       await atualizarLog(client, logId, "processado", mensagem, pagamento, vendaId);
       await client.query("COMMIT");
       return { status, venda_id: vendaId, message: mensagem };
+    }
+
+    if (venda.forma_pagamento === "pix") {
+      const pixConfirmado = String(pagamento.payment_method_id || "").toLowerCase() === "pix"
+        && String(pagamento.payment_type_id || "").toLowerCase() === "bank_transfer"
+        && Boolean(pagamento.date_approved)
+        && Number(pagamento.total_paid_amount || 0) >= Number(venda.total || 0)
+        && ambienteMercadoPagoProducao();
+      if (!pixConfirmado) {
+        const mensagem = ambienteMercadoPagoProducao()
+          ? "PIX ainda não consta como depositado integralmente na conta Mercado Pago."
+          : "PIX de teste não confirma compra real; ative uma credencial Mercado Pago de produção.";
+        await client.query("UPDATE mercado_pago_pagamentos SET resultado_processamento='pix_aguardando_deposito',erro_processamento=$2 WHERE id=$1", [registro.id, mensagem]);
+        await atualizarLog(client, logId, "processado", mensagem, pagamento, vendaId);
+        await client.query("COMMIT");
+        return { status: "pix_aguardando_deposito", venda_id: vendaId, message: mensagem };
+      }
     }
 
     const pagamentoJaRegistrado = (await client.query("SELECT id FROM pagamentos_venda WHERE mercado_pago_payment_id=$1 LIMIT 1", [String(pagamento.id)])).rows[0];

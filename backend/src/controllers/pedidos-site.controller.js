@@ -111,6 +111,7 @@ async function confirmarPagamento(req, res) {
     if (!pedido) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Pedido do site não encontrado." }); }
     if (pedido.status === "cancelada" || pedido.status_pagamento === "cancelado") throw Object.assign(new Error("Pedido cancelado não pode receber pagamento."), { statusCode: 409 });
     if (pedido.status_pagamento === "pago") throw Object.assign(new Error("O pagamento deste pedido já foi confirmado."), { statusCode: 409 });
+    if (pedido.forma_pagamento === "pix") throw Object.assign(new Error("Pedidos PIX são confirmados automaticamente somente após o depósito aprovado na conta Mercado Pago."), { statusCode: 409 });
     const formaConfirmada = forma || pedido.forma_pagamento;
     if (!FORMAS_PAGAMENTO.has(formaConfirmada)) throw Object.assign(new Error("Informe uma forma de pagamento válida."), { statusCode: 400 });
     await client.query(
