@@ -20,7 +20,10 @@ function texto(value) {
 }
 
 async function listarPedidosSite(req, res) {
-  const filtros = ["v.canal_venda = 'site'", "COALESCE(v.excluido_painel,FALSE) = FALSE"];
+  const visao = texto(req.query.visao) === "cancelados" ? "cancelados" : "ativos";
+  const filtros = ["v.canal_venda = 'site'"];
+  if (visao === "cancelados") filtros.push("(v.status='cancelada' OR v.status_pagamento='cancelado')");
+  else filtros.push("COALESCE(v.excluido_painel,FALSE) = FALSE", "COALESCE(v.status,'') <> 'cancelada'", "COALESCE(v.status_pagamento,'') <> 'cancelado'");
   const valores = [];
   const adicionar = (sql, valor) => { valores.push(valor); filtros.push(sql.replace("?", `$${valores.length}`)); };
 
