@@ -1,5 +1,6 @@
 const { pool } = require("../config/db");
 const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
+const { consultarPagamento, cancelarPagamentoPendente } = require("../services/mercado-pago.service");
 
 const FORMAS_PAGAMENTO = new Set(["pix", "dinheiro", "cartao"]);
 const STATUS_ENTREGA = new Set(["pendente", "separando", "pronto_retirada", "saiu_entrega", "entregue", "cancelado"]);
@@ -167,6 +168,43 @@ async function cancelarPedido(req, res) {
   } finally { client.release(); }
 }
 
+async function excluirPedido(req, res) {
+  const id = idPedido(req, res);
+  if (!id) return;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const pedido = (await client.query("SELECT * FROM vendas WHERE id=$1 AND canal_venda='site' FOR UPDATE", [id])).rows[0];
+    if (!pedido) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Pedido do site não encontrado." }); }
+    if (pedido.status_pagamento === "pago" || Number(pedido.total_pago || 0) > 0) throw Object.assign(new Error("Pedidos com pagamento efetivado devem permanecer no histórico financeiro e não podem ser excluídos."), { statusCode: 409 });
+    const fiscal = (await client.query("SELECT id FROM documentos_fiscais WHERE venda_id=$1 LIMIT 1", [id])).rows[0];
+    if (fiscal) throw Object.assign(new Error("Este pedido possui documento fiscal vinculado e não pode ser excluído."), { statusCode: 409 });
+    const jaCancelado = ["cancelado", "cancelada"].includes(String(pedido.status_pagamento).toLowerCase()) || ["cancelado", "cancelada"].includes(String(pedido.status).toLowerCase());
+    const mp = (await client.query("SELECT * FROM mercado_pago_pagamentos WHERE venda_id=$1 ORDER BY created_at DESC LIMIT 1 FOR UPDATE", [id])).rows[0];
+    if (mp?.payment_id) {
+      const pagamento = await consultarPagamento(mp.payment_id);
+      if (String(pagamento.status).toLowerCase() === "approved") throw Object.assign(new Error("O Mercado Pago já aprovou este pagamento; o pedido não pode ser excluído."), { statusCode: 409 });
+      if (["pending", "in_process", "authorized"].includes(String(pagamento.status).toLowerCase())) await cancelarPagamentoPendente(mp.payment_id);
+    }
+    if (!jaCancelado) {
+      const itens = (await client.query("SELECT produto_id,produto_variacao_id,produto_nome,quantidade FROM itens_venda WHERE venda_id=$1", [id])).rows;
+      for (const item of itens) {
+        if (item.produto_variacao_id) await client.query("UPDATE estoque SET quantidade=quantidade+$1,updated_at=NOW() WHERE produto_variacao_id=$2", [item.quantidade, item.produto_variacao_id]);
+        await client.query("INSERT INTO movimentacoes_estoque (produto_id,produto_variacao_id,tipo,quantidade,motivo,responsavel,observacoes) VALUES ($1,$2,'entrada',$3,$4,$5,$6)", [item.produto_id,item.produto_variacao_id,item.quantidade,`Exclusão administrativa do pedido #${id}`,req.usuario?.nome||"Administração",item.produto_nome]);
+      }
+    }
+    await client.query("DELETE FROM mercado_pago_pagamentos WHERE venda_id=$1", [id]);
+    await client.query("UPDATE mercado_pago_point_orders SET venda_id=NULL,updated_at=NOW() WHERE venda_id=$1", [id]);
+    await client.query("DELETE FROM vendas WHERE id=$1", [id]);
+    await client.query("COMMIT");
+    res.json({ ok:true, message:"Pedido excluído definitivamente." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao excluir pedido:", error.message);
+    res.status(error.statusCode || 500).json({ message:error.statusCode ? error.message : "Não foi possível excluir o pedido." });
+  } finally { client.release(); }
+}
+
 async function atualizarStatusEntrega(req, res) {
   const id = idPedido(req, res);
   if (!id) return;
@@ -195,4 +233,4 @@ async function atualizarStatusEntrega(req, res) {
   } finally { client.release(); }
 }
 
-module.exports = { listarPedidosSite, detalharPedidoSite, confirmarPagamento, cancelarPedido, atualizarStatusEntrega };
+module.exports = { listarPedidosSite, detalharPedidoSite, confirmarPagamento, cancelarPedido, excluirPedido, atualizarStatusEntrega };

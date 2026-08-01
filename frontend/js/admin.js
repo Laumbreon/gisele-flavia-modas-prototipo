@@ -392,7 +392,7 @@
       ${state.orders.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th>Data</th><th>Ações</th></tr></thead><tbody>${state.orders.map((item) => `<tr>
         <td><strong>#${item.id}</strong><div class="muted">${escapeHtml(item.tipo_entrega || "retirada")}</div></td><td>${escapeHtml(item.cliente || "Cliente")}<div class="muted">${escapeHtml(item.telefone || "")}</div></td><td>${money(item.total)}</td><td><span class="badge ${item.status_pagamento === "pago" ? "" : item.status_pagamento === "cancelado" ? "cancelado" : "pending"}">${escapeHtml(item.status_pagamento || "pendente")}</span></td>
         <td><select data-action="delivery-status" data-id="${item.id}" ${item.status === "cancelada" ? "disabled" : ""}>${deliveryOptions(item.status_entrega, item.tipo_entrega)}</select></td><td>${date(item.created_at)}</td>
-        <td><div class="actions"><button class="btn secondary small" data-action="order-details" data-id="${item.id}">Detalhes</button>${item.status_pagamento !== "pago" && item.status_pagamento !== "cancelado" && item.forma_pagamento !== "pix" ? `<button class="btn small" data-action="pay-order" data-id="${item.id}">Confirmar pagamento</button>` : ""}${item.status_pagamento !== "pago" && item.forma_pagamento === "pix" ? `<span class="badge pending">Confirmação automática</span>` : ""}${item.status !== "cancelada" ? `<button class="btn secondary small" data-action="cancel-order" data-id="${item.id}">Cancelar</button>` : ""}</div></td>
+        <td><div class="actions"><button class="btn secondary small" data-action="order-details" data-id="${item.id}">Detalhes</button>${item.status_pagamento !== "pago" && item.status_pagamento !== "cancelado" && item.forma_pagamento !== "pix" ? `<button class="btn small" data-action="pay-order" data-id="${item.id}">Confirmar pagamento</button>` : ""}${item.status_pagamento !== "pago" && item.forma_pagamento === "pix" ? `<span class="badge pending">Confirmação automática</span>` : ""}${item.status !== "cancelada" ? `<button class="btn secondary small" data-action="cancel-order" data-id="${item.id}">Cancelar</button>` : ""}${item.status_pagamento !== "pago" ? `<button class="btn danger small" data-action="delete-order" data-id="${item.id}">Excluir</button>` : ""}</div></td>
       </tr>`).join("")}</tbody></table></div>` : empty("Ainda não há pedidos feitos pelo site.")}`;
   }
 
@@ -630,6 +630,7 @@
       else if (kind === "campaign-upload") await submitCampaignUpload(form);
       else if (kind === "edit-category") await submitEditCategory(form);
       else if (kind === "pay-order") await submitPayOrder(form);
+      else if (kind === "delete-order") await submitDeleteOrder(form);
       else if (kind === "admin") await submitAdmin(form);
       else if (kind === "pdv-open-cash") await submitPdvOpenCash(form);
       else if (kind === "pdv-sale") await submitPdvSale(form);
@@ -961,6 +962,7 @@
       else if (action === "print-order") printableWindow(`Separação do pedido #${state.currentOrder?.id}`, orderSeparationHtml(state.currentOrder));
       else if (action === "pay-order") await payOrder(id);
       else if (action === "cancel-order") await cancelOrder(id);
+      else if (action === "delete-order") openDeleteOrder(id);
       else if (action === "new-freight") openModal("Novo bairro de entrega", freightForm());
       else if (action === "edit-freight") openModal("Editar frete", freightForm(state.freight.find((item) => item.id === id)));
       else if (action === "delete-freight") await deleteFreight(id);
@@ -1055,6 +1057,15 @@
   async function cancelOrder(id) {
     if (!confirm(`Cancelar o pedido #${id}? O estoque será devolvido.`)) return;
     const result = await request(`/pedidos-site/${id}/cancelar`, { method: "POST", body: "{}" }); toast(result.message); await renderOrders();
+  }
+
+  function openDeleteOrder(id) {
+    openModal(`Excluir pedido #${id}`, `<form data-form="delete-order" data-id="${id}"><div class="help"><strong>Atenção:</strong> esta ação exclui definitivamente o pedido. Se estiver pendente, a cobrança será cancelada e o estoque será devolvido. Pedidos pagos não podem ser excluídos.</div><div style="height:16px"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Excluir pedido</button></div></form>`);
+  }
+
+  async function submitDeleteOrder(form) {
+    const result = await request(`/pedidos-site/${form.dataset.id}`, { method:"DELETE", headers:{ "X-Admin-Pin":form.elements.admin_pin.value } });
+    closeModal(); toast(result.message); await renderOrders();
   }
 
   async function deleteFreight(id) {

@@ -1,6 +1,7 @@
 const express = require("express");
 const controller = require("../controllers/pedidos-site.controller");
 const permissoesMiddleware = require("../middlewares/permissoes.middleware");
+const adminPin = require("../middlewares/admin-pin.middleware");
 
 const router = express.Router();
 const podeVisualizar = permissoesMiddleware(["relatorios.ver", "vendas.criar"]);
@@ -10,6 +11,7 @@ router.get("/", podeVisualizar, controller.listarPedidosSite);
 router.get("/:id", podeVisualizar, controller.detalharPedidoSite);
 router.post("/:id/confirmar-pagamento", podeOperar, controller.confirmarPagamento);
 router.post("/:id/cancelar", podeOperar, controller.cancelarPedido);
+router.delete("/:id", podeOperar, adminPin, controller.excluirPedido);
 router.post("/:id/status-entrega", podeOperar, controller.atualizarStatusEntrega);
 
 module.exports = router;
