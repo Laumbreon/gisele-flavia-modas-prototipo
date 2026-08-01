@@ -12,6 +12,14 @@
     if (element && value && normalizedText(element) !== value) element.textContent = value;
   }
 
+  function escapeHtml(value) {
+    return String(value || "").replace(/[&<>"']/g, character => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[character]);
+  }
+
+  function policyText(value) {
+    return escapeHtml(value).replace(/\r?\n/g, "<br>");
+  }
+
   function setSectionText(key, original) {
     const selector = `[data-site-setting="${key}"]`;
     let element = document.querySelector(selector);
@@ -32,14 +40,35 @@
       <div class="store-policy-card">
         <div class="store-policy-heading">
           <span class="store-policy-icon" aria-hidden="true">!</span>
-          <div><span class="store-policy-kicker">Informações importantes</span><h2 id="store-policy-title">Atenção</h2></div>
+          <div><span class="store-policy-kicker">Informações importantes</span><h2 id="store-policy-title">${escapeHtml(settings.politicas_titulo)}</h2></div>
         </div>
         <div class="store-policy-grid">
-          <article><strong>Prazo de postagem e entrega</strong><p>O prazo de entrega começa a contar após a postagem do pedido.</p><p>Considere <b>até 3 dias para postagem</b> + o prazo de entrega informado na finalização da compra, conforme o frete escolhido.</p></article>
-          <article><strong>Trocas e devoluções</strong><p>Não efetuamos trocas ou devoluções em peças do departamento de Promoções e em casos de avaria ou defeito.</p><p>Esta condição inclui promoções de <b>Black Friday, Bye Bye Verão, Bye Bye Inverno e SOS Jeans</b>, entre outras campanhas promocionais.</p></article>
+          <article><strong>${escapeHtml(settings.politica_entrega_titulo)}</strong><p>${policyText(settings.politica_entrega_texto)}</p></article>
+          <article><strong>${escapeHtml(settings.politica_trocas_titulo)}</strong><p>${policyText(settings.politica_trocas_texto)}</p></article>
         </div>
       </div>`;
     footer.parentNode.insertBefore(section, footer);
+  }
+
+  function ensureContacts() {
+    const footer = document.querySelector("footer");
+    if (!footer) return;
+    let contacts = footer.querySelector(".store-dynamic-contacts");
+    if (!contacts) {
+      contacts = document.createElement("div");
+      contacts.className = "store-dynamic-contacts";
+      footer.prepend(contacts);
+    }
+    const whatsappDigits = String(settings.contato_whatsapp || "").replace(/\D/g, "");
+    const whatsapp = whatsappDigits.length <= 11 ? `55${whatsappDigits}` : whatsappDigits;
+    const links = [
+      settings.contato_telefone ? `<a href="tel:${escapeHtml(String(settings.contato_telefone).replace(/[^\d+]/g, ""))}">${escapeHtml(settings.contato_telefone)}</a>` : "",
+      whatsappDigits ? `<a href="https://wa.me/${escapeHtml(whatsapp)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : "",
+      settings.contato_email ? `<a href="mailto:${escapeHtml(settings.contato_email)}">${escapeHtml(settings.contato_email)}</a>` : "",
+      `<a href="https://www.instagram.com/${escapeHtml(String(settings.instagram_usuario || "").replace(/^@/, ""))}/" target="_blank" rel="noopener noreferrer">@${escapeHtml(String(settings.instagram_usuario || "").replace(/^@/, ""))}</a>`,
+    ].join("");
+    const markup = `<strong>Contato</strong>${links}`;
+    if (contacts.innerHTML !== markup) contacts.innerHTML = markup;
   }
 
   function ensureInformativeImage() {
@@ -108,6 +137,10 @@
     document.querySelectorAll("blockquote.instagram-media").forEach((embed) => {
       if (embed.dataset.instgrmPermalink !== profileUrl) embed.dataset.instgrmPermalink = profileUrl;
     });
+
+    document.querySelectorAll('a[href^="tel:"]').forEach(link => { link.href = `tel:${String(settings.contato_telefone || "").replace(/[^\d+]/g, "")}`; });
+    document.querySelectorAll('a[href^="mailto:"]').forEach(link => { link.href = `mailto:${settings.contato_email}`; });
+    ensureContacts();
 
     ensureDeliveryNotice();
     ensureInformativeImage();

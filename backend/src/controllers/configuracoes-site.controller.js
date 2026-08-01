@@ -21,6 +21,9 @@ const CONFIGURACOES = {
     limite: 80,
     descricao: "Usuário público do Instagram, sem arroba",
   },
+  contato_telefone: { padrao: "", limite: 30, descricao: "Telefone público da loja" },
+  contato_whatsapp: { padrao: "", limite: 30, descricao: "WhatsApp público da loja" },
+  contato_email: { padrao: "", limite: 160, descricao: "E-mail público da loja" },
   hero_titulo: {
     padrao: "Vestindo você para o sucesso.",
     limite: 120,
@@ -77,6 +80,11 @@ const CONFIGURACOES = {
   instagram_selo: { padrao: "Fique por dentro", limite: 60, descricao: "Chamada da seção do Instagram" },
   instagram_titulo: { padrao: "Acompanhe as novidades em primeira mão", limite: 140, descricao: "Título da seção do Instagram" },
   instagram_texto: { padrao: "Lançamentos, combinações e atendimento direto pelo Instagram.", limite: 220, descricao: "Texto da seção do Instagram" },
+  politicas_titulo: { padrao: "Atenção", limite: 100, descricao: "Título da seção de políticas" },
+  politica_entrega_titulo: { padrao: "Prazo de postagem e entrega", limite: 120, descricao: "Título da política de entrega" },
+  politica_entrega_texto: { padrao: "O prazo de entrega começa a contar após a postagem do pedido.\nConsidere até 3 dias para postagem + o prazo de entrega informado na finalização da compra, conforme o frete escolhido.", limite: 1200, descricao: "Texto da política de entrega" },
+  politica_trocas_titulo: { padrao: "Trocas e devoluções", limite: 120, descricao: "Título da política de trocas" },
+  politica_trocas_texto: { padrao: "Não efetuamos trocas ou devoluções em peças do departamento de Promoções e em casos de avaria ou defeito.\nEsta condição inclui promoções de Black Friday, Bye Bye Verão, Bye Bye Inverno e SOS Jeans, entre outras campanhas promocionais.", limite: 1200, descricao: "Texto da política de trocas e devoluções" },
 };
 
 function normalizarConfiguracoes(rows) {
@@ -120,10 +128,17 @@ async function salvarConfiguracoes(req, res) {
   for (const [chave, valorOriginal] of entradas) {
     const definicao = CONFIGURACOES[chave];
     const valor = String(valorOriginal ?? "").trim().slice(0, definicao.limite);
-    if (!valor) return res.status(400).json({ message: `O campo ${chave} não pode ficar vazio.` });
+    const contatosOpcionais = ["contato_telefone", "contato_whatsapp", "contato_email"];
+    if (!valor && !contatosOpcionais.includes(chave)) return res.status(400).json({ message: `O campo ${chave} não pode ficar vazio.` });
 
     if (chave === "instagram_usuario" && !/^[a-zA-Z0-9._]+$/.test(valor.replace(/^@/, ""))) {
       return res.status(400).json({ message: "Informe um usuário válido do Instagram." });
+    }
+    if (chave === "contato_email" && valor && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor)) {
+      return res.status(400).json({ message: "Informe um e-mail de contato válido." });
+    }
+    if (chave === "contato_whatsapp" && valor && !/^\+?[\d\s().-]{10,30}$/.test(valor)) {
+      return res.status(400).json({ message: "Informe um WhatsApp válido, com DDD." });
     }
     if (["frete_gratis_minimo", "frete_promocional_minimo", "frete_promocional_valor"].includes(chave) && (!Number.isFinite(Number(valor)) || Number(valor) < 0)) {
       return res.status(400).json({ message: "Informe valores válidos para as regras de frete." });

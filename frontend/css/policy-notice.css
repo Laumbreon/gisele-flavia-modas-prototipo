@@ -24,6 +24,10 @@
 .customer-receipt-items { border-top: 1px dashed #bbb; }.customer-receipt-items>div{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px dotted #ccc}.customer-receipt-items span:last-child{text-align:right}.customer-receipt-items b,.customer-receipt-items small{display:block}
 .customer-receipt-totals { display: grid; gap: 6px; padding: 13px 0; }.customer-receipt-totals span,.customer-receipt-totals>strong{display:flex;justify-content:space-between}.customer-receipt-totals>strong{color:#ad0257;font-size:17px}
 .customer-receipt-card footer { padding: 13px 0; border-top: 1px dashed #bbb; text-align: center; line-height: 1.6; }.customer-receipt-print{width:100%;padding:11px;border:0;color:#fff;background:#fe0182;font-weight:700}
+.store-dynamic-contacts { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 18px; width: min(1180px, calc(100% - 32px)); margin: 0 auto 24px; padding: 18px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.store-dynamic-contacts strong { width: 100%; color: #fff; text-align: center; }
+.store-dynamic-contacts a { color: #d1d5db; font-size: 13px; text-decoration: none; }
+.store-dynamic-contacts a:hover { color: #fe0182; }
 @media print{body>*{display:none!important}.customer-receipt-modal,.customer-receipt-card{display:block!important;position:static;box-shadow:none;max-height:none}.customer-receipt-backdrop,.customer-receipt-close,.customer-receipt-print{display:none!important}}
 
 @media (max-width: 700px) {

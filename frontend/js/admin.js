@@ -514,6 +514,9 @@
         <div class="field full"><label>Título principal da home</label><input name="hero_titulo" maxlength="120" required value="${escapeHtml(s.hero_titulo)}"></div>
         <div class="field full"><label>Texto abaixo do título</label><textarea name="hero_subtitulo" maxlength="240" required>${escapeHtml(s.hero_subtitulo)}</textarea></div>
         <div class="field"><label>Instagram</label><input name="instagram_usuario" required value="@${escapeHtml(s.instagram_usuario)}"></div>
+        <div class="field"><label>Telefone de contato</label><input name="contato_telefone" type="tel" maxlength="30" value="${escapeHtml(s.contato_telefone)}"></div>
+        <div class="field"><label>WhatsApp com DDD</label><input name="contato_whatsapp" type="tel" maxlength="30" value="${escapeHtml(s.contato_whatsapp)}"></div>
+        <div class="field"><label>E-mail de contato</label><input name="contato_email" type="email" maxlength="160" value="${escapeHtml(s.contato_email)}"></div>
         <div class="field"><label>Compra mínima para frete promocional (R$)</label><input name="frete_promocional_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_promocional_minimo)}"></div>
         <div class="field"><label>Valor do frete promocional (R$)</label><input name="frete_promocional_valor" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_promocional_valor)}"></div>
         <div class="field"><label>Frete grátis acima de (R$)</label><input name="frete_gratis_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_gratis_minimo)}"><small>Use 0 para desativar o frete grátis.</small></div>
@@ -538,6 +541,12 @@
         <div class="field"><label>Chamada</label><input name="instagram_selo" maxlength="60" required value="${escapeHtml(s.instagram_selo)}"></div>
         <div class="field"><label>Título</label><input name="instagram_titulo" maxlength="140" required value="${escapeHtml(s.instagram_titulo)}"></div>
         <div class="field full"><label>Descrição</label><input name="instagram_texto" maxlength="220" required value="${escapeHtml(s.instagram_texto)}"></div>
+        <div class="field full"><h3>Políticas da loja</h3></div>
+        <div class="field full"><label>Título da seção</label><input name="politicas_titulo" maxlength="100" required value="${escapeHtml(s.politicas_titulo)}"></div>
+        <div class="field"><label>Título — postagem e entrega</label><input name="politica_entrega_titulo" maxlength="120" required value="${escapeHtml(s.politica_entrega_titulo)}"></div>
+        <div class="field"><label>Título — trocas e devoluções</label><input name="politica_trocas_titulo" maxlength="120" required value="${escapeHtml(s.politica_trocas_titulo)}"></div>
+        <div class="field"><label>Política de postagem e entrega</label><textarea name="politica_entrega_texto" maxlength="1200" rows="7" required>${escapeHtml(s.politica_entrega_texto)}</textarea></div>
+        <div class="field"><label>Política de trocas e devoluções</label><textarea name="politica_trocas_texto" maxlength="1200" rows="7" required>${escapeHtml(s.politica_trocas_texto)}</textarea></div>
         <div class="field full help">As fotos de categorias e looks são obtidas dos produtos e podem ser alteradas em “Produtos e uploads”.</div>
       </div><div class="form-actions"><button class="btn">Salvar dados do site</button></div></form>
       <div class="carousel-settings"><h3>Imagens do carrossel</h3><p class="help">Envie de 1 a 3 imagens. O novo conjunto substituirá as imagens atuais. Para melhor resultado, use imagens horizontais com pelo menos 1400 × 900 px.</p>
