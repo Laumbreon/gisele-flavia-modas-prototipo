@@ -82,6 +82,38 @@ async function buscarPagamentoPorReferencia(externalReference) {
   return primeiro?.id ? consultarPagamento(primeiro.id) : null;
 }
 
+async function criarPagamentoPixVenda(vendaCompleta) {
+  const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
+  if (!token) throw Object.assign(new Error("Token Mercado Pago não configurado."), { statusCode: 503, code: "MP_TOKEN_NAO_CONFIGURADO" });
+  const appUrl = String(process.env.APP_PUBLIC_URL || "http://localhost:5500").replace(/\/+$/, "");
+  const cpf = String(vendaCompleta.cpf || "").replace(/\D/g, "");
+  const payload = {
+    transaction_amount: Number(vendaCompleta.total),
+    description: `Pedido Gisele Flávia #${vendaCompleta.id}`,
+    payment_method_id: "pix",
+    external_reference: `venda_site_${vendaCompleta.id}`,
+    notification_url: `${appUrl}/api/mercado-pago/webhook`,
+    payer: {
+      email: vendaCompleta.email,
+      first_name: String(vendaCompleta.cliente || "Cliente").trim().split(/\s+/)[0],
+      ...(cpf.length === 11 ? { identification: { type: "CPF", number: cpf } } : {}),
+    },
+  };
+  if (!payload.payer.email) throw Object.assign(new Error("Informe o e-mail da cliente para gerar o PIX."), { statusCode: 400 });
+  const response = await postJson("https://api.mercadopago.com/v1/payments", payload, {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    "X-Idempotency-Key": `pix-venda-site-${vendaCompleta.id}`,
+  });
+  if (!response.ok) {
+    const message = response.data?.message || response.data?.error || `Mercado Pago respondeu HTTP ${response.status}.`;
+    throw Object.assign(new Error(message), { statusCode: response.status >= 400 && response.status < 500 ? 400 : 502, mercadoPago: response.data });
+  }
+  const transaction = response.data?.point_of_interaction?.transaction_data || {};
+  if (!transaction.qr_code && !transaction.ticket_url) throw Object.assign(new Error("O Mercado Pago não retornou o QR Code PIX."), { statusCode: 502, mercadoPago: response.data });
+  return { payment_id: String(response.data.id), status: response.data.status || "pending", status_detail: response.data.status_detail, external_reference: payload.external_reference, qr_code: transaction.qr_code, qr_code_base64: transaction.qr_code_base64, ticket_url: transaction.ticket_url, payload, resposta: response.data };
+}
+
 async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
   if (!token) throw Object.assign(new Error("Token Mercado Pago não configurado."), { statusCode: 503, code: "MP_TOKEN_NAO_CONFIGURADO" });
@@ -132,4 +164,4 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   return { preference_id: response.data.id, init_point: response.data.init_point, sandbox_init_point: response.data.sandbox_init_point, payload, resposta: response.data };
 }
 
-module.exports = { criarPreferenciaPagamentoVenda, consultarPagamento, consultarPagamentoMercadoPago: consultarPagamento, buscarPagamentoPorReferencia };
+module.exports = { criarPreferenciaPagamentoVenda, criarPagamentoPixVenda, consultarPagamento, consultarPagamentoMercadoPago: consultarPagamento, buscarPagamentoPorReferencia };

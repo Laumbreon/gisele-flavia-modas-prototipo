@@ -1,5 +1,5 @@
 const { pool } = require("../config/db");
-const { criarPreferenciaPagamentoVenda, consultarPagamento, buscarPagamentoPorReferencia } = require("../services/mercado-pago.service");
+const { criarPreferenciaPagamentoVenda, criarPagamentoPixVenda, consultarPagamento, buscarPagamentoPorReferencia } = require("../services/mercado-pago.service");
 const { validarAssinaturaWebhookMercadoPago } = require("../utils/mercado-pago-webhook");
 const { criarOrderPoint, consultarOrderPoint } = require("../services/mercado-pago-point.service");
 const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
@@ -290,7 +290,7 @@ async function criarOuObterPreferenciaVenda(id) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const venda = (await client.query(`SELECT v.*,c.nome cliente,c.email,c.telefone FROM vendas v LEFT JOIN clientes c ON c.id=v.cliente_id WHERE v.id=$1 FOR UPDATE OF v`, [id])).rows[0];
+    const venda = (await client.query(`SELECT v.*,c.nome cliente,c.email,c.telefone,c.cpf FROM vendas v LEFT JOIN clientes c ON c.id=v.cliente_id WHERE v.id=$1 FOR UPDATE OF v`, [id])).rows[0];
     if (!venda) throw Object.assign(new Error("Venda não encontrada."), { statusCode: 404 });
     if (venda.canal_venda !== "site") throw Object.assign(new Error("A preferência só pode ser criada para pedidos do site."), { statusCode: 400 });
     if (venda.status_pagamento === "pago") throw Object.assign(new Error("Este pedido já está pago."), { statusCode: 409 });
@@ -301,8 +301,11 @@ async function criarOuObterPreferenciaVenda(id) {
     if (!config.ativo) throw Object.assign(new Error("A integração Mercado Pago está desativada na configuração."), { statusCode: 409 });
     const itens = (await client.query("SELECT * FROM itens_venda WHERE venda_id=$1 ORDER BY id", [id])).rows;
     if (!itens.length) throw Object.assign(new Error("A venda não possui itens para pagamento."), { statusCode: 400 });
-    const mp = await criarPreferenciaPagamentoVenda({ ...venda, itens, config });
-    const saved = await client.query(`INSERT INTO mercado_pago_pagamentos (venda_id,preference_id,init_point,sandbox_init_point,external_reference,status,valor,payload_json,resposta_json,resultado_processamento) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,'link_gerado') RETURNING *`, [id, mp.preference_id, mp.init_point, mp.sandbox_init_point, mp.payload.external_reference, venda.total, mp.payload, mp.resposta]);
+    const mp = venda.forma_pagamento === "pix"
+      ? await criarPagamentoPixVenda({ ...venda, itens, config })
+      : await criarPreferenciaPagamentoVenda({ ...venda, itens, config });
+    const preferenceId = mp.preference_id || `pix_${mp.payment_id}`;
+    const saved = await client.query(`INSERT INTO mercado_pago_pagamentos (venda_id,preference_id,payment_id,init_point,sandbox_init_point,external_reference,status,status_detail,payment_status,payment_status_detail,payment_method_id,payment_type_id,valor,transaction_amount,payload_json,resposta_json,resultado_processamento) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$7,$8,$9,$10,$11,$11,$12,$13,$14) RETURNING *`, [id, preferenceId, mp.payment_id || null, mp.init_point || mp.ticket_url || null, mp.sandbox_init_point || null, mp.external_reference || mp.payload.external_reference, mp.status || "pending", mp.status_detail || null, venda.forma_pagamento === "pix" ? "pix" : null, venda.forma_pagamento === "pix" ? "bank_transfer" : null, venda.total, mp.payload, mp.resposta, venda.forma_pagamento === "pix" ? "pix_qr_gerado" : "link_gerado"]);
     await client.query("COMMIT"); return formatarPreferencia(saved.rows[0]);
   } catch (error) {
     await client.query("ROLLBACK");
@@ -313,7 +316,8 @@ async function criarOuObterPreferenciaVenda(id) {
 function formatarPreferencia(row) {
   const ambiente = String(process.env.MERCADO_PAGO_ENV || "sandbox").toLowerCase();
   const url = ["production","producao"].includes(ambiente) ? row.init_point : (row.sandbox_init_point || row.init_point);
-  return { ok: true, venda_id: row.venda_id, preference_id: row.preference_id, payment_id: row.payment_id, payment_status: row.payment_status || row.status, init_point: row.init_point, sandbox_init_point: row.sandbox_init_point, url_pagamento: url, status: row.status, ambiente };
+  const transaction = row.resposta_json?.point_of_interaction?.transaction_data || {};
+  return { ok: true, venda_id: row.venda_id, preference_id: row.preference_id, payment_id: row.payment_id, payment_status: row.payment_status || row.status, init_point: row.init_point, sandbox_init_point: row.sandbox_init_point, url_pagamento: transaction.ticket_url || url, qr_code: transaction.qr_code || null, qr_code_base64: transaction.qr_code_base64 || null, status: row.status, ambiente };
 }
 
 async function criarPreferencia(req, res) {
