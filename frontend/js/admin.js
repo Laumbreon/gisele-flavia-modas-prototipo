@@ -1060,7 +1060,7 @@
   }
 
   function openDeleteOrder(id) {
-    openModal(`Excluir pedido #${id}`, `<form data-form="delete-order" data-id="${id}"><div class="help"><strong>Atenção:</strong> esta ação exclui definitivamente o pedido. Se estiver pendente, a cobrança será cancelada e o estoque será devolvido. Pedidos pagos não podem ser excluídos.</div><div style="height:16px"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Excluir pedido</button></div></form>`);
+    openModal(`Remover pedido #${id} do painel`, `<form data-form="delete-order" data-id="${id}"><div class="help"><strong>Atenção:</strong> o pedido será removido da lista do painel, mas continuará no perfil da cliente como cancelado. Se estiver pendente, a cobrança será cancelada e o estoque será devolvido. Pedidos pagos não podem ser removidos.</div><div style="height:16px"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Remover do painel</button></div></form>`);
   }
 
   async function submitDeleteOrder(form) {

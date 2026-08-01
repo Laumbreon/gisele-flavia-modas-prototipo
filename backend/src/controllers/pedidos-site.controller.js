@@ -20,7 +20,7 @@ function texto(value) {
 }
 
 async function listarPedidosSite(req, res) {
-  const filtros = ["v.canal_venda = 'site'"];
+  const filtros = ["v.canal_venda = 'site'", "COALESCE(v.excluido_painel,FALSE) = FALSE"];
   const valores = [];
   const adicionar = (sql, valor) => { valores.push(valor); filtros.push(sql.replace("?", `$${valores.length}`)); };
 
@@ -193,11 +193,12 @@ async function excluirPedido(req, res) {
         await client.query("INSERT INTO movimentacoes_estoque (produto_id,produto_variacao_id,tipo,quantidade,motivo,responsavel,observacoes) VALUES ($1,$2,'entrada',$3,$4,$5,$6)", [item.produto_id,item.produto_variacao_id,item.quantidade,`Exclusão administrativa do pedido #${id}`,req.usuario?.nome||"Administração",item.produto_nome]);
       }
     }
-    await client.query("DELETE FROM mercado_pago_pagamentos WHERE venda_id=$1", [id]);
-    await client.query("UPDATE mercado_pago_point_orders SET venda_id=NULL,updated_at=NOW() WHERE venda_id=$1", [id]);
-    await client.query("DELETE FROM vendas WHERE id=$1", [id]);
+    await client.query("UPDATE vendas SET status='cancelada',status_pagamento='cancelado',status_entrega='cancelado',excluido_painel=TRUE,updated_at=NOW() WHERE id=$1", [id]);
+    await client.query("UPDATE pagamentos_venda SET status='cancelado' WHERE venda_id=$1", [id]);
+    await client.query("UPDATE venda_entregas SET status_entrega='cancelado',updated_at=NOW() WHERE venda_id=$1", [id]);
+    await client.query("UPDATE mercado_pago_pagamentos SET status='cancelled',payment_status='cancelled',resultado_processamento='oculto_no_painel',updated_at=NOW() WHERE venda_id=$1", [id]);
     await client.query("COMMIT");
-    res.json({ ok:true, message:"Pedido excluído definitivamente." });
+    res.json({ ok:true, message:"Pedido removido do painel e mantido no histórico da cliente como cancelado." });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Erro ao excluir pedido:", error.message);

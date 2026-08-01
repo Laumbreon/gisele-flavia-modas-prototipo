@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS vendas (
   maquininha_id INTEGER REFERENCES maquininhas(id) ON DELETE SET NULL,
   status VARCHAR(30) NOT NULL DEFAULT 'finalizada',
   observacoes TEXT,
+  excluido_painel BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -310,6 +311,5 @@ CREATE TABLE IF NOT EXISTS admin_pins (
   ativo BOOLEAN NOT NULL DEFAULT TRUE, updated_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
 
 
