@@ -120,7 +120,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .pdv-receipt { width: min(390px, 100%); margin: 0 auto; padding: 22px; border: 1px solid var(--line); border-radius: 12px; color: #1f171c; background: #fffdfd; font-size: 13px; box-shadow: 0 10px 30px rgba(33, 23, 29, .08); }
 .pdv-receipt header { padding-bottom: 14px; border-bottom: 1px dashed #a899a2; text-align: center; }
 .pdv-receipt header > strong { display: block; font: 700 24px Georgia, serif; }
-.receipt-logo { display: block; width: 88px; height: 88px; margin: 0 auto 8px; border-radius: 50%; object-fit: cover; }
+.receipt-logo { display: block; width: 124px; height: 124px; margin: 0 auto 8px; border-radius: 50%; object-fit: cover; filter: grayscale(1) contrast(1.35); }
 .pdv-receipt header span, .pdv-receipt header small { display: block; color: var(--muted); }
 .pdv-receipt header h3 { margin: 12px 0 2px; }
 .receipt-meta, .receipt-item, .receipt-totals > div, .receipt-payments > div { display: flex; justify-content: space-between; gap: 10px; }

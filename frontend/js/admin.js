@@ -855,7 +855,7 @@
     payments.forEach((payment) => { if (payment.forma_pagamento in paidByMethod) paidByMethod[payment.forma_pagamento] += Number(payment.valor || 0); });
     if (!payments.length && sale.forma_pagamento in paidByMethod) paidByMethod[sale.forma_pagamento] = Number(sale.total_pago || sale.total || 0);
     return `<article class="pdv-receipt">
-      <header><img class="receipt-logo" src="/assets/logo.jpeg" alt="Gisele Flávia Moda Feminina"><strong>Gisele Flávia</strong><span>Moda Feminina</span><h3>Comprovante de compra #${Number(sale.id)}</h3></header>
+      <header><img class="receipt-logo" src="/assets/logo-termica.png" alt="Gisele Flávia" style="width:124px;height:124px;border-radius:50%;object-fit:cover"><h3>Comprovante de compra #${Number(sale.id)}</h3></header>
       <div class="receipt-meta"><span>${date(sale.created_at)}</span><span>Caixa #${Number(sale.caixa_id || state.pdvCash?.id || 0)}</span></div>
       <p class="receipt-customer"><b>Cliente:</b> ${escapeHtml(sale.cliente || "Consumidor não identificado")}</p>
       <div class="receipt-lines">${items.map((item) => `<div class="receipt-item"><div><b>${escapeHtml(item.produto_nome || item.produto || "Produto")}</b><small>${escapeHtml([item.tamanho, item.cor].filter(Boolean).join(" · "))}</small><small class="receipt-codes">Ref./lote: ${escapeHtml(item.codigo_ref || item.codigo_interno || item.sku || "Não informado")}<br>Cód. barras: ${escapeHtml(item.codigo_barras || "Não informado")}</small></div><span>${Number(item.quantidade)} × ${money(item.preco_unitario ?? item.preco)}</span><strong>${money(item.subtotal ?? Number(item.quantidade) * Number(item.preco_unitario ?? item.preco))}</strong></div>`).join("")}</div>
