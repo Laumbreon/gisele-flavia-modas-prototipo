@@ -1,6 +1,8 @@
 const { pool } = require("../config/db");
 const { criarPreferenciaPagamentoVenda, consultarPagamento, buscarPagamentoPorReferencia } = require("../services/mercado-pago.service");
 const { validarAssinaturaWebhookMercadoPago } = require("../utils/mercado-pago-webhook");
+const { criarOrderPoint, consultarOrderPoint } = require("../services/mercado-pago-point.service");
+const crypto = require("crypto");
 
 const idValido = value => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
 const texto = value => { const result = String(value || "").trim(); return result || null; };
@@ -295,4 +297,56 @@ async function criarPreferencia(req, res) {
   }
 }
 
-module.exports = { obterConfig, salvarConfig, buscarPagamentoVenda, criarPreferencia, criarOuObterPreferenciaVenda, receberWebhook, sincronizarPagamento, listarLogs, aplicarPagamentoMercadoPago };
+function statusOrderPoint(raw = {}) {
+  const status = String(raw.transactions?.payments?.[0]?.status || raw.status || "pending").toLowerCase();
+  if (["approved", "processed"].includes(status)) return "approved";
+  if (["cancelled", "canceled"].includes(status)) return "cancelled";
+  if (["failed", "declined", "rejected"].includes(status)) return "rejected";
+  if (status === "expired") return "expired";
+  return "pending";
+}
+
+function resumoOrderPoint(row) {
+  return { id: row.id, order_id: row.order_id, venda_id: row.venda_id, caixa_id: row.caixa_id, maquininha_id: row.maquininha_id, terminal_id: row.terminal_id, external_reference: row.external_reference, status: row.status, status_detail: row.status_detail, valor: Number(row.valor), forma_pagamento: row.forma_pagamento, erro: row.erro, approved_at: row.approved_at, created_at: row.created_at, updated_at: row.updated_at };
+}
+
+async function criarOrderPointPdv(req, res) {
+  const caixaId = idValido(req.body?.caixa_id), maquininhaId = idValido(req.body?.maquininha_id);
+  const valor = Number(req.body?.valor), forma = String(req.body?.forma_pagamento || "").toLowerCase();
+  if (!caixaId || !maquininhaId || !Number.isFinite(valor) || valor <= 0 || !["pix", "debito", "credito"].includes(forma)) return res.status(400).json({ message: "Caixa, maquininha, valor e forma de pagamento são obrigatórios." });
+  try {
+    const caixa = (await pool.query("SELECT id FROM caixas WHERE id=$1 AND status='aberto'", [caixaId])).rows[0];
+    if (!caixa) return res.status(409).json({ message: "O caixa informado não está aberto." });
+    const maquina = (await pool.query("SELECT * FROM maquininhas WHERE id=$1 AND ativo=TRUE", [maquininhaId])).rows[0];
+    if (!maquina) return res.status(404).json({ message: "Maquininha não encontrada." });
+    if (maquina.mercado_pago_modo !== "point" || !maquina.mercado_pago_ativo || !maquina.mercado_pago_terminal_id) return res.status(409).json({ message: "Esta maquininha não está configurada como Point integrada." });
+    const nonce = crypto.randomUUID(), externalReference = `pdv_${caixaId}_${Date.now()}_${nonce.slice(0, 8)}`;
+    const local = (await pool.query(`INSERT INTO mercado_pago_point_orders (caixa_id,maquininha_id,terminal_id,external_reference,status,valor,forma_pagamento) VALUES ($1,$2,$3,$4,'creating',$5,$6) RETURNING *`, [caixaId, maquininhaId, maquina.mercado_pago_terminal_id, externalReference, valor, forma])).rows[0];
+    try {
+      const mp = await criarOrderPoint({ valor, descricao: texto(req.body?.descricao) || "Venda no PDV Gisele Flávia Modas", terminal_id: maquina.mercado_pago_terminal_id, external_reference: externalReference, forma_pagamento: forma, idempotency_key: nonce });
+      const status = statusOrderPoint(mp.resposta);
+      const row = (await pool.query(`UPDATE mercado_pago_point_orders SET order_id=$2,status=$3,status_detail=$4,request_payload=$5,response_payload=$6,last_response_payload=$6,approved_at=CASE WHEN $3='approved' THEN NOW() ELSE NULL END,erro=NULL,updated_at=NOW() WHERE id=$1 RETURNING *`, [local.id, texto(mp.resposta?.id), status, texto(mp.resposta?.status_detail), mp.payload, mp.resposta])).rows[0];
+      return res.status(201).json(resumoOrderPoint(row));
+    } catch (error) {
+      await pool.query("UPDATE mercado_pago_point_orders SET status='error',erro=$2,updated_at=NOW() WHERE id=$1", [local.id, error.message]);
+      throw error;
+    }
+  } catch (error) { console.error("Erro ao criar order Point:", error); res.status(error.statusCode || 500).json({ message: error.message || "Não foi possível enviar a cobrança ao Point." }); }
+}
+
+async function sincronizarOrderPointPdv(req, res) {
+  try {
+    const row = (await pool.query("SELECT * FROM mercado_pago_point_orders WHERE order_id=$1", [req.params.order_id])).rows[0];
+    if (!row) return res.status(404).json({ message: "Cobrança Point não encontrada." });
+    const raw = await consultarOrderPoint(row.order_id), status = statusOrderPoint(raw);
+    const atualizado = (await pool.query(`UPDATE mercado_pago_point_orders SET status=$2,status_detail=$3,last_response_payload=$4,approved_at=CASE WHEN $2='approved' THEN COALESCE(approved_at,NOW()) ELSE approved_at END,cancelled_at=CASE WHEN $2 IN ('cancelled','expired') THEN COALESCE(cancelled_at,NOW()) ELSE cancelled_at END,erro=NULL,updated_at=NOW() WHERE id=$1 RETURNING *`, [row.id, status, texto(raw.status_detail || raw.transactions?.payments?.[0]?.status_detail), raw])).rows[0];
+    res.json(resumoOrderPoint(atualizado));
+  } catch (error) { console.error("Erro ao sincronizar Point:", error); res.status(error.statusCode || 500).json({ message: error.message || "Não foi possível consultar a cobrança Point." }); }
+}
+
+async function obterOrderPointPdv(req, res) {
+  try { const row = (await pool.query("SELECT * FROM mercado_pago_point_orders WHERE order_id=$1", [req.params.order_id])).rows[0]; if (!row) return res.status(404).json({ message: "Cobrança Point não encontrada." }); res.json(resumoOrderPoint(row)); }
+  catch (error) { res.status(500).json({ message: "Não foi possível carregar a cobrança Point." }); }
+}
+
+module.exports = { obterConfig, salvarConfig, buscarPagamentoVenda, criarPreferencia, criarOuObterPreferenciaVenda, receberWebhook, sincronizarPagamento, listarLogs, aplicarPagamentoMercadoPago, criarOrderPointPdv, obterOrderPointPdv, sincronizarOrderPointPdv };

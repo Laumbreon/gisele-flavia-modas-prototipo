@@ -16,6 +16,7 @@ async function listarEstoque(req, res) {
         pv.sku,
         pv.codigo_barras,
         pv.codigo_interno,
+        pv.codigo_ref,
         pv.preco_venda,
         pv.preco_promocional,
         pv.ativo AS variacao_ativa,

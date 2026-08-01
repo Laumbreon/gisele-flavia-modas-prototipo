@@ -21,6 +21,7 @@ function produtosSql(whereClause = "", somenteVariacoesAtivas = false) {
               'sku', pv.sku,
               'codigo_barras', pv.codigo_barras,
               'codigo_interno', pv.codigo_interno,
+              'codigo_ref', pv.codigo_ref,
               'preco_venda', pv.preco_venda,
               'preco_promocional', pv.preco_promocional,
               'ativo', pv.ativo,
@@ -319,6 +320,7 @@ async function buscarProdutoPorCodigo(req, res) {
           pv.sku,
           pv.codigo_barras,
           pv.codigo_interno,
+          pv.codigo_ref,
           pv.preco_venda,
           pv.preco_promocional AS variacao_preco_promocional,
           pv.ativo AS variacao_ativa,
@@ -330,7 +332,8 @@ async function buscarProdutoPorCodigo(req, res) {
           AND pv.ativo = TRUE
           AND (UPPER(pv.sku) = UPPER($1)
            OR UPPER(pv.codigo_barras) = UPPER($1)
-           OR UPPER(pv.codigo_interno) = UPPER($1))
+           OR UPPER(pv.codigo_interno) = UPPER($1)
+           OR UPPER(pv.codigo_ref) = UPPER($1))
         LIMIT 1;
       `,
       [codigo]
@@ -362,6 +365,7 @@ async function buscarProdutoPorCodigo(req, res) {
         sku: row.sku,
         codigo_barras: row.codigo_barras,
         codigo_interno: row.codigo_interno,
+        codigo_ref: row.codigo_ref,
         preco_venda: row.preco_venda,
         preco_promocional: row.variacao_preco_promocional,
         ativo: row.variacao_ativa,
@@ -414,8 +418,9 @@ async function inserirVariacao(client, produtoId, produtoNome, produtoCategoria,
   const sku = textoV2(body.sku, 80) || gerado;
   const codigoBarrasInformado = textoV2(body.codigo_barras, 80) || null;
   const codigoInterno = textoV2(body.codigo_interno, 80) || sku;
-  const row = (await client.query(`INSERT INTO produto_variacoes (produto_id,tamanho,cor,sku,codigo_barras,codigo_interno,preco_venda,preco_promocional,ativo)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [produtoId, tamanho, cor, sku, codigoBarrasInformado, codigoInterno, preco, promocional, body.ativo !== false])).rows[0];
+  const codigoRef = textoV2(body.codigo_ref, 80) || null;
+  const row = (await client.query(`INSERT INTO produto_variacoes (produto_id,tamanho,cor,sku,codigo_barras,codigo_interno,codigo_ref,preco_venda,preco_promocional,ativo)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [produtoId, tamanho, cor, sku, codigoBarrasInformado, codigoInterno, codigoRef, preco, promocional, body.ativo !== false])).rows[0];
   if (!codigoBarrasInformado) {
     row.codigo_barras = `GF${String(row.id).padStart(6, "0")}`;
     await client.query("UPDATE produto_variacoes SET codigo_barras=$2,updated_at=NOW() WHERE id=$1", [row.id, row.codigo_barras]);
@@ -464,7 +469,7 @@ async function atualizarVariacao(req, res) {
     await client.query("BEGIN");
     const atual=(await client.query(`SELECT pv.*,e.quantidade FROM produto_variacoes pv INNER JOIN estoque e ON e.produto_variacao_id=pv.id WHERE pv.id=$1 AND pv.produto_id=$2 FOR UPDATE OF pv,e`,[id,produtoId])).rows[0];
     if(!atual)throw Object.assign(new Error("Variação não encontrada."),{statusCode:404});
-    const result=await client.query(`UPDATE produto_variacoes SET tamanho=$3,cor=$4,sku=COALESCE(NULLIF($5,''),sku),codigo_barras=COALESCE(NULLIF($6,''),codigo_barras),codigo_interno=COALESCE(NULLIF($7,''),codigo_interno),preco_venda=$8,preco_promocional=$9,ativo=$10,updated_at=NOW() WHERE id=$1 AND produto_id=$2 RETURNING *`,[id,produtoId,tamanho,cor,textoV2(b.sku,80),textoV2(b.codigo_barras,80),textoV2(b.codigo_interno,80),b.preco_venda===""||b.preco_venda==null?null:numeroNaoNegativo(b.preco_venda),b.preco_promocional===""||b.preco_promocional==null?null:numeroNaoNegativo(b.preco_promocional),b.ativo!==false]);
+    const result=await client.query(`UPDATE produto_variacoes SET tamanho=$3,cor=$4,sku=COALESCE(NULLIF($5,''),sku),codigo_barras=COALESCE(NULLIF($6,''),codigo_barras),codigo_interno=COALESCE(NULLIF($7,''),codigo_interno),codigo_ref=NULLIF($8,''),preco_venda=$9,preco_promocional=$10,ativo=$11,updated_at=NOW() WHERE id=$1 AND produto_id=$2 RETURNING *`,[id,produtoId,tamanho,cor,textoV2(b.sku,80),textoV2(b.codigo_barras,80),textoV2(b.codigo_interno,80),textoV2(b.codigo_ref,80),b.preco_venda===""||b.preco_venda==null?null:numeroNaoNegativo(b.preco_venda),b.preco_promocional===""||b.preco_promocional==null?null:numeroNaoNegativo(b.preco_promocional),b.ativo!==false]);
     const saldoAnterior=Number(atual.quantidade||0),saldoFinal=novoEstoque===null?saldoAnterior:novoEstoque;
     await client.query(`INSERT INTO estoque (produto_variacao_id,quantidade,quantidade_minima) VALUES ($1,$2,$3) ON CONFLICT (produto_variacao_id) DO UPDATE SET quantidade=EXCLUDED.quantidade,quantidade_minima=EXCLUDED.quantidade_minima,updated_at=NOW()`,[id,saldoFinal,minimo]);
     if(saldoFinal!==saldoAnterior)await client.query(`INSERT INTO movimentacoes_estoque (produto_id,produto_variacao_id,tipo,quantidade,motivo,responsavel,observacoes) VALUES ($1,$2,'ajuste',$3,'Ajuste no cadastro do produto',$4,$5)`,[produtoId,id,Math.abs(saldoFinal-saldoAnterior),req.usuario?.nome||"Gestão",`Saldo anterior: ${saldoAnterior}. Novo saldo: ${saldoFinal}.`]);

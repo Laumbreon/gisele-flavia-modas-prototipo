@@ -187,3 +187,32 @@ tbody tr:last-child td { border-bottom: 0; }
   th, td { padding: 12px 11px; }
   .pdv-products { grid-template-columns: 1fr; }
 }
+.product-ref {
+  display: block;
+  margin-top: 3px;
+  color: #6f3152;
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.point-payment-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #f2b9d7;
+  border-radius: 12px;
+  background: #fff8fc;
+}
+
+.point-payment-box p { margin: 0; color: #6d5361; }
+.point-payment-box small { display: block; margin-top: 3px; }
+.sale-success { text-align: center; padding: 12px 0; }
+.sale-success h2 { color: #f80080; font-size: 2rem; margin: 14px 0 8px; }
+
+@media (max-width: 640px) {
+  .point-payment-box { align-items: stretch; flex-direction: column; }
+}
