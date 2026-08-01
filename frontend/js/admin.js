@@ -882,6 +882,19 @@
     toast(state.pdvPointOrder.status === "approved" ? "Pagamento aprovado. A venda já pode ser finalizada." : `Status atual: ${state.pdvPointOrder.status}.`);
   }
 
+  async function approvePdvPointAutomatically() {
+    if (!state.pdvPointOrder) await sendPdvPointOrder();
+    const terminalStates=["rejected","cancelled","expired","error"];
+    for(let attempt=0;attempt<60;attempt+=1){
+      if(state.pdvPointOrder?.status==="approved")return;
+      if(terminalStates.includes(state.pdvPointOrder?.status))throw new Error(`Pagamento Point não aprovado: ${state.pdvPointOrder.status}.`);
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      state.pdvPointOrder=await request(`/mercado-pago/point/orders/${encodeURIComponent(state.pdvPointOrder.order_id)}/sincronizar`,{method:"POST",body:"{}"});
+      updatePdvMachinePaymentUi();
+    }
+    throw new Error("Tempo esgotado aguardando a aprovação na Point. Consulte o status antes de tentar novamente.");
+  }
+
   function printableWindow(title, html) {
     const popup = window.open("", "_blank", "width=720,height=900");
     if (!popup) throw new Error("Permita pop-ups para abrir a impressão.");
@@ -897,7 +910,6 @@
     if (!state.pdvCart.length) throw new Error("Adicione ao menos um produto à venda.");
     const data = formObject(form);
     const totals = pdvTotals();
-    if (!form.elements.pagamento_confirmado.checked) throw new Error("Confirme que o pagamento foi recebido antes de finalizar a venda.");
     if (totals.discount > totals.subtotal) throw new Error("O desconto não pode ser maior que o subtotal.");
     const mixedPayments = data.forma_pagamento === "misto"
       ? ["dinheiro", "pix", "debito", "credito"].map((method) => ({ forma_pagamento: method, valor: Number(data[`misto_${method}`] || 0), maquininha_id: ["debito", "credito"].includes(method) && data.maquininha_id ? Number(data.maquininha_id) : null })).filter((payment) => payment.valor > 0)
@@ -914,7 +926,8 @@
     if (data.forma_pagamento === "dinheiro" && (!Number.isFinite(cashReceived) || cashReceived < totals.total)) throw new Error(`O valor entregue em dinheiro deve ser igual ou maior que ${money(totals.total)}.`);
     const machine = selectedPdvMachine();
     if (data.forma_pagamento === "misto" && isPointIntegrated(machine)) throw new Error("Para pagamento misto, selecione uma maquininha manual. O Point integrado aceita uma cobrança por vez.");
-    if (isPointIntegrated(machine) && state.pdvPointOrder?.status !== "approved") throw new Error("Envie a cobrança ao Point e aguarde a aprovação antes de finalizar.");
+    if (isPointIntegrated(machine)) await approvePdvPointAutomatically();
+    else if (!form.elements.pagamento_confirmado.checked) throw new Error("Confirme que o pagamento foi recebido antes de finalizar a venda.");
     const payload = {
       cliente_id: data.cliente_id ? Number(data.cliente_id) : null,
       caixa_id: state.pdvCash.id,
