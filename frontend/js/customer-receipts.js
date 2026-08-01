@@ -42,16 +42,38 @@
     finally { button.disabled = false; button.textContent = "Ver comprovante"; }
   }
 
+  async function emailReceipt(orderId, button) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+    const original = button.textContent;
+    button.disabled = true; button.textContent = "Enviando...";
+    try {
+      const response = await fetch(`/api/clientes-auth/me/pedidos/${orderId}/enviar-comprovante`, { method:"POST", headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json" }, body:"{}" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Não foi possível enviar o comprovante.");
+      alert(data.message || "Comprovante enviado por e-mail.");
+    } catch (error) { alert(error.message); }
+    finally { button.disabled = false; button.textContent = original; }
+  }
+
   function enhanceOrders() {
     document.querySelectorAll("article").forEach(article => {
       const heading = Array.from(article.querySelectorAll("p")).find(element => /^Pedido #\d+$/.test(element.textContent.trim()));
-      if (!heading || article.querySelector(".customer-receipt-button")) return;
+      if (!heading) return;
       const id = Number(heading.textContent.match(/\d+/)?.[0]); if (!id) return;
       if (!paidOrders.has(id) && !/pagamento:\s*pago\b|pagamento\s+confirmado/i.test(article.textContent)) return;
-      const button = document.createElement("button");
-      button.type = "button"; button.className = "customer-receipt-button"; button.textContent = "Ver comprovante";
-      button.addEventListener("click", () => openReceipt(id, button));
-      article.appendChild(button);
+      if (!article.querySelector(".customer-receipt-button")) {
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "customer-receipt-button"; button.textContent = "Ver comprovante";
+        button.addEventListener("click", () => openReceipt(id, button));
+        article.appendChild(button);
+      }
+      if (!article.querySelector(".customer-email-receipt-button")) {
+        const emailButton = document.createElement("button");
+        emailButton.type = "button"; emailButton.className = "customer-receipt-button customer-email-receipt-button"; emailButton.style.marginLeft = "8px"; emailButton.textContent = "Enviar por e-mail";
+        emailButton.addEventListener("click", () => emailReceipt(id, emailButton));
+        article.appendChild(emailButton);
+      }
     });
   }
 

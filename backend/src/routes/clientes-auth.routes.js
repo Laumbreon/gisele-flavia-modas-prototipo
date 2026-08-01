@@ -11,6 +11,7 @@ router.put("/me",authClienteMiddleware,controller.atualizarMe);
 router.get("/me/pedidos",authClienteMiddleware,controller.meusPedidos);
 router.post("/me/pedidos/:venda_id/cancelar",authClienteMiddleware,controller.cancelarMeuPedido);
 router.get("/me/pedidos/:venda_id/cupom",authClienteMiddleware,controller.cupomPedido);
+router.post("/me/pedidos/:venda_id/enviar-comprovante",authClienteMiddleware,controller.enviarCupomPedidoEmail);
 router.get("/me/compras-salvas",authClienteMiddleware,controller.comprasSalvas);
 router.put("/me/compras-salvas",authClienteMiddleware,controller.salvarCompras);
 router.post("/me/pedidos/:venda_id/link-pagamento",authClienteMiddleware,controller.gerarLinkPagamento);

@@ -5,6 +5,7 @@ const { pool, query } = require("../config/db");
 const { smtpConfigurado, enviarEmailRecuperacaoSenha } = require("../services/email.service");
 const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
 const { consultarPagamento, cancelarPagamentoPendente } = require("../services/mercado-pago.service");
+const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
 
 const emailValido = email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const texto = (valor, limite) => String(valor || "").trim().slice(0, limite);
@@ -115,6 +116,22 @@ async function cupomPedido(req,res){
   }catch(error){console.error("Erro ao carregar cupom do cliente:",error);res.status(500).json({message:"Não foi possível carregar o cupom."});}
 }
 
+async function enviarCupomPedidoEmail(req,res){
+  const vendaId=Number(req.params.venda_id),clienteId=Number(req.cliente.cliente_id);
+  if(!Number.isInteger(vendaId)||vendaId<=0)return res.status(400).json({message:"Pedido inválido."});
+  try{
+    const venda=(await query(`SELECT v.id,v.status_pagamento,v.comprovante_enviado_em,c.email FROM vendas v JOIN clientes c ON c.id=v.cliente_id WHERE v.id=$1 AND v.cliente_id=$2 AND v.canal_venda='site' LIMIT 1`,[vendaId,clienteId])).rows[0];
+    if(!venda)return res.status(404).json({message:"Pedido não encontrado na sua conta."});
+    if(venda.status_pagamento!=="pago")return res.status(409).json({message:"O comprovante só pode ser enviado após a confirmação do pagamento."});
+    if(!emailValido(String(venda.email||"")))return res.status(409).json({message:"Cadastre um e-mail válido em Minha conta antes de enviar o comprovante."});
+    if(venda.comprovante_enviado_em&&Date.now()-new Date(venda.comprovante_enviado_em).getTime()<60000)return res.json({ok:true,message:`O comprovante já foi enviado recentemente para ${venda.email}.`});
+    await query("UPDATE vendas SET enviar_comprovante_email=TRUE,comprovante_enviado_em=NULL,updated_at=NOW() WHERE id=$1",[vendaId]);
+    const resultado=await enviarComprovanteVendaPaga(vendaId);
+    if(!resultado.enviado)return res.status(502).json({message:"Não foi possível enviar o comprovante agora. Tente novamente em instantes."});
+    res.json({ok:true,message:`Comprovante enviado para ${venda.email}.`});
+  }catch(error){console.error("Erro ao reenviar comprovante por e-mail:",error.message);res.status(500).json({message:"Não foi possível enviar o comprovante agora."});}
+}
+
 function listaCompraSegura(valor,limite){
   if(!Array.isArray(valor))return[];
   return valor.slice(0,limite);
@@ -195,4 +212,4 @@ async function redefinirSenha(req,res){
   }catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.statusCode?error.message:"Não foi possível redefinir a senha agora."});}finally{client.release();}
 }
 
-module.exports={cadastro,login,me,atualizarMe,meusPedidos,cancelarMeuPedido,cupomPedido,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};
+module.exports={cadastro,login,me,atualizarMe,meusPedidos,cancelarMeuPedido,cupomPedido,enviarCupomPedidoEmail,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};
