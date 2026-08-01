@@ -223,7 +223,7 @@ async function atualizarStatusEntrega(req, res) {
     const tipo = pedido.entrega?.tipo_entrega || "retirada";
     const permitidos = tipo === "entrega_local"
       ? new Set(["pendente", "separando", "saiu_entrega", "entregue", "cancelado"])
-      : new Set(["sem_entrega", "separando", "pronto_retirada", "entregue", "cancelado"]);
+      : new Set(["pendente", "sem_entrega", "separando", "pronto_retirada", "entregue", "cancelado"]);
     if (!permitidos.has(status)) throw Object.assign(new Error(`Status incompatível com ${tipo === "entrega_local" ? "entrega local" : "retirada"}.`), { statusCode: 400 });
     await client.query("UPDATE vendas SET status_entrega=$2, updated_at=NOW() WHERE id=$1", [id, status]);
     if (pedido.entrega) await client.query("UPDATE venda_entregas SET status_entrega=$2, updated_at=NOW() WHERE venda_id=$1", [id, status]);

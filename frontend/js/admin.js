@@ -400,7 +400,7 @@
   function deliveryOptions(selected, type) {
     const values = type === "entrega_local"
       ? [["pendente","Pendente"],["separando","Separando"],["saiu_entrega","Saiu para entrega"],["entregue","Entregue"]]
-      : [["sem_entrega","Pendente"],["separando","Separando"],["pronto_retirada","Pronto para retirada"],["entregue","Retirado"]];
+      : [["pendente","Pendente"],["separando","Em preparação"],["pronto_retirada","Pronto para retirada"],["entregue","Retirado"]];
     if (selected === "cancelado") values.push(["cancelado", "Cancelado"]);
     return values.map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
   }
