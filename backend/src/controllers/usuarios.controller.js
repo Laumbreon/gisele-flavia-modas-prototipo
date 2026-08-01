@@ -16,7 +16,9 @@ function emailNormalizado(value) {
 async function listarUsuarios(req, res) {
   try {
     const result = await query(`
-      SELECT u.id, u.nome, u.email, u.tipo, u.ativo, u.created_at,
+      SELECT u.id, u.nome,
+        CASE WHEN LOWER(u.email) = '${EMAIL_ADMIN_PROTEGIDO}' THEN NULL ELSE u.email END AS email,
+        u.tipo, u.ativo, u.created_at,
         (LOWER(u.email) = '${EMAIL_ADMIN_PROTEGIDO}') AS protegido,
         COALESCE(json_agg(json_build_object('permissao', p.permissao, 'permitido', p.permitido)
           ORDER BY p.permissao) FILTER (WHERE p.id IS NOT NULL), '[]') AS permissoes
