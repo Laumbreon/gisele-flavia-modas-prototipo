@@ -124,8 +124,10 @@ async function criarPagamentoPixVenda(vendaCompleta) {
     "X-Idempotency-Key": `pix-venda-site-${vendaCompleta.id}`,
   });
   if (!response.ok) {
-    const message = response.data?.message || response.data?.error || `Mercado Pago respondeu HTTP ${response.status}.`;
-    throw Object.assign(new Error(message), { statusCode: response.status >= 400 && response.status < 500 ? 400 : 502, mercadoPago: response.data });
+    const original = String(response.data?.message || response.data?.error || "");
+    const chavePixAusente = /without key enabled for qr render/i.test(original);
+    const message = chavePixAusente ? "Cadastre e ative uma chave PIX na conta Mercado Pago vinculada ao Access Token de produção." : (original || `Mercado Pago respondeu HTTP ${response.status}.`);
+    throw Object.assign(new Error(message), { statusCode: response.status >= 400 && response.status < 500 ? 400 : 502, code: chavePixAusente ? "MP_PIX_KEY_REQUIRED" : "MP_PIX_CREATE_ERROR", mercadoPago: response.data });
   }
   const transaction = response.data?.point_of_interaction?.transaction_data || {};
   if (!transaction.qr_code && !transaction.ticket_url) throw Object.assign(new Error("O Mercado Pago não retornou o QR Code PIX."), { statusCode: 502, mercadoPago: response.data });

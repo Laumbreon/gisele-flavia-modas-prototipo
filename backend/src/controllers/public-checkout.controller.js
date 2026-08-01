@@ -103,7 +103,7 @@ async function checkoutPublico(req, res) {
       try{
         const preferencia=await criarOuObterPreferenciaVenda(vendaId),paymentLink=preferencia.url_pagamento||preferencia.sandbox_init_point||preferencia.init_point;
         mercadoPago=paymentLink?{disponivel:true,status:formaPagamento==="pix"?"pix_aguardando_pagamento":"link_gerado",preference_id:preferencia.preference_id,payment_id:preferencia.payment_id,payment_link:paymentLink,qr_code:preferencia.qr_code||null,qr_code_base64:preferencia.qr_code_base64||null,ambiente:preferencia.ambiente}:{disponivel:false,status:"erro",message:"Pedido criado, mas não foi possível gerar o pagamento agora."};
-      }catch(error){console.error(`Mercado Pago automático indisponível para venda #${vendaId}:`,error.code||error.message);mercadoPago={disponivel:false,status:error.statusCode===409?"indisponivel":"erro",message:"Pedido criado, mas não foi possível gerar o link de pagamento agora."};}
+      }catch(error){console.error(`Mercado Pago automático indisponível para venda #${vendaId}:`,error.code||error.message);const pixSemChave=error.code==="MP_PIX_KEY_REQUIRED";mercadoPago={disponivel:false,status:pixSemChave?"pix_nao_habilitado":error.statusCode===409?"indisponivel":"erro",message:pixSemChave?"O PIX da loja ainda não está habilitado no Mercado Pago. Entre em contato com a loja para concluir o pagamento.":"Pedido criado, mas não foi possível gerar o link de pagamento agora."};}
     }
     res.status(201).json({ ok:true,venda_id:vendaId,total,status_pagamento:"pendente",parcelas,mensagem:"Pedido recebido com sucesso.",mercado_pago:mercadoPago });
   } catch (error) {
