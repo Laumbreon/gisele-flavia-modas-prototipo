@@ -92,11 +92,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Erro interno do servidor" });
 });
 
-app.listen(port, () => {
+const { carregarMercadoPagoDoBanco } = require("./src/config/mercado-pago-runtime");
+
+carregarMercadoPagoDoBanco().catch(error => console.error("Não foi possível carregar a configuração Mercado Pago do painel:", error.message)).finally(() => app.listen(port, () => {
   console.log(`Backend rodando na porta ${port}`);
   console.log("PostgreSQL config:", {
     DB_HOST: process.env.DB_HOST || "localhost",
     DB_PORT: process.env.DB_PORT || "5432",
     DB_NAME: process.env.DB_NAME || "gisele_flavia_modas",
   });
-});
+}));

@@ -575,6 +575,8 @@
         <form data-form="mercado-pago-config"><div class="field-grid">
           <div class="field"><label>Ambiente</label><select name="ambiente"><option value="sandbox" ${selected(mp.ambiente || "sandbox", "sandbox")}>Sandbox (testes)</option><option value="producao" ${selected(mp.ambiente, "producao")}>Produção</option></select></div>
           <div class="field"><label>Status das credenciais</label><input disabled value="${mp.access_token_configurado ? "Access Token configurado" : "Access Token ausente"}"><small>Ambiente efetivo do servidor: ${escapeHtml(mp.ambiente_efetivo || mp.ambiente || "sandbox")}</small></div>
+          <div class="field"><label>Access Token</label><input name="access_token" type="password" maxlength="2000" autocomplete="new-password" placeholder="${mp.access_token_configurado ? "Configurado — deixe vazio para manter" : "APP_USR-... ou TEST-..."}"><small>${mp.access_token_configurado ? "Token configurado e protegido." : "Necessário para receber pagamentos."}</small></div>
+          <div class="field"><label>Segredo do webhook</label><input name="webhook_secret" type="password" maxlength="2000" autocomplete="new-password" placeholder="${mp.webhook_secret_configurado ? "Configurado — deixe vazio para manter" : "Assinatura secreta do webhook"}"><small>${mp.webhook_secret_configurado ? "Segredo configurado e protegido." : "Usado para validar as notificações."}</small></div>
           <div class="field full"><label>Public Key</label><input name="public_key" maxlength="300" value="${escapeHtml(mp.public_key || "")}" placeholder="Opcional para o checkout atual"></div>
           <div class="field"><label>Client ID</label><input name="client_id" maxlength="255" value="${escapeHtml(mp.client_id || "")}" autocomplete="off" placeholder="Client ID da aplicação"></div>
           <div class="field"><label>Client Secret</label><input name="client_secret" type="password" maxlength="2000" autocomplete="new-password" placeholder="${mp.client_secret_configurado ? "Configurado — deixe vazio para manter" : "Client Secret da aplicação"}"><small>${mp.client_secret_configurado ? "Client Secret configurado e protegido." : "Ainda não configurado."}</small></div>
@@ -584,6 +586,7 @@
           <div class="field"><label>Retorno — pendente</label><input name="pending_url" type="url" required value="${escapeHtml(mp.pending_url || "https://giseleflavia.com/?pagamento=pendente")}"></div>
           <div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div>
           <div class="field full"><label class="checkbox"><input name="ativo" type="checkbox" ${mp.ativo ? "checked" : ""}> Ativar integração Mercado Pago</label></div>
+          <div class="field full"><label class="checkbox"><input name="webhook_enabled" type="checkbox" ${mp.webhook_ativo !== false ? "checked" : ""}> Ativar notificações do webhook</label></div>
           <div class="field full help">Webhook: ${mp.webhook_ativo ? "habilitado" : "desabilitado"} · ${escapeHtml(mp.webhook_url_sugerida || "")}</div>
         </div><div class="form-actions"><button class="btn" type="submit">Salvar e cadastrar webhook</button></div></form>
       </div>` : ""}
@@ -706,12 +709,15 @@
       ativo: form.elements.ativo.checked,
       public_key: data.public_key || null,
       client_id: data.client_id || null,
+      webhook_enabled: form.elements.webhook_enabled.checked,
       webhook_url: data.webhook_url,
       success_url: data.success_url,
       failure_url: data.failure_url,
       pending_url: data.pending_url,
     };
     if (data.client_secret) payload.client_secret = data.client_secret;
+    if (data.access_token) payload.access_token = data.access_token;
+    if (data.webhook_secret) payload.webhook_secret = data.webhook_secret;
     const result = await request("/mercado-pago/config", { method:"PUT", headers:{ "X-Admin-Pin":data.admin_pin }, body:JSON.stringify(payload) });
     state.mercadoPagoConfig = result;
     toast(`Mercado Pago ${result.ativo ? "ativado" : "desativado"}. Webhook cadastrado para as novas cobranças.`);
