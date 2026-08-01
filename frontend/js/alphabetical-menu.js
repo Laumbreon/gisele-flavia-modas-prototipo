@@ -80,8 +80,11 @@
       const response = await fetch("/api/public/produtos/categorias", { headers:{ Accept:"application/json" }, cache:"no-store" });
       if (!response.ok) return;
       const rows = await response.json();
-      categories = [...new Set(["Novidades", "Promoções", ...rows.map(row => row.nome || row.name).filter(Boolean)])]
+      const featured = ["Novidades", "Promoções"];
+      const remaining = [...new Set(rows.map(row => row.nome || row.name).filter(Boolean))]
+        .filter(name => !featured.some(item => collator.compare(item, name) === 0))
         .sort((first, second) => collator.compare(first, second));
+      categories = [...featured, ...remaining];
       arrange();
       new MutationObserver(arrange).observe(document.body, { childList:true, subtree:true });
     } catch { /* Mantém o menu original se o catálogo estiver indisponível. */ }
@@ -90,4 +93,3 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once:true });
   else start();
 })();
-
