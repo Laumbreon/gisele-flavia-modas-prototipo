@@ -101,19 +101,22 @@ async function criarPagamentoPixVenda(vendaCompleta) {
   const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
   if (!token) throw Object.assign(new Error("Token Mercado Pago não configurado."), { statusCode: 503, code: "MP_TOKEN_NAO_CONFIGURADO" });
   const appUrl = String(process.env.APP_PUBLIC_URL || "http://localhost:5500").replace(/\/+$/, "");
+  const config = vendaCompleta.config || {};
+  const webhookAtivo = String(process.env.MERCADO_PAGO_WEBHOOK_ENABLED || "true").toLowerCase() !== "false";
+  const notificationUrl = webhookAtivo ? (urlValida(config.webhook_url) || urlValida(`${appUrl}/api/mercado-pago/webhook`)) : null;
   const cpf = String(vendaCompleta.cpf || "").replace(/\D/g, "");
   const payload = {
     transaction_amount: Number(vendaCompleta.total),
     description: `Pedido Gisele Flávia #${vendaCompleta.id}`,
     payment_method_id: "pix",
     external_reference: `venda_site_${vendaCompleta.id}`,
-    notification_url: `${appUrl}/api/mercado-pago/webhook`,
     payer: {
       email: vendaCompleta.email,
       first_name: String(vendaCompleta.cliente || "Cliente").trim().split(/\s+/)[0],
       ...(cpf.length === 11 ? { identification: { type: "CPF", number: cpf } } : {}),
     },
   };
+  if (notificationUrl) payload.notification_url = notificationUrl;
   if (!payload.payer.email) throw Object.assign(new Error("Informe o e-mail da cliente para gerar o PIX."), { statusCode: 400 });
   const response = await postJson("https://api.mercadopago.com/v1/payments", payload, {
     Authorization: `Bearer ${token}`,
@@ -165,7 +168,7 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   const successHost = new URL(success).hostname;
   if (!["localhost", "127.0.0.1"].includes(successHost)) payload.auto_return = "approved";
   const webhookAtivo = String(process.env.MERCADO_PAGO_WEBHOOK_ENABLED || "true").toLowerCase() !== "false";
-  const notificationUrl = webhookAtivo ? urlValida(`${appUrl}/api/mercado-pago/webhook`) : null;
+  const notificationUrl = webhookAtivo ? (urlValida(config.webhook_url) || urlValida(`${appUrl}/api/mercado-pago/webhook`)) : null;
   if (notificationUrl) payload.notification_url = notificationUrl;
   const response = await postJson("https://api.mercadopago.com/checkout/preferences", payload, {
     Authorization: `Bearer ${token}`,

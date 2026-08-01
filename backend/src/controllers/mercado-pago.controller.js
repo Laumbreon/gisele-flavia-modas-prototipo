@@ -25,7 +25,7 @@ function criptografarClientSecret(value) {
 
 function configMercadoPagoSegura(config, extras = {}) {
   const { client_secret_encrypted, client_secret_iv, client_secret_tag, ...segura } = config || {};
-  return { ...segura, client_secret_configurado: Boolean(client_secret_encrypted), ...extras };
+  return { ...segura, client_secret_configurado: Boolean(client_secret_encrypted), webhook_configurado: Boolean(texto(segura.webhook_url)), ...extras };
 }
 
 function extrairPaymentId(req) {
@@ -295,10 +295,16 @@ async function salvarConfig(req, res) {
     if(b.ativo===true&&ambiente!==ambienteEfetivo)return res.status(409).json({message:`O servidor está em ${ambienteEfetivo}. Ajuste MERCADO_PAGO_ENV antes de ativar ${ambiente}.`});
     const clientId = texto(b.client_id);
     const clientSecret = texto(b.client_secret);
+    const webhookUrl = texto(b.webhook_url);
     if (clientId && clientId.length > 255) return res.status(400).json({ message: "O Client ID deve ter no máximo 255 caracteres." });
     if (clientSecret && clientSecret.length > 2000) return res.status(400).json({ message: "O Client Secret é inválido." });
+    if (!webhookUrl) return res.status(400).json({ message: "Informe a URL do webhook." });
+    try {
+      const url = new URL(webhookUrl);
+      if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") throw new Error();
+    } catch { return res.status(400).json({ message: "Informe uma URL HTTPS válida para o webhook." }); }
     const segredo = clientSecret ? criptografarClientSecret(clientSecret) : {};
-    const result = await pool.query(`INSERT INTO mercado_pago_config (id,ambiente,ativo,public_key,access_token_configurado,webhook_url,success_url,failure_url,pending_url,client_id,client_secret_encrypted,client_secret_iv,client_secret_tag) VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET ambiente=$1,ativo=$2,public_key=$3,access_token_configurado=$4,webhook_url=$5,success_url=$6,failure_url=$7,pending_url=$8,client_id=$9,client_secret_encrypted=COALESCE($10,mercado_pago_config.client_secret_encrypted),client_secret_iv=COALESCE($11,mercado_pago_config.client_secret_iv),client_secret_tag=COALESCE($12,mercado_pago_config.client_secret_tag),updated_at=NOW() RETURNING *`, [ambiente, b.ativo === true, texto(b.public_key), tokenConfigurado, texto(b.webhook_url), texto(b.success_url), texto(b.failure_url), texto(b.pending_url), clientId, segredo.encrypted || null, segredo.iv || null, segredo.tag || null]);
+    const result = await pool.query(`INSERT INTO mercado_pago_config (id,ambiente,ativo,public_key,access_token_configurado,webhook_url,success_url,failure_url,pending_url,client_id,client_secret_encrypted,client_secret_iv,client_secret_tag) VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET ambiente=$1,ativo=$2,public_key=$3,access_token_configurado=$4,webhook_url=$5,success_url=$6,failure_url=$7,pending_url=$8,client_id=$9,client_secret_encrypted=COALESCE($10,mercado_pago_config.client_secret_encrypted),client_secret_iv=COALESCE($11,mercado_pago_config.client_secret_iv),client_secret_tag=COALESCE($12,mercado_pago_config.client_secret_tag),updated_at=NOW() RETURNING *`, [ambiente, b.ativo === true, texto(b.public_key), tokenConfigurado, webhookUrl, texto(b.success_url), texto(b.failure_url), texto(b.pending_url), clientId, segredo.encrypted || null, segredo.iv || null, segredo.tag || null]);
     res.json(configMercadoPagoSegura(result.rows[0], { ambiente_efetivo:ambienteEfetivo, access_token_configurado: tokenConfigurado, webhook_url_sugerida: urlWebhookSugerida(), webhook_fase_2: true, webhook_ativo: webhookAtivo() }));
   } catch (error) { console.error("Erro ao salvar config Mercado Pago:", error); res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : "Não foi possível salvar a configuração do Mercado Pago." }); }
 }

@@ -578,14 +578,14 @@
           <div class="field full"><label>Public Key</label><input name="public_key" maxlength="300" value="${escapeHtml(mp.public_key || "")}" placeholder="Opcional para o checkout atual"></div>
           <div class="field"><label>Client ID</label><input name="client_id" maxlength="255" value="${escapeHtml(mp.client_id || "")}" autocomplete="off" placeholder="Client ID da aplicação"></div>
           <div class="field"><label>Client Secret</label><input name="client_secret" type="password" maxlength="2000" autocomplete="new-password" placeholder="${mp.client_secret_configurado ? "Configurado — deixe vazio para manter" : "Client Secret da aplicação"}"><small>${mp.client_secret_configurado ? "Client Secret configurado e protegido." : "Ainda não configurado."}</small></div>
-          <div class="field full"><label>URL do webhook</label><input name="webhook_url" type="url" required value="${escapeHtml(mp.webhook_url || mp.webhook_url_sugerida || "")}"></div>
+          <div class="field full"><label>URL do webhook</label><input name="webhook_url" type="url" required value="${escapeHtml(mp.webhook_url || mp.webhook_url_sugerida || "")}"><small>${mp.webhook_configurado ? "Webhook cadastrado para as novas cobranças." : "Salve para cadastrar esta URL nas novas cobranças do Mercado Pago."}</small></div>
           <div class="field"><label>Retorno — sucesso</label><input name="success_url" type="url" required value="${escapeHtml(mp.success_url || "https://giseleflavia.com/?pagamento=sucesso")}"></div>
           <div class="field"><label>Retorno — falha</label><input name="failure_url" type="url" required value="${escapeHtml(mp.failure_url || "https://giseleflavia.com/?pagamento=falha")}"></div>
           <div class="field"><label>Retorno — pendente</label><input name="pending_url" type="url" required value="${escapeHtml(mp.pending_url || "https://giseleflavia.com/?pagamento=pendente")}"></div>
           <div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div>
           <div class="field full"><label class="checkbox"><input name="ativo" type="checkbox" ${mp.ativo ? "checked" : ""}> Ativar integração Mercado Pago</label></div>
           <div class="field full help">Webhook: ${mp.webhook_ativo ? "habilitado" : "desabilitado"} · ${escapeHtml(mp.webhook_url_sugerida || "")}</div>
-        </div><div class="form-actions"><button class="btn" type="submit">Salvar Mercado Pago</button></div></form>
+        </div><div class="form-actions"><button class="btn" type="submit">Salvar e cadastrar webhook</button></div></form>
       </div>` : ""}
     </section>`;
   }
@@ -714,7 +714,7 @@
     if (data.client_secret) payload.client_secret = data.client_secret;
     const result = await request("/mercado-pago/config", { method:"PUT", headers:{ "X-Admin-Pin":data.admin_pin }, body:JSON.stringify(payload) });
     state.mercadoPagoConfig = result;
-    toast(`Mercado Pago ${result.ativo ? "ativado" : "desativado"} em ${result.ambiente}.`);
+    toast(`Mercado Pago ${result.ativo ? "ativado" : "desativado"}. Webhook cadastrado para as novas cobranças.`);
     await renderSettings();
   }
 
