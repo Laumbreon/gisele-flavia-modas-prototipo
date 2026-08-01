@@ -231,7 +231,10 @@
     const field = document.getElementById("pdvCashReceivedField");
     const received = Number(form.elements.valor_recebido_dinheiro?.value || 0);
     const total = pdvTotals().total;
-    if (field) field.hidden = !isCash;
+    if (field) {
+      field.hidden = !isCash;
+      field.style.display = isCash ? "" : "none";
+    }
     const change = document.getElementById("pdvCashChange");
     if (change) change.textContent = isCash && received >= total
       ? `Troco a devolver: ${money(received - total)}`
