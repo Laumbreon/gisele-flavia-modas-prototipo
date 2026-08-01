@@ -202,6 +202,12 @@
     return Number(variation.preco_promocional ?? variation.preco_venda ?? product.preco_promocional ?? product.preco ?? 0);
   }
 
+  function machineIntegrationLabel(machine) {
+    if (machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo) return "Point integrado";
+    if (machine?.mercado_pago_integrada || machine?.provedor_pagamento === "mercado_pago") return "Mercado Pago";
+    return "Manual";
+  }
+
   function pdvTotals() {
     const subtotal = state.pdvCart.reduce((sum, item) => sum + item.preco * item.quantidade, 0);
     const discount = Math.max(0, Number(document.querySelector('[name="pdv_desconto"]')?.value || 0));
@@ -291,7 +297,7 @@
       machineSelect.closest(".field").querySelector("label").textContent = "Maquininha / Point (opcional para Pix)";
       [...machineSelect.options].slice(1).forEach((option) => {
         const machine = state.machines.find((item) => Number(item.id) === Number(option.value));
-        option.textContent = `${machine?.nome || option.textContent} · ${machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo ? "Point integrado" : "Manual"}`;
+        option.textContent = `${machine?.nome || option.textContent} · ${machineIntegrationLabel(machine)}`;
       });
       const actions = view.querySelector(".pdv-actions");
       actions?.insertAdjacentHTML("beforebegin", `<div id="pdvPointStatus" class="point-payment-box">${pdvPointStatusHtml()}</div>`);
@@ -304,7 +310,7 @@
     const payment = document.querySelector('[data-form="pdv-sale"] [name="forma_pagamento"]')?.value;
     if (!["pix","debito","credito","misto"].includes(payment)) return `<p>Selecione Pix, débito, crédito ou pagamento misto para usar uma maquininha.</p>`;
     if (!machine) return `<p>${payment === "pix" ? "A maquininha é opcional para Pix." : "Selecione a maquininha utilizada no pagamento."}</p>`;
-    if (machine.mercado_pago_modo !== "point" || !machine.mercado_pago_ativo) return `<p><b>Pagamento manual:</b> realize a cobrança na ${escapeHtml(machine.nome)}. Depois da aprovação, marque “Confirmo que o pagamento foi recebido” e finalize a venda.</p>`;
+    if (machine.mercado_pago_modo !== "point" || !machine.mercado_pago_ativo) return `<p><b>Maquininha ${escapeHtml(machineIntegrationLabel(machine))}:</b> realize a cobrança na ${escapeHtml(machine.nome)}. Depois da aprovação, marque “Confirmo que o pagamento foi recebido” e finalize a venda.</p>`;
     if (payment === "misto") return `<p>Pagamento misto não pode ser enviado em uma única cobrança Point. Use uma maquininha manual.</p>`;
     const order = state.pdvPointOrder;
     if (!order) return `<p>Ao escolher um Point integrado, envie a cobrança antes de finalizar. O PDV manual continua disponível.</p><button type="button" class="btn secondary small" data-action="pdv-point-send">Enviar cobrança ao Point</button>`;
@@ -504,7 +510,8 @@
       const machine = state.machines[index], cells = row.querySelectorAll("td");
       if (!machine || cells.length < 7) return;
       cells[4].innerHTML = `${escapeHtml(machine.terminal_tipo || "—")}${machine.mercado_pago_terminal_id ? `<small class="product-ref">ID: ${escapeHtml(machine.mercado_pago_terminal_id)}</small>` : ""}`;
-      cells[5].innerHTML = `<span class="badge ${machine.mercado_pago_modo === "point" && machine.mercado_pago_ativo ? "" : "inactive"}">${machine.mercado_pago_modo === "point" && machine.mercado_pago_ativo ? "Point integrado" : "Manual"}</span>`;
+      const integrationLabel = machineIntegrationLabel(machine);
+      cells[5].innerHTML = `<span class="badge ${integrationLabel === "Manual" ? "inactive" : ""}">${escapeHtml(integrationLabel)}</span>`;
     });
   }
 
