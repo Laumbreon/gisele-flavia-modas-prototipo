@@ -1,2 +1,2 @@
 await (window.GiseleShoppingReady || Promise.resolve());
-await import("/js/app.js?v=20260801-integrated-pix-qr");
+await import("/js/app.js?v=20260801-pix-without-blue-button");
