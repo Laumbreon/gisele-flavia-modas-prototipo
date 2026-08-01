@@ -571,11 +571,13 @@
         ${s.imagem_informativa ? `<div class="informative-preview"><img src="${escapeHtml(s.imagem_informativa)}" alt="Prévia da imagem informativa"></div>` : `<div class="empty-state"><strong>Nenhuma imagem informativa anexada.</strong></div>`}
         <form data-form="informative-upload" class="upload-zone"><label>Selecionar imagem informativa</label><input name="imagem" type="file" accept="image/jpeg,image/png,image/webp" required><small>JPG, PNG ou WEBP · máximo de 10 MB.</small><div class="form-actions"><button class="btn" type="submit">Anexar imagem</button></div></form>
       </div>
-      ${mp ? `<div class="carousel-settings"><h3>Mercado Pago</h3><p class="help">Checkout e confirmação automática de pagamentos. O Access Token é protegido no servidor e não é exibido no painel.</p>
+      ${mp ? `<div class="carousel-settings"><h3>Mercado Pago</h3><p class="help">Checkout e confirmação automática de pagamentos. As credenciais secretas são protegidas no servidor e não são exibidas no painel.</p>
         <form data-form="mercado-pago-config"><div class="field-grid">
           <div class="field"><label>Ambiente</label><select name="ambiente"><option value="sandbox" ${selected(mp.ambiente || "sandbox", "sandbox")}>Sandbox (testes)</option><option value="producao" ${selected(mp.ambiente, "producao")}>Produção</option></select></div>
           <div class="field"><label>Status das credenciais</label><input disabled value="${mp.access_token_configurado ? "Access Token configurado" : "Access Token ausente"}"><small>Ambiente efetivo do servidor: ${escapeHtml(mp.ambiente_efetivo || mp.ambiente || "sandbox")}</small></div>
           <div class="field full"><label>Public Key</label><input name="public_key" maxlength="300" value="${escapeHtml(mp.public_key || "")}" placeholder="Opcional para o checkout atual"></div>
+          <div class="field"><label>Client ID</label><input name="client_id" maxlength="255" value="${escapeHtml(mp.client_id || "")}" autocomplete="off" placeholder="Client ID da aplicação"></div>
+          <div class="field"><label>Client Secret</label><input name="client_secret" type="password" maxlength="2000" autocomplete="new-password" placeholder="${mp.client_secret_configurado ? "Configurado — deixe vazio para manter" : "Client Secret da aplicação"}"><small>${mp.client_secret_configurado ? "Client Secret configurado e protegido." : "Ainda não configurado."}</small></div>
           <div class="field full"><label>URL do webhook</label><input name="webhook_url" type="url" required value="${escapeHtml(mp.webhook_url || mp.webhook_url_sugerida || "")}"></div>
           <div class="field"><label>Retorno — sucesso</label><input name="success_url" type="url" required value="${escapeHtml(mp.success_url || "https://giseleflavia.com/?pagamento=sucesso")}"></div>
           <div class="field"><label>Retorno — falha</label><input name="failure_url" type="url" required value="${escapeHtml(mp.failure_url || "https://giseleflavia.com/?pagamento=falha")}"></div>
@@ -703,11 +705,13 @@
       ambiente: data.ambiente,
       ativo: form.elements.ativo.checked,
       public_key: data.public_key || null,
+      client_id: data.client_id || null,
       webhook_url: data.webhook_url,
       success_url: data.success_url,
       failure_url: data.failure_url,
       pending_url: data.pending_url,
     };
+    if (data.client_secret) payload.client_secret = data.client_secret;
     const result = await request("/mercado-pago/config", { method:"PUT", headers:{ "X-Admin-Pin":data.admin_pin }, body:JSON.stringify(payload) });
     state.mercadoPagoConfig = result;
     toast(`Mercado Pago ${result.ativo ? "ativado" : "desativado"} em ${result.ambiente}.`);
