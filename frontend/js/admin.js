@@ -506,9 +506,10 @@
 
   async function renderSettings() {
     loading("Carregando dados do site...");
-    [state.settings, state.mercadoPagoConfig] = await Promise.all([
+    [state.settings, state.mercadoPagoConfig, state.categories] = await Promise.all([
       request("/configuracoes-site"),
       request("/mercado-pago/config").catch(() => null),
+      request("/produtos/categorias").catch(() => state.categories || []),
     ]);
     const s = state.settings;
     const mp = state.mercadoPagoConfig;
@@ -536,6 +537,7 @@
         <div class="field"><label>Chamada</label><input name="campanha_selo" maxlength="60" required value="${escapeHtml(s.campanha_selo)}"></div>
         <div class="field"><label>Título</label><input name="campanha_titulo" maxlength="120" required value="${escapeHtml(s.campanha_titulo)}"></div>
         <div class="field full"><label>Descrição</label><input name="campanha_texto" maxlength="220" required value="${escapeHtml(s.campanha_texto)}"></div>
+        <div class="field full"><label>Categoria do botão da campanha</label><select name="campanha_categoria" required><option value="todos" ${selected(s.campanha_categoria, "todos")}>Todos os produtos</option>${state.categories.filter(category => category.ativo !== false).map(category => `<option value="${escapeHtml(category.nome)}" ${selected(s.campanha_categoria, category.nome)}>${escapeHtml(category.nome)}</option>`).join("")}</select><small>Ao clicar no botão da seção Exclusividade, a cliente será levada para esta categoria.</small></div>
         <div class="field full"><h3>Novidades e looks</h3></div>
         <div class="field"><label>Chamada de novidades</label><input name="novidades_selo" maxlength="60" required value="${escapeHtml(s.novidades_selo)}"></div>
         <div class="field"><label>Título de novidades</label><input name="novidades_titulo" maxlength="100" required value="${escapeHtml(s.novidades_titulo)}"></div>

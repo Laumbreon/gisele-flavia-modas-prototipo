@@ -71,6 +71,24 @@
     if (contacts.innerHTML !== markup) contacts.innerHTML = markup;
   }
 
+  function applyCampaignCategory() {
+    const title = document.querySelector('[data-site-setting="campanha_titulo"]');
+    const section = title?.closest("section");
+    const link = section?.querySelector('a[href*="/produtos"]');
+    if (!link) return;
+    const category = String(settings.campanha_categoria || "Novidades").trim();
+    const destination = category.toLowerCase() === "todos" ? "/produtos" : `/produtos?categoria=${encodeURIComponent(category)}`;
+    link.href = destination;
+    link.dataset.campaignDestination = destination;
+    if (!link.dataset.campaignCategoryBound) {
+      link.dataset.campaignCategoryBound = "true";
+      link.addEventListener("click", event => {
+        event.preventDefault();
+        window.location.assign(link.dataset.campaignDestination || "/produtos");
+      });
+    }
+  }
+
   function ensureInformativeImage() {
     const source = String(settings?.imagem_informativa || "").trim();
     const current = document.querySelector(".home-informative-image");
@@ -124,6 +142,7 @@
     if (campaignImage && settings.campanha_imagem && campaignImage.getAttribute("src") !== settings.campanha_imagem) {
       campaignImage.setAttribute("src", settings.campanha_imagem);
     }
+    applyCampaignCategory();
 
     const username = String(settings.instagram_usuario || "gisele_flavia_modas").replace(/^@/, "");
     const profileUrl = `https://www.instagram.com/${username}/`;

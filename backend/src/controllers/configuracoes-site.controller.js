@@ -71,6 +71,7 @@ const CONFIGURACOES = {
   campanha_selo: { padrao: "Exclusividade", limite: 60, descricao: "Chamada do banner de campanha" },
   campanha_titulo: { padrao: "Nova Coleção Inverno", limite: 120, descricao: "Título do banner de campanha" },
   campanha_texto: { padrao: "Peças exclusivas com tecidos nobres e cortes impecáveis", limite: 220, descricao: "Texto do banner de campanha" },
+  campanha_categoria: { padrao: "Novidades", limite: 120, descricao: "Categoria aberta pelo botão do banner de campanha" },
   campanha_imagem: { padrao: "https://images.unsplash.com/photo-1779398969439-99c38b9df638?w=1400&h=600&fit=crop&auto=format", limite: 500, descricao: "Imagem do banner de campanha" },
   novidades_selo: { padrao: "Recém chegadas", limite: 60, descricao: "Chamada da seção de novidades" },
   novidades_titulo: { padrao: "Novidades", limite: 100, descricao: "Título da seção de novidades" },
