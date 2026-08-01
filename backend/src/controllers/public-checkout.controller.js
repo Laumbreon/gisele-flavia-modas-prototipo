@@ -4,6 +4,7 @@ const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
 function erroValidacao(message) { const error = new Error(message); error.statusCode = 400; return error; }
 function texto(value) { const result = String(value || "").trim(); return result || null; }
 function dinheiro(value) { return Math.round(Number(value || 0) * 100) / 100; }
+function cpfNormalizado(value) { return String(value || "").replace(/\D/g, "") || null; }
 
 async function checkoutPublico(req, res) {
   const cliente = req.body.cliente || {};
@@ -11,10 +12,17 @@ async function checkoutPublico(req, res) {
   const tipoEntrega = req.body.tipo_entrega === "entrega_local" ? "entrega_local" : "retirada";
   const entrega = req.body.entrega || {};
   const formaPagamento = ["pix", "dinheiro", "cartao"].includes(req.body.forma_pagamento) ? req.body.forma_pagamento : null;
+  const parcelasInformadas = Number(req.body.parcelas ?? 1);
+  const parcelas = formaPagamento === "cartao" ? parcelasInformadas : 1;
+  const cpfCliente = cpfNormalizado(cliente.cpf);
 
   if (!texto(cliente.nome) || !texto(cliente.telefone)) return res.status(400).json({ message: "Nome e telefone são obrigatórios." });
+  if (cpfCliente && cpfCliente.length !== 11) return res.status(400).json({ message: "O CPF deve conter exatamente 11 dígitos." });
   if (!itens.length) return res.status(400).json({ message: "Adicione ao menos um item ao pedido." });
   if (!formaPagamento) return res.status(400).json({ message: "Selecione uma forma de pagamento válida." });
+  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 12) {
+    return res.status(400).json({ message: "Selecione uma quantidade de parcelas entre 1 e 12." });
+  }
   if (tipoEntrega === "entrega_local" && (!texto(entrega.bairro) || !texto(entrega.cidade) || !texto(entrega.endereco) || !texto(entrega.numero))) {
     return res.status(400).json({ message: "Preencha os dados obrigatórios da entrega." });
   }
@@ -39,13 +47,13 @@ async function checkoutPublico(req, res) {
       : await client.query(`SELECT id,senha_hash FROM clientes WHERE telefone = $1 OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2)) ORDER BY CASE WHEN $2::text IS NOT NULL AND LOWER(email)=LOWER($2) THEN 0 ELSE 1 END,id LIMIT 1 FOR UPDATE`, [texto(cliente.telefone), texto(cliente.email)]);
     if (autenticadoId && !existente.rows[0]) throw Object.assign(new Error("Sua conta não está disponível. Entre novamente."),{statusCode:401});
     if (!autenticadoId && existente.rows[0]?.senha_hash) {
-      const visitante=await client.query(`INSERT INTO clientes (nome,telefone,whatsapp,email,ativo) VALUES ($1,$2,$2,NULL,TRUE) RETURNING id`,[texto(cliente.nome),texto(cliente.telefone)]);
+      const visitante=await client.query(`INSERT INTO clientes (nome,telefone,whatsapp,email,cpf,ativo) VALUES ($1,$2,$2,NULL,$3,TRUE) RETURNING id`,[texto(cliente.nome),texto(cliente.telefone),cpfCliente]);
       clienteId=visitante.rows[0].id;
     } else if (existente.rows[0]) {
       clienteId = existente.rows[0].id;
-      if(autenticadoId||!existente.rows[0].senha_hash)await client.query(`UPDATE clientes SET nome=$1, telefone=$2, whatsapp=$2, email=COALESCE($3,email), updated_at=NOW() WHERE id=$4`, [texto(cliente.nome), texto(cliente.telefone), autenticadoId?null:texto(cliente.email), clienteId]);
+      if(autenticadoId||!existente.rows[0].senha_hash)await client.query(`UPDATE clientes SET nome=$1, telefone=$2, whatsapp=$2, email=COALESCE($3,email), cpf=COALESCE($4,cpf), updated_at=NOW() WHERE id=$5`, [texto(cliente.nome), texto(cliente.telefone), autenticadoId?null:texto(cliente.email), cpfCliente, clienteId]);
     } else {
-      const criado = await client.query(`INSERT INTO clientes (nome,telefone,whatsapp,email,ativo) VALUES ($1,$2,$2,$3,TRUE) RETURNING id`, [texto(cliente.nome), texto(cliente.telefone), texto(cliente.email)]);
+      const criado = await client.query(`INSERT INTO clientes (nome,telefone,whatsapp,email,cpf,ativo) VALUES ($1,$2,$2,$3,$4,TRUE) RETURNING id`, [texto(cliente.nome), texto(cliente.telefone), texto(cliente.email), cpfCliente]);
       clienteId = criado.rows[0].id;
     }
 
@@ -70,7 +78,7 @@ async function checkoutPublico(req, res) {
       frete = dinheiro(result.rows[0].valor);
     }
     const total = dinheiro(subtotal + frete);
-    const venda = await client.query(`INSERT INTO vendas (cliente_id,usuario_id,subtotal,desconto,frete_valor,total,total_pago,troco,valor_faltante,forma_pagamento,canal_venda,origem_venda,tem_entrega,status_pagamento,status_entrega,caixa_id,maquininha_id,status,observacoes) VALUES ($1,NULL,$2,0,$3,$4,0,0,$4,$5,'site','checkout_publico',$6,'pendente',$7,NULL,NULL,'pendente',$8) RETURNING id,total,status_pagamento`, [clienteId,subtotal,frete,total,formaPagamento,tipoEntrega === "entrega_local",tipoEntrega === "entrega_local" ? "pendente" : "sem_entrega",texto(req.body.observacoes)]);
+    const venda = await client.query(`INSERT INTO vendas (cliente_id,usuario_id,subtotal,desconto,frete_valor,total,total_pago,troco,valor_faltante,forma_pagamento,parcelas,canal_venda,origem_venda,tem_entrega,status_pagamento,status_entrega,caixa_id,maquininha_id,status,observacoes) VALUES ($1,NULL,$2,0,$3,$4,0,0,$4,$5,$6,'site','checkout_publico',$7,'pendente',$8,NULL,NULL,'pendente',$9) RETURNING id,total,status_pagamento,parcelas`, [clienteId,subtotal,frete,total,formaPagamento,parcelas,tipoEntrega === "entrega_local",tipoEntrega === "entrega_local" ? "pendente" : "sem_entrega",texto(req.body.observacoes)]);
     const vendaId = venda.rows[0].id;
     for (const item of processados) {
       await client.query(`INSERT INTO itens_venda (venda_id,produto_id,produto_variacao_id,produto_nome,tamanho,cor,quantidade,preco_unitario,subtotal) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [vendaId,item.produto_id,item.variacao_id,item.produto_nome,item.tamanho,item.cor,item.quantidade,item.preco,item.subtotal]);
@@ -88,7 +96,7 @@ async function checkoutPublico(req, res) {
         mercadoPago=paymentLink?{disponivel:true,status:"link_gerado",preference_id:preferencia.preference_id,payment_link:paymentLink,ambiente:preferencia.ambiente}:{disponivel:false,status:"erro",message:"Pedido criado, mas não foi possível gerar o link de pagamento agora."};
       }catch(error){console.error(`Mercado Pago automático indisponível para venda #${vendaId}:`,error.code||error.message);mercadoPago={disponivel:false,status:error.statusCode===409?"indisponivel":"erro",message:"Pedido criado, mas não foi possível gerar o link de pagamento agora."};}
     }
-    res.status(201).json({ ok:true,venda_id:vendaId,total,status_pagamento:"pendente",mensagem:"Pedido recebido com sucesso.",mercado_pago:mercadoPago });
+    res.status(201).json({ ok:true,venda_id:vendaId,total,status_pagamento:"pendente",parcelas,mensagem:"Pedido recebido com sucesso.",mercado_pago:mercadoPago });
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.statusCode === 400 || error.statusCode === 401) return res.status(error.statusCode).json({ message:error.message });

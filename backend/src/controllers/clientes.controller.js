@@ -10,6 +10,11 @@ function normalizeOptional(value) {
   return text || null;
 }
 
+function normalizeCpf(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits || null;
+}
+
 async function listarClientes(req, res) {
   try {
     const result = await query(`
@@ -44,7 +49,7 @@ async function criarCliente(req, res) {
   const nome = normalizeOptional(req.body.nome);
   const telefone = normalizeOptional(req.body.telefone);
   const email = normalizeOptional(req.body.email);
-  const cpf = normalizeOptional(req.body.cpf);
+  const cpf = normalizeCpf(req.body.cpf);
   const endereco = normalizeOptional(req.body.endereco);
   const cidade = normalizeOptional(req.body.cidade);
   const estado = normalizeOptional(req.body.estado);
@@ -56,6 +61,10 @@ async function criarCliente(req, res) {
 
   if (email && !isValidEmail(email)) {
     return res.status(400).json({ message: "E-mail inválido." });
+  }
+
+  if (cpf && cpf.length !== 11) {
+    return res.status(400).json({ message: "O CPF deve conter exatamente 11 dígitos." });
   }
 
   try {

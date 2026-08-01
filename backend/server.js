@@ -25,6 +25,7 @@ const pedidosSiteRoutes = require("./src/routes/pedidos-site.routes");
 const fiscalRoutes = require("./src/routes/fiscal.routes");
 const mercadoPagoRoutes = require("./src/routes/mercado-pago.routes");
 const clientesAuthRoutes = require("./src/routes/clientes-auth.routes");
+const configuracoesSiteRoutes = require("./src/routes/configuracoes-site.routes");
 const { authClienteOpcional } = require("./src/middlewares/auth-cliente.middleware");
 
 const app = express();
@@ -41,6 +42,7 @@ app.use("/api/health", healthRoutes);
 app.use("/api/public/produtos", publicProdutosRoutes);
 app.use("/api/public/checkout", authClienteOpcional, publicCheckoutRoutes);
 app.use("/api/public/frete-bairro", fretesBairroRoutes.publicRouter);
+app.use("/api/public/configuracoes-site", configuracoesSiteRoutes.publicRouter);
 app.use("/api/produtos", authMiddleware, produtosRoutes);
 app.use("/api/clientes", authMiddleware, clientesRoutes);
 app.use("/api/vendas", authMiddleware, vendasRoutes);
@@ -53,6 +55,7 @@ app.use("/api/maquininhas", authMiddleware, maquininhasRoutes);
 app.use("/api/usuarios", authMiddleware, usuariosRoutes);
 app.use("/api/pedidos-site", authMiddleware, pedidosSiteRoutes);
 app.use("/api/fiscal", authMiddleware, fiscalRoutes);
+app.use("/api/configuracoes-site", authMiddleware, configuracoesSiteRoutes.router);
 // O webhook do Mercado Pago é público; as demais rotas aplicam autenticação no próprio router.
 app.use("/api/mercado-pago", mercadoPagoRoutes);
 
@@ -60,11 +63,16 @@ app.use("/api/mercado-pago", mercadoPagoRoutes);
 // As rotas /api e /uploads acima continuam tendo prioridade.
 const frontendDirectory = path.resolve(__dirname, "../frontend");
 const frontendIndex = path.join(frontendDirectory, "index.html");
+const frontendAdmin = path.join(frontendDirectory, "admin.html");
 const catalogAssetsDirectory = path.resolve(__dirname, "../assets");
 if (fs.existsSync(frontendIndex)) {
   app.use(express.static(frontendDirectory, { index: false }));
   if (fs.existsSync(catalogAssetsDirectory)) {
     app.use("/assets", express.static(catalogAssetsDirectory, { index: false }));
+  }
+
+  if (fs.existsSync(frontendAdmin)) {
+    app.get("/admin", (req, res) => res.sendFile(frontendAdmin));
   }
 
   app.get("*", (req, res, next) => {

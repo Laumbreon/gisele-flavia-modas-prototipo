@@ -110,6 +110,11 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
     external_reference: `venda_site_${vendaCompleta.id}`,
     back_urls: { success, failure, pending },
   };
+  if (vendaCompleta.forma_pagamento === "cartao") {
+    const parcelas = Math.min(12, Math.max(1, Number(vendaCompleta.parcelas || 1)));
+    payload.payment_methods = { installments: 12, default_installments: parcelas };
+    payload.metadata = { parcelas_escolhidas: parcelas };
+  }
   const successHost = new URL(success).hostname;
   if (!["localhost", "127.0.0.1"].includes(successHost)) payload.auto_return = "approved";
   const webhookAtivo = String(process.env.MERCADO_PAGO_WEBHOOK_ENABLED || "true").toLowerCase() !== "false";

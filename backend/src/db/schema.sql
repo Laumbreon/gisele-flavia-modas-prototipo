@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS clientes (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS cliente_compras_salvas (
+  cliente_id INTEGER PRIMARY KEY REFERENCES clientes(id) ON DELETE CASCADE,
+  carrinho JSONB NOT NULL DEFAULT '[]'::jsonb,
+  favoritos JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS fornecedores (
   id SERIAL PRIMARY KEY,
   nome VARCHAR(140) NOT NULL,
@@ -166,6 +174,7 @@ CREATE TABLE IF NOT EXISTS vendas (
   troco NUMERIC(10,2) NOT NULL DEFAULT 0,
   valor_faltante NUMERIC(10,2) NOT NULL DEFAULT 0,
   forma_pagamento VARCHAR(60),
+  parcelas SMALLINT NOT NULL DEFAULT 1 CHECK (parcelas BETWEEN 1 AND 12),
   canal_venda VARCHAR(30) NOT NULL DEFAULT 'loja_fisica',
   origem_venda VARCHAR(30),
   tem_entrega BOOLEAN NOT NULL DEFAULT FALSE,

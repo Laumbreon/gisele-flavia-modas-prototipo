@@ -115,6 +115,41 @@ async function listarProdutosPublicos(req, res) {
   }
 }
 
+async function listarCategoriasPublicas(req, res) {
+  try {
+    const result = await query(`
+      SELECT
+        c.id,
+        c.nome,
+        c.slug,
+        c.descricao,
+        c.ordem,
+        COUNT(DISTINCT p.id)::int AS quantidade_produtos,
+        (
+          SELECT pm.url
+          FROM produtos produto_imagem
+          INNER JOIN produto_midias pm ON pm.produto_id = produto_imagem.id
+          WHERE produto_imagem.status = 'ativo'
+            AND LOWER(produto_imagem.categoria) = LOWER(c.nome)
+            AND pm.tipo = 'imagem'
+          ORDER BY pm.principal DESC, pm.ordem ASC, pm.id ASC
+          LIMIT 1
+        ) AS imagem
+      FROM categorias_produtos c
+      LEFT JOIN produtos p
+        ON LOWER(p.categoria) = LOWER(c.nome)
+       AND p.status = 'ativo'
+      WHERE c.ativo = TRUE
+      GROUP BY c.id
+      ORDER BY c.ordem ASC, c.nome ASC;
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erro ao listar categorias públicas:", error);
+    res.status(500).json({ message: "Não foi possível carregar as categorias." });
+  }
+}
+
 async function obterProduto(req, res) {
   const id = Number(req.params.id);
 
@@ -529,6 +564,7 @@ async function excluirCategoria(req,res){const id=inteiroPositivo(req.params.cat
 module.exports = {
   listarProdutos,
   listarProdutosPublicos,
+  listarCategoriasPublicas,
   obterProduto,
   obterProdutoPublico,
   gerarCodigosVariacoes,

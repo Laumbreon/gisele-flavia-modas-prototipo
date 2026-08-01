@@ -3,18 +3,21 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { pool, query } = require("../config/db");
 const { smtpConfigurado, enviarEmailRecuperacaoSenha } = require("../services/email.service");
+const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
 
 const emailValido = email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const texto = (valor, limite) => String(valor || "").trim().slice(0, limite);
 const emailNormalizado = valor => texto(valor, 160).toLowerCase();
-const clienteSeguro = cliente => ({ id:cliente.id,nome:cliente.nome,email:cliente.email,telefone:cliente.telefone,cpf:cliente.cpf,ativo:cliente.ativo,email_verificado:cliente.email_verificado === true });
+const cpfNormalizado = valor => String(valor || "").replace(/\D/g, "") || null;
+const clienteSeguro = cliente => ({ id:cliente.id,nome:cliente.nome,email:cliente.email,telefone:cliente.telefone,cpf:cliente.cpf,cep:cliente.cep,cidade:cliente.cidade,estado:cliente.estado,endereco:cliente.endereco,ativo:cliente.ativo,email_verificado:cliente.email_verificado === true });
 const jwtSecret = () => process.env.JWT_SECRET || "dev_secret_altere_no_env";
 const gerarToken = cliente => jwt.sign({ tipo:"cliente",cliente_id:Number(cliente.id),email:cliente.email },jwtSecret(),{ expiresIn:process.env.CLIENTE_JWT_EXPIRES_IN || "30d" });
 
 async function cadastro(req,res){
-  const nome=texto(req.body?.nome,120),email=emailNormalizado(req.body?.email),telefone=texto(req.body?.telefone,30),cpf=texto(req.body?.cpf,20)||null,senha=String(req.body?.senha||""),confirmar=req.body?.confirmarSenha;
+  const nome=texto(req.body?.nome,120),email=emailNormalizado(req.body?.email),telefone=texto(req.body?.telefone,30),cpf=cpfNormalizado(req.body?.cpf),senha=String(req.body?.senha||""),confirmar=req.body?.confirmarSenha;
   if(!nome||!email||!telefone||!senha)return res.status(400).json({message:"Nome, e-mail, telefone e senha são obrigatórios."});
   if(!emailValido(email))return res.status(400).json({message:"Informe um e-mail válido."});
+  if(cpf&&cpf.length!==11)return res.status(400).json({message:"O CPF deve conter exatamente 11 dígitos."});
   if(senha.length<6)return res.status(400).json({message:"A senha deve ter pelo menos 6 caracteres."});
   if(confirmar!==undefined&&senha!==String(confirmar))return res.status(400).json({message:"A confirmação da senha não confere."});
   const client=await pool.connect();
@@ -35,7 +38,84 @@ async function login(req,res){
 
 async function me(req,res){try{const cliente=(await query("SELECT * FROM clientes WHERE id=$1 AND ativo=TRUE",[req.cliente.cliente_id])).rows[0];if(!cliente)return res.status(404).json({message:"Cliente não encontrado."});res.json({cliente:clienteSeguro(cliente)});}catch{res.status(500).json({message:"Não foi possível carregar sua conta."});}}
 
-async function meusPedidos(req,res){try{const result=await query(`SELECT v.id,v.created_at,v.total,v.status_pagamento,v.status_entrega,v.forma_pagamento,v.tem_entrega,COALESCE(json_agg(json_build_object('produto',iv.produto_nome,'tamanho',iv.tamanho,'cor',iv.cor,'quantidade',iv.quantidade,'subtotal',iv.subtotal) ORDER BY iv.id) FILTER (WHERE iv.id IS NOT NULL),'[]'::json) itens FROM vendas v LEFT JOIN itens_venda iv ON iv.venda_id=v.id WHERE v.cliente_id=$1 AND v.canal_venda='site' GROUP BY v.id ORDER BY v.created_at DESC LIMIT 50`,[req.cliente.cliente_id]);res.json(result.rows);}catch(error){console.error("Erro ao listar pedidos do cliente:",error);res.status(500).json({message:"Não foi possível carregar seus pedidos."});}}
+async function atualizarMe(req,res){
+  const id=Number(req.cliente.cliente_id),nome=texto(req.body?.nome,120),email=emailNormalizado(req.body?.email),telefone=texto(req.body?.telefone,30),cpf=cpfNormalizado(req.body?.cpf),cep=texto(req.body?.cep,12)||null,cidade=texto(req.body?.cidade,100)||null,estado=texto(req.body?.estado,2).toUpperCase()||null,endereco=texto(req.body?.endereco,500)||null,senhaAtual=String(req.body?.senha_atual||"");
+  if(!nome||!email||!telefone)return res.status(400).json({message:"Nome, e-mail e telefone são obrigatórios."});
+  if(!emailValido(email))return res.status(400).json({message:"Informe um e-mail válido."});
+  if(cpf&&cpf.length!==11)return res.status(400).json({message:"O CPF deve conter exatamente 11 dígitos."});
+  if(estado&&!/^[A-Z]{2}$/.test(estado))return res.status(400).json({message:"Informe o estado com 2 letras."});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const atual=(await client.query("SELECT * FROM clientes WHERE id=$1 AND ativo=TRUE FOR UPDATE",[id])).rows[0];
+    if(!atual)throw Object.assign(new Error("Cliente não encontrado."),{statusCode:404});
+    const mudouEmail=email!==emailNormalizado(atual.email);
+    if(mudouEmail){
+      if(!senhaAtual||!atual.senha_hash||!await bcrypt.compare(senhaAtual,atual.senha_hash))throw Object.assign(new Error("Informe sua senha atual para alterar o e-mail."),{statusCode:400});
+      const emUso=(await client.query("SELECT 1 FROM clientes WHERE LOWER(email)=$1 AND id<>$2 LIMIT 1",[email,id])).rows[0];
+      if(emUso)throw Object.assign(new Error("Este e-mail já está cadastrado."),{statusCode:409});
+    }
+    const atualizado=(await client.query(`UPDATE clientes SET nome=$2,email=$3::varchar,telefone=$4,whatsapp=$4,cpf=$5,cep=$6,cidade=$7,estado=$8,endereco=$9,email_verificado=CASE WHEN LOWER(COALESCE(email,''))<>LOWER($3::text) THEN FALSE ELSE email_verificado END,updated_at=NOW() WHERE id=$1 RETURNING *`,[id,nome,email,telefone,cpf,cep,cidade,estado,endereco])).rows[0];
+    await client.query("COMMIT");
+    res.json({message:"Dados atualizados com sucesso.",token:gerarToken(atualizado),cliente:clienteSeguro(atualizado)});
+  }catch(error){
+    await client.query("ROLLBACK");
+    if(error.code==="23505")return res.status(409).json({message:"Este e-mail já está cadastrado."});
+    console.error("Erro ao atualizar dados do cliente:",error);
+    res.status(error.statusCode||500).json({message:error.statusCode?error.message:"Não foi possível atualizar seus dados agora."});
+  }finally{client.release();}
+}
+
+async function meusPedidos(req,res){try{const result=await query(`SELECT v.id,v.created_at,v.total,v.status_pagamento,v.status_entrega,v.forma_pagamento,v.parcelas,v.tem_entrega,COALESCE(json_agg(json_build_object('produto',iv.produto_nome,'tamanho',iv.tamanho,'cor',iv.cor,'quantidade',iv.quantidade,'subtotal',iv.subtotal) ORDER BY iv.id) FILTER (WHERE iv.id IS NOT NULL),'[]'::json) itens FROM vendas v LEFT JOIN itens_venda iv ON iv.venda_id=v.id WHERE v.cliente_id=$1 AND v.canal_venda='site' GROUP BY v.id ORDER BY v.created_at DESC LIMIT 50`,[req.cliente.cliente_id]);res.json(result.rows);}catch(error){console.error("Erro ao listar pedidos do cliente:",error);res.status(500).json({message:"Não foi possível carregar seus pedidos."});}}
+
+function listaCompraSegura(valor,limite){
+  if(!Array.isArray(valor))return[];
+  return valor.slice(0,limite);
+}
+
+async function comprasSalvas(req,res){
+  try{
+    const result=await query("SELECT carrinho,favoritos,updated_at FROM cliente_compras_salvas WHERE cliente_id=$1",[req.cliente.cliente_id]);
+    const dados=result.rows[0];
+    res.json({carrinho:dados?.carrinho||[],favoritos:dados?.favoritos||[],updated_at:dados?.updated_at||null,existe:Boolean(dados)});
+  }catch(error){
+    console.error("Erro ao carregar carrinho e favoritos:",error);
+    res.status(500).json({message:"Não foi possível carregar seus itens salvos."});
+  }
+}
+
+async function salvarCompras(req,res){
+  const carrinho=listaCompraSegura(req.body?.carrinho,120),favoritos=listaCompraSegura(req.body?.favoritos,120);
+  const tamanho=Buffer.byteLength(JSON.stringify({carrinho,favoritos}),"utf8");
+  if(tamanho>750000)return res.status(413).json({message:"A lista de itens salvos excedeu o limite permitido."});
+  try{
+    const result=await query(`INSERT INTO cliente_compras_salvas (cliente_id,carrinho,favoritos) VALUES ($1,$2::jsonb,$3::jsonb) ON CONFLICT (cliente_id) DO UPDATE SET carrinho=EXCLUDED.carrinho,favoritos=EXCLUDED.favoritos,updated_at=NOW() RETURNING updated_at`,[req.cliente.cliente_id,JSON.stringify(carrinho),JSON.stringify(favoritos)]);
+    res.json({message:"Carrinho e favoritos salvos.",updated_at:result.rows[0].updated_at});
+  }catch(error){
+    console.error("Erro ao salvar carrinho e favoritos:",error);
+    res.status(500).json({message:"Não foi possível salvar seus itens agora."});
+  }
+}
+
+async function gerarLinkPagamento(req,res){
+  const vendaId=Number(req.params.venda_id);
+  if(!Number.isInteger(vendaId)||vendaId<=0)return res.status(400).json({message:"Pedido inválido."});
+  try{
+    const venda=(await query(`SELECT id,status,status_pagamento,forma_pagamento FROM vendas WHERE id=$1 AND cliente_id=$2 AND canal_venda='site' LIMIT 1`,[vendaId,req.cliente.cliente_id])).rows[0];
+    if(!venda)return res.status(404).json({message:"Pedido não encontrado na sua conta."});
+    if(venda.status==="cancelada"||venda.status_pagamento==="cancelado")return res.status(409).json({message:"Pedido cancelado não pode receber link de pagamento."});
+    if(venda.status_pagamento==="pago")return res.status(409).json({message:"Este pedido já está pago."});
+    if(!["pendente","pending","aguardando_pagamento"].includes(String(venda.status_pagamento||"").toLowerCase()))return res.status(409).json({message:"O pagamento deste pedido não está pendente."});
+    const preferencia=await criarOuObterPreferenciaVenda(vendaId);
+    const url=preferencia.url_pagamento||preferencia.sandbox_init_point||preferencia.init_point;
+    if(!url)return res.status(502).json({message:"O link de pagamento ainda não está disponível."});
+    res.json({message:"Link de pagamento gerado.",pedido_id:vendaId,url_pagamento:url,ambiente:preferencia.ambiente,status:preferencia.status});
+  }catch(error){
+    if(error.statusCode)return res.status(error.statusCode).json({message:error.message});
+    console.error("Erro ao gerar link de pagamento do cliente:",error);
+    res.status(500).json({message:"Não foi possível gerar o link de pagamento agora."});
+  }
+}
 
 const MENSAGEM_RECUPERACAO="Se este e-mail estiver cadastrado, enviaremos um código para redefinir sua senha.";
 const inteiroEnv=(nome,padrao,minimo,maximo)=>{const valor=Number(process.env[nome]||padrao);return Number.isInteger(valor)&&valor>=minimo&&valor<=maximo?valor:padrao;};
@@ -68,4 +148,4 @@ async function redefinirSenha(req,res){
   }catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.statusCode?error.message:"Não foi possível redefinir a senha agora."});}finally{client.release();}
 }
 
-module.exports={cadastro,login,me,meusPedidos,esqueciSenha,redefinirSenha};
+module.exports={cadastro,login,me,atualizarMe,meusPedidos,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};

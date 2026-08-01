@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Painel administrativo | Gisele Flávia</title>
+    <link rel="icon" href="/assets/logo.jpeg" />
+    <link rel="stylesheet" href="/css/admin.css" />
+    <script defer src="/js/admin.js"></script>
+  </head>
+  <body>
+    <div class="admin-shell">
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="/" aria-label="Abrir loja">
+          <img src="/assets/logo.jpeg" alt="Gisele Flávia" />
+          <span><strong>Gisele Flávia</strong><small>Administração</small></span>
+        </a>
+        <button id="menuButton" class="menu-button" aria-label="Abrir menu" aria-expanded="false" aria-controls="adminNavigation">☰</button>
+        <nav class="nav" id="adminNavigation" aria-label="Navegação administrativa">
+          <button class="nav-item active" data-view="dashboard">Visão geral</button>
+          <button class="nav-item" data-view="products">Produtos e uploads</button>
+          <button class="nav-item" data-view="orders">Pedidos</button>
+          <button class="nav-item" data-view="customers">Clientes</button>
+          <button class="nav-item" data-view="freight">Fretes</button>
+          <button class="nav-item" data-view="settings">Dados do site</button>
+          <button class="nav-item" data-view="team">Equipe</button>
+        </nav>
+        <div class="sidebar-footer">
+          <a href="/" target="_blank" rel="noreferrer">Ver loja</a>
+          <button id="logoutButton" class="link-button">Sair</button>
+        </div>
+      </aside>
+
+      <div class="admin-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Painel administrativo</p>
+            <h1 id="pageTitle">Visão geral</h1>
+          </div>
+          <div class="user-chip">
+            <span id="userInitial">A</span>
+            <div><strong id="userName">Administrador</strong><small id="userRole">Acesso seguro</small></div>
+          </div>
+        </header>
+        <main id="view" class="view" aria-live="polite">
+          <div class="loading-card"><span class="spinner"></span> Carregando painel...</div>
+        </main>
+      </div>
+    </div>
+
+    <div id="modal" class="modal" hidden>
+      <div class="modal-backdrop" data-close-modal></div>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <header><h2 id="modalTitle">Editar</h2><button class="icon-button" data-close-modal aria-label="Fechar">×</button></header>
+        <div id="modalBody" class="modal-body"></div>
+      </section>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
