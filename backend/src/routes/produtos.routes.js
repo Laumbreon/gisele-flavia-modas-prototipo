@@ -5,9 +5,10 @@ const { middlewareUploadProdutos } = require("../middlewares/upload-produtos.mid
 
 const router = express.Router();
 
-const visualizar = permissoes(["produtos.editar", "estoque.ver"]);
+const visualizar = permissoes(["produtos.editar", "estoque.ver", "pdv.acessar", "vendas.criar", "etiquetas.imprimir"]);
 const editar = permissoes(["produtos.editar"]);
-router.post("/gerar-codigos", editar, produtosController.gerarCodigosVariacoes);
+const gerarEtiquetas = permissoes(["produtos.editar", "etiquetas.imprimir"]);
+router.post("/gerar-codigos", gerarEtiquetas, produtosController.gerarCodigosVariacoes);
 router.get("/codigo/:codigo", visualizar, produtosController.buscarProdutoPorCodigo);
 router.get("/categorias", visualizar, produtosController.listarCategorias);
 router.post("/categorias", editar, produtosController.criarCategoria);
@@ -21,7 +22,7 @@ router.patch("/:id/arquivar", editar, produtosController.arquivarProduto);
 router.patch("/:id/restaurar", editar, produtosController.restaurarProduto);
 router.delete("/:id", editar, produtosController.excluirProduto);
 router.post("/:id/variacoes", editar, produtosController.criarVariacao);
-router.post("/:id/variacoes/:variacao_id/gerar-codigo-curto", editar, produtosController.gerarCodigoCurtoVariacao);
+router.post("/:id/variacoes/:variacao_id/gerar-codigo-curto", gerarEtiquetas, produtosController.gerarCodigoCurtoVariacao);
 router.put("/:id/variacoes/:variacao_id", editar, produtosController.atualizarVariacao);
 router.delete("/:id/variacoes/:variacao_id", editar, produtosController.excluirVariacao);
 router.post("/:id/midias/upload", editar, middlewareUploadProdutos, produtosController.uploadMidias);

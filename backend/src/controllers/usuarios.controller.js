@@ -1,7 +1,7 @@
 const { pool, query } = require("../config/db");
 const bcrypt = require("bcrypt");
 
-const MAX_ADMINISTRADORES = 3;
+const MAX_ADMINISTRADORES = 2;
 const EMAIL_ADMIN_PROTEGIDO = "four4code4@gmail.com";
 const TIPOS_ADMINISTRADOR = ["dona", "super_admin"];
 
@@ -59,7 +59,7 @@ async function criarAdministrador(req, res) {
     );
     if (total.rows[0].total >= MAX_ADMINISTRADORES) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "O limite de 3 administradores ativos já foi atingido." });
+      return res.status(409).json({ message: "O limite de 2 administradores ativos já foi atingido." });
     }
 
     const senhaHash = await bcrypt.hash(senha, 12);

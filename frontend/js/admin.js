@@ -5,11 +5,14 @@
   const API = "/api";
   const titles = {
     dashboard: "Visão geral",
+    pdv: "PDV — Frente de caixa",
     products: "Produtos e uploads",
     "product-editor": "Editar produto",
     orders: "Pedidos",
     customers: "Clientes",
     freight: "Fretes por bairro",
+    machines: "Configuração das maquininhas",
+    labels: "Etiquetas de produtos",
     settings: "Dados do site",
     team: "Equipe",
   };
@@ -25,6 +28,12 @@
     users: [],
     settings: {},
     product: null,
+    pdvProducts: [],
+    pdvCart: [],
+    pdvCash: null,
+    cashHistory: [],
+    machines: [],
+    labelProducts: [],
   };
 
   const view = document.getElementById("view");
@@ -117,11 +126,14 @@
     setActiveNav(viewName);
     try {
       if (viewName === "dashboard") await renderDashboard();
+      else if (viewName === "pdv") await renderPdv();
       else if (viewName === "products") await renderProducts();
       else if (viewName === "product-editor") await renderProductEditor(data);
       else if (viewName === "orders") await renderOrders();
       else if (viewName === "customers") await renderCustomers();
       else if (viewName === "freight") await renderFreight();
+      else if (viewName === "machines") await renderMachines();
+      else if (viewName === "labels") await renderLabels();
       else if (viewName === "settings") await renderSettings();
       else if (viewName === "team") await renderTeam();
     } catch (error) {
@@ -170,6 +182,73 @@
           </div>
         </section>
       </div>`;
+  }
+
+  function pdvUnitPrice(product, variation) {
+    return Number(variation.preco_promocional ?? variation.preco_venda ?? product.preco_promocional ?? product.preco ?? 0);
+  }
+
+  function pdvTotals() {
+    const subtotal = state.pdvCart.reduce((sum, item) => sum + item.preco * item.quantidade, 0);
+    const discount = Math.max(0, Number(document.querySelector('[name="pdv_desconto"]')?.value || 0));
+    return { subtotal, discount, total: Math.max(0, subtotal - discount) };
+  }
+
+  function pdvCartHtml() {
+    const totals = pdvTotals();
+    const lines = state.pdvCart.length
+      ? state.pdvCart.map((item) => `<div class="pdv-cart-line"><div><strong>${escapeHtml(item.produto)}</strong><small>${escapeHtml(item.tamanho)} · ${escapeHtml(item.cor)}</small></div><div class="pdv-quantity"><button type="button" data-action="pdv-minus" data-id="${item.variacao_id}" aria-label="Diminuir">−</button><span>${item.quantidade}</span><button type="button" data-action="pdv-plus" data-id="${item.variacao_id}" aria-label="Aumentar">＋</button></div><strong>${money(item.preco * item.quantidade)}</strong><button type="button" class="pdv-remove" data-action="pdv-remove" data-id="${item.variacao_id}" aria-label="Remover">×</button></div>`).join("")
+      : `<div class="empty-state pdv-empty">Adicione produtos para iniciar a venda.</div>`;
+    return `${lines}<div class="pdv-totals"><span>Subtotal <strong>${money(totals.subtotal)}</strong></span><span>Desconto <strong>${money(totals.discount)}</strong></span><span class="pdv-total">Total <strong>${money(totals.total)}</strong></span></div>`;
+  }
+
+  function updatePdvCart() {
+    const cart = document.getElementById("pdvCart");
+    if (cart) cart.innerHTML = pdvCartHtml();
+    const submit = document.querySelector('[data-form="pdv-sale"] button[type="submit"], [data-form="pdv-sale"] button:not([type])');
+    if (submit) submit.disabled = !state.pdvCart.length;
+  }
+
+  function cashHistoryHtml() {
+    return `<section class="section pdv-history"><div class="section-heading"><h2>Histórico de caixas</h2><span class="muted">Últimos ${state.cashHistory.length} registros</span></div>${state.cashHistory.length ? `<div class="table-wrap"><table><thead><tr><th>Caixa</th><th>Abertura</th><th>Fechamento</th><th>Responsável</th><th>Total sistema</th><th>Total informado</th><th>Diferença</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.cashHistory.map((item) => `<tr><td><strong>#${item.id}</strong></td><td>${date(item.data_abertura)}</td><td>${item.data_fechamento ? date(item.data_fechamento) : "—"}</td><td>${escapeHtml(item.usuario_abertura || "—")}</td><td>${money(item.total_sistema)}</td><td>${item.status === "fechado" ? money(item.total_informado) : "—"}</td><td>${item.status === "fechado" ? money(item.divergencia) : "—"}</td><td><span class="badge ${item.status === "aberto" ? "pending" : ""}">${escapeHtml(item.status)}</span></td><td><div class="actions"><button class="btn secondary small" data-action="cash-details" data-id="${item.id}">Detalhes</button><button class="btn secondary small" data-action="edit-cash" data-id="${item.id}">Editar</button><button class="btn secondary small" data-action="delete-cash" data-id="${item.id}">Excluir</button></div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum histórico de caixa encontrado.")}</section>`;
+  }
+
+  async function renderPdv() {
+    loading("Preparando o frente de caixa...");
+    const [products, cash, machines, customers, cashHistory] = await Promise.all([
+      request("/produtos?status=ativos"), request("/caixas/aberto"), request("/maquininhas"), request("/clientes"), request("/caixas"),
+    ]);
+    state.pdvProducts = products.filter((item) => item.ativo && Number(item.estoque_total) > 0);
+    state.pdvCash = cash;
+    state.machines = machines.filter((item) => item.ativo);
+    state.customers = customers;
+    state.cashHistory = cashHistory;
+    if (!cash) {
+      view.innerHTML = `<section class="section pdv-open"><h2>Abrir caixa</h2><p class="muted">Informe o valor disponível em dinheiro antes de começar as vendas.</p><form data-form="pdv-open-cash"><div class="field-grid"><div class="field"><label>Valor inicial (R$)</label><input name="valor_inicial" type="number" min="0" step="0.01" value="0" required></div><div class="field"><label>Observação</label><input name="observacoes_abertura" maxlength="500" placeholder="Opcional"></div></div><div class="form-actions"><button class="btn">Abrir caixa e iniciar PDV</button></div></form></section>${cashHistoryHtml()}`;
+      return;
+    }
+    const productCards = state.pdvProducts.flatMap((product) => (product.variacoes || [])
+      .filter((variation) => variation.ativo !== false && Number(variation.quantidade_estoque) > 0)
+      .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""}`.toLowerCase())}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span><small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
+    view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Pagamento</label><select name="forma_pagamento" required><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
+  }
+
+  function findPdvVariation(variationId) {
+    for (const product of state.pdvProducts) {
+      const variation = (product.variacoes || []).find((item) => item.id === variationId);
+      if (variation) return { product, variation };
+    }
+    return null;
+  }
+
+  function changePdvItem(variationId, change) {
+    const found = findPdvVariation(variationId);
+    if (!found) return;
+    const current = state.pdvCart.find((item) => item.variacao_id === variationId);
+    if (!current && change > 0) state.pdvCart.push({ produto_id: found.product.id, variacao_id: variationId, produto: found.product.nome, tamanho: found.variation.tamanho, cor: found.variation.cor, preco: pdvUnitPrice(found.product, found.variation), quantidade: 1, estoque: Number(found.variation.quantidade_estoque) });
+    else if (current) current.quantidade = Math.max(0, Math.min(current.estoque, current.quantidade + change));
+    state.pdvCart = state.pdvCart.filter((item) => item.quantidade > 0);
+    updatePdvCart();
   }
 
   function productImage(product) {
@@ -310,6 +389,70 @@
     view.innerHTML = `<div class="page-actions"><div><strong>${state.freight.length} região(ões) configurada(s)</strong><p>Valores usados no cálculo da entrega local.</p></div><button class="btn" data-action="new-freight">＋ Novo bairro</button></div>${state.freight.length ? `<div class="table-wrap"><table><thead><tr><th>Bairro</th><th>Cidade/UF</th><th>Valor</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.freight.map((item) => `<tr><td><strong>${escapeHtml(item.bairro)}</strong></td><td>${escapeHtml(item.cidade)} / ${escapeHtml(item.estado)}</td><td>${money(item.valor)}</td><td>${escapeHtml(item.prazo_estimado || "—")}</td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativo" : "Inativo"}</span></td><td><div class="actions"><button class="btn secondary small" data-action="edit-freight" data-id="${item.id}">Editar</button>${item.ativo ? `<button class="btn secondary small" data-action="delete-freight" data-id="${item.id}">Desativar</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum bairro configurado para entrega local.")}`;
   }
 
+  function machineForm(item = null) {
+    const selected = (value, expected) => value === expected ? "selected" : "";
+    return `<form data-form="machine" data-id="${item?.id || ""}"><div class="field-grid"><div class="field"><label>Nome da maquininha</label><input name="nome" maxlength="120" required value="${escapeHtml(item?.nome || "")}" placeholder="Ex.: Maquininha Balcão 1"></div><div class="field"><label>Uso</label><select name="tipo"><option value="loja" ${selected(item?.tipo || "loja", "loja")}>Loja</option><option value="motoboy" ${selected(item?.tipo, "motoboy")}>Motoboy</option><option value="outro" ${selected(item?.tipo, "outro")}>Outro</option></select></div><div class="field"><label>Provedor de pagamento</label><select name="provedor_pagamento"><option value="manual" ${selected(item?.provedor_pagamento || "manual", "manual")}>Manual / não integrada</option><option value="mercado_pago" ${selected(item?.provedor_pagamento, "mercado_pago")}>Mercado Pago</option></select></div><div class="field"><label>Código externo</label><input name="codigo_externo" maxlength="120" value="${escapeHtml(item?.codigo_externo || "")}" placeholder="Código no provedor"></div><div class="field"><label>Mercado Pago POS ID</label><input name="mercado_pago_pos_id" maxlength="160" value="${escapeHtml(item?.mercado_pago_pos_id || "")}"></div><div class="field"><label>Mercado Pago Store ID</label><input name="mercado_pago_store_id" maxlength="160" value="${escapeHtml(item?.mercado_pago_store_id || "")}"></div><div class="field"><label>Código no PDV</label><input name="pdv_codigo" maxlength="100" value="${escapeHtml(item?.pdv_codigo || "")}" placeholder="Ex.: BALCAO-01"></div><div class="field"><label>Tipo de terminal</label><input name="terminal_tipo" maxlength="100" value="${escapeHtml(item?.terminal_tipo || "")}" placeholder="Ex.: Point Smart"></div><div class="field"><label>Ordem de exibição</label><input name="ordem_exibicao" type="number" step="1" value="${Number(item?.ordem_exibicao || 0)}"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required placeholder="Obrigatório para salvar"></div><div class="field full"><label>Observações</label><textarea name="observacoes" maxlength="1000">${escapeHtml(item?.observacoes || "")}</textarea></div><div class="field full"><label class="checkbox"><input name="mercado_pago_integrada" type="checkbox" ${item?.mercado_pago_integrada ? "checked" : ""}> Integração Mercado Pago habilitada</label></div><div class="field full"><label class="checkbox"><input name="ativo" type="checkbox" ${item?.ativo !== false ? "checked" : ""}> Maquininha ativa no PDV</label></div><div class="field full help">O PIN administrativo é validado pelo servidor e não fica salvo no navegador.</div></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn">${item ? "Salvar alterações" : "Cadastrar maquininha"}</button></div></form>`;
+  }
+
+  async function renderMachines() {
+    loading("Carregando maquininhas...");
+    state.machines = await request("/maquininhas");
+    view.innerHTML = `<div class="page-actions"><div><strong>${state.machines.length} maquininha(s) cadastrada(s)</strong><p>Configure os terminais disponíveis no PDV e a integração com o Mercado Pago.</p></div><button class="btn" data-action="new-machine">＋ Nova maquininha</button></div>${state.machines.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Uso</th><th>Provedor</th><th>Código PDV</th><th>Terminal</th><th>Integração</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.machines.map((item) => `<tr><td><strong>${escapeHtml(item.nome)}</strong><div class="muted">${escapeHtml(item.codigo_externo || "Sem código externo")}</div></td><td>${escapeHtml(item.tipo || "loja")}</td><td>${escapeHtml(item.provedor_pagamento || "manual")}</td><td>${escapeHtml(item.pdv_codigo || "—")}</td><td>${escapeHtml(item.terminal_tipo || "—")}</td><td><span class="badge ${item.mercado_pago_integrada ? "" : "inactive"}">${item.mercado_pago_integrada ? "Mercado Pago" : "Manual"}</span></td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativa" : "Inativa"}</span></td><td><div class="actions"><button class="btn secondary small" data-action="edit-machine" data-id="${item.id}">Editar</button>${item.ativo ? `<button class="btn secondary small" data-action="disable-machine" data-id="${item.id}">Desativar</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma maquininha cadastrada.")}`;
+  }
+
+  function disableMachineForm(item) {
+    return `<form data-form="disable-machine" data-id="${item.id}"><p>Desativar <strong>${escapeHtml(item.nome)}</strong>? Ela deixará de aparecer no PDV, mas o histórico de vendas será preservado.</p><div style="height:16px"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Desativar maquininha</button></div></form>`;
+  }
+
+  async function renderLabels() {
+    loading("Carregando produtos para etiquetas...");
+    state.labelProducts = await request("/produtos?status=ativos");
+    const rows = state.labelProducts.flatMap((product) => (product.variacoes || []).filter((variation) => variation.ativo !== false).map((variation) => ({ product, variation })));
+    view.innerHTML = `<div class="page-actions"><div><strong>${rows.length} variação(ões) disponíveis</strong></div><button class="btn secondary" data-action="generate-label-codes">Padronizar códigos</button></div><form data-form="print-labels"><section class="section"><div class="label-toolbar"><label class="checkbox"><input id="labelSelectAll" type="checkbox"> Selecionar todas</label><div class="field"><label>Tamanho da etiqueta</label><select name="label_size"><option value="40x30">40 × 30 mm</option><option value="50x30">50 × 30 mm</option><option value="60x40">60 × 40 mm</option></select></div><label class="checkbox"><input name="show_price" type="checkbox" checked> Mostrar preço</label><button class="btn">Imprimir selecionadas</button></div></section>${rows.length ? `<div class="table-wrap"><table><thead><tr><th></th><th>Produto</th><th>Variação</th><th>SKU</th><th>Código de barras</th><th>Preço</th><th>Estoque</th><th>Cópias</th></tr></thead><tbody>${rows.map(({ product, variation }) => `<tr><td><input class="label-select" type="checkbox" name="variation_id" value="${variation.id}"></td><td><strong>${escapeHtml(product.nome)}</strong><div class="muted">${escapeHtml(product.categoria)}</div></td><td>${escapeHtml(variation.tamanho)} / ${escapeHtml(variation.cor)}</td><td>${escapeHtml(variation.sku || "—")}</td><td><code>${escapeHtml(variation.codigo_barras || "Sem código")}</code></td><td>${money(pdvUnitPrice(product, variation))}</td><td>${Number(variation.quantidade_estoque || 0)}</td><td><input class="label-copy-count" data-id="${variation.id}" type="number" min="1" max="100" step="1" value="1" aria-label="Quantidade de cópias"></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma variação ativa disponível para etiquetas.")}</form>`;
+  }
+
+  const code39Patterns = { "0":"nnnwwnwnn", "1":"wnnwnnnnw", "2":"nnwwnnnnw", "3":"wnwwnnnnn", "4":"nnnwwnnnw", "5":"wnnwwnnnn", "6":"nnwwwnnnn", "7":"nnnwnnwnw", "8":"wnnwnnwnn", "9":"nnwwnnwnn", "F":"nnwnwwnnn", "G":"nnnnnwwnw", "*":"nwnnwnwnn" };
+
+  function barcodeSvg(value) {
+    const code = String(value || "").toUpperCase();
+    if (![...code].every((char) => code39Patterns[char])) return `<div class="barcode-fallback">${escapeHtml(code)}</div>`;
+    let x = 0; const bars = [];
+    for (const char of `*${code}*`) {
+      [...code39Patterns[char]].forEach((width, index) => { const size = width === "w" ? 5 : 2; if (index % 2 === 0) bars.push(`<rect x="${x}" y="0" width="${size}" height="38"/>`); x += size; });
+      x += 2;
+    }
+    return `<svg class="barcode" viewBox="0 0 ${x} 38" preserveAspectRatio="none" aria-label="Código ${escapeHtml(code)}">${bars.join("")}</svg>`;
+  }
+
+  function labelItem(variationId) {
+    for (const product of state.labelProducts) {
+      const variation = (product.variacoes || []).find((item) => item.id === variationId);
+      if (variation) return { product, variation };
+    }
+    return null;
+  }
+
+  async function submitPrintLabels(form) {
+    const selected = [...form.querySelectorAll('.label-select:checked')];
+    if (!selected.length) throw new Error("Selecione ao menos uma variação para imprimir.");
+    const labels = [];
+    for (const input of selected) {
+      const item = labelItem(Number(input.value));
+      if (!item) continue;
+      if (!item.variation.codigo_barras) throw new Error(`A variação ${item.product.nome} — ${item.variation.tamanho}/${item.variation.cor} ainda não possui código de barras.`);
+      const copies = Math.min(100, Math.max(1, Number(form.querySelector(`.label-copy-count[data-id="${item.variation.id}"]`)?.value || 1)));
+      for (let index = 0; index < copies; index += 1) labels.push(item);
+    }
+    if (labels.length > 500) throw new Error("Imprima no máximo 500 etiquetas por vez.");
+    const [width, height] = form.elements.label_size.value.split("x").map(Number);
+    const showPrice = form.elements.show_price.checked;
+    const popup = window.open("", "_blank");
+    if (!popup) throw new Error("O navegador bloqueou a janela de impressão. Permita pop-ups e tente novamente.");
+    const content = labels.map(({ product, variation }) => `<article class="label"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span>${barcodeSvg(variation.codigo_barras)}<code>${escapeHtml(variation.codigo_barras)}</code>${showPrice ? `<b>${money(pdvUnitPrice(product, variation))}</b>` : ""}</article>`).join("");
+    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Etiquetas Gisele Flávia</title><style>@page{size:${width}mm ${height}mm;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.label{width:${width}mm;height:${height}mm;padding:2.2mm;display:flex;flex-direction:column;align-items:center;justify-content:center;page-break-after:always;overflow:hidden;text-align:center}.label strong{max-width:100%;font-size:${height <= 30 ? 9 : 11}pt;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label span{font-size:7pt;margin-top:1mm}.barcode{width:90%;height:${height <= 30 ? 9 : 14}mm;margin-top:1mm;fill:#000}.label code{font:7pt monospace;letter-spacing:.4mm}.label b{font-size:${height <= 30 ? 9 : 11}pt;margin-top:.5mm}.barcode-fallback{font:9pt monospace;margin:2mm 0}@media screen{body{background:#ddd}.label{background:#fff;margin:4mm auto;box-shadow:0 1mm 4mm #999}}@media print{.label{margin:0;box-shadow:none}}</style></head><body>${content}<script>window.onload=()=>setTimeout(()=>window.print(),150)<\/script></body></html>`);
+    popup.document.close();
+  }
+
   async function renderSettings() {
     loading("Carregando dados do site...");
     state.settings = await request("/configuracoes-site");
@@ -331,7 +474,7 @@
     loading("Carregando equipe...");
     state.users = await request("/usuarios");
     const admins = state.users.filter((item) => ["dona", "super_admin"].includes(item.tipo));
-    view.innerHTML = `<div class="page-actions"><div><strong>${admins.length} de 3 administradores cadastrados</strong><p>Contas com acesso total ao painel.</p></div>${admins.length < 3 ? `<button class="btn" data-action="new-admin">＋ Novo administrador</button>` : `<span class="badge">Limite atingido</span>`}</div>${admins.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th>Ações</th></tr></thead><tbody>${admins.map((item) => `<tr><td><strong>${escapeHtml(item.nome)}</strong></td><td>${escapeHtml(item.email)}${item.protegido ? ` <span class="badge">Protegido</span>` : ""}</td><td>Administrador</td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativo" : "Inativo"}</span></td><td>${date(item.created_at)}</td><td>${item.protegido ? "Não pode ser excluído" : `<button class="btn secondary small" data-action="delete-admin" data-id="${item.id}">Excluir</button>`}</td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum administrador cadastrado.")}`;
+    view.innerHTML = `<div class="page-actions"><div><strong>${admins.length} de 2 administradores cadastrados</strong><p>Uma conta protegida FourCode e uma conta administrativa adicional.</p></div>${admins.length < 2 ? `<button class="btn" data-action="new-admin">＋ Novo administrador</button>` : `<span class="badge">Limite atingido</span>`}</div>${admins.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th>Ações</th></tr></thead><tbody>${admins.map((item) => `<tr><td><strong>${escapeHtml(item.nome)}</strong></td><td>${escapeHtml(item.email)}${item.protegido ? ` <span class="badge">Protegido</span>` : ""}</td><td>Administrador</td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativo" : "Inativo"}</span></td><td>${date(item.created_at)}</td><td>${item.protegido ? "Não pode ser excluído" : `<button class="btn secondary small" data-action="delete-admin" data-id="${item.id}">Excluir</button>`}</td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum administrador cadastrado.")}`;
   }
 
   function adminForm() {
@@ -339,7 +482,7 @@
       <div class="field full"><label>Nome</label><input name="nome" minlength="2" maxlength="120" required></div>
       <div class="field full"><label>E-mail</label><input name="email" type="email" maxlength="160" required></div>
       <div class="field full"><label>Senha temporária</label><input name="senha" type="password" minlength="8" required autocomplete="new-password"></div>
-      <div class="field full help">O sistema permite no máximo três administradores ativos.</div>
+      <div class="field full help">O sistema permite no máximo dois administradores ativos, incluindo a conta FourCode protegida.</div>
     </div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn" type="submit">Cadastrar administrador</button></div></form>`;
   }
 
@@ -366,6 +509,14 @@
       else if (kind === "edit-category") await submitEditCategory(form);
       else if (kind === "pay-order") await submitPayOrder(form);
       else if (kind === "admin") await submitAdmin(form);
+      else if (kind === "pdv-open-cash") await submitPdvOpenCash(form);
+      else if (kind === "pdv-sale") await submitPdvSale(form);
+      else if (kind === "pdv-close-cash") await submitPdvCloseCash(form);
+      else if (kind === "machine") await submitMachine(form);
+      else if (kind === "disable-machine") await submitDisableMachine(form);
+      else if (kind === "edit-cash") await submitEditCash(form);
+      else if (kind === "delete-cash") await submitDeleteCash(form);
+      else if (kind === "print-labels") await submitPrintLabels(form);
     } catch (error) { toast(error.message, true); }
     finally { if (submit?.isConnected) { submit.disabled = false; submit.textContent = original; } }
   }
@@ -445,6 +596,106 @@
     closeModal(); toast("Administrador cadastrado."); await renderTeam();
   }
 
+  async function submitPdvOpenCash(form) {
+    const data = formObject(form);
+    await request("/caixas/abrir", { method: "POST", body: JSON.stringify({ valor_inicial: Number(data.valor_inicial || 0), observacoes_abertura: data.observacoes_abertura || null }) });
+    toast("Caixa aberto. O PDV está pronto para vender.");
+    await renderPdv();
+  }
+
+  async function submitPdvSale(form) {
+    if (!state.pdvCart.length) throw new Error("Adicione ao menos um produto à venda.");
+    const data = formObject(form);
+    const totals = pdvTotals();
+    if (totals.discount > totals.subtotal) throw new Error("O desconto não pode ser maior que o subtotal.");
+    if (["debito", "credito"].includes(data.forma_pagamento) && !data.maquininha_id) throw new Error("Selecione a maquininha usada no pagamento.");
+    const payload = {
+      cliente_id: data.cliente_id ? Number(data.cliente_id) : null,
+      caixa_id: state.pdvCash.id,
+      canal_venda: "loja_fisica",
+      origem_venda: "pdv_admin",
+      desconto: totals.discount,
+      frete: 0,
+      forma_pagamento: data.forma_pagamento,
+      maquininha_id: data.maquininha_id ? Number(data.maquininha_id) : null,
+      itens: state.pdvCart.map((item) => ({ produto_id: item.produto_id, variacao_id: item.variacao_id, quantidade: item.quantidade, preco_unitario: item.preco })),
+    };
+    const sale = await request("/vendas", { method: "POST", body: JSON.stringify(payload) });
+    state.pdvCart = [];
+    toast(`Venda #${sale.id} finalizada — ${money(sale.total)}.`);
+    await renderPdv();
+  }
+
+  function openPdvCloseCash() {
+    if (state.pdvCart.length && !confirm("Existe uma venda não finalizada. Deseja descartá-la e continuar com o fechamento?")) return;
+    openModal(`Fechar caixa #${state.pdvCash.id}`, `<form data-form="pdv-close-cash"><p class="help">Conte o valor recebido em cada forma de pagamento. O sistema calculará automaticamente qualquer diferença.</p><div style="height:16px"></div><div class="field-grid"><div class="field"><label>Dinheiro em caixa (R$)</label><input name="dinheiro" type="number" min="0" step="0.01" required inputmode="decimal"></div><div class="field"><label>Pix recebido (R$)</label><input name="pix" type="number" min="0" step="0.01" required inputmode="decimal"></div><div class="field"><label>Débito recebido (R$)</label><input name="debito" type="number" min="0" step="0.01" required inputmode="decimal"></div><div class="field"><label>Crédito recebido (R$)</label><input name="credito" type="number" min="0" step="0.01" required inputmode="decimal"></div><div class="field full"><label>Observação do fechamento</label><textarea name="observacoes_fechamento" maxlength="1000" placeholder="Opcional"></textarea></div></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Confirmar fechamento</button></div></form>`);
+  }
+
+  async function submitPdvCloseCash(form) {
+    const data = formObject(form);
+    const payload = { dinheiro: Number(data.dinheiro), pix: Number(data.pix), debito: Number(data.debito), credito: Number(data.credito), observacoes_fechamento: data.observacoes_fechamento || null };
+    if (Object.values(payload).slice(0, 4).some((value) => !Number.isFinite(value) || value < 0)) throw new Error("Informe valores válidos para fechar o caixa.");
+    const cash = await request(`/caixas/${state.pdvCash.id}/fechar`, { method: "POST", body: JSON.stringify(payload) });
+    state.pdvCart = [];
+    state.pdvCash = null;
+    closeModal();
+    const difference = Number(cash.divergencia || 0);
+    toast(`Caixa fechado. Total informado: ${money(cash.total_informado)}${difference ? ` · Diferença: ${money(difference)}` : " · Sem diferença"}.`, difference !== 0);
+    await renderPdv();
+  }
+
+  async function showCashDetails(id) {
+    const detail = await request(`/caixas/${id}`);
+    const cash = detail.caixa;
+    openModal(`Caixa #${id}`, `<div class="field-grid"><div><strong>${escapeHtml(cash.status)}</strong><p class="muted">Aberto em ${date(cash.data_abertura)}</p></div><div><strong>${money(cash.valor_inicial)}</strong><p class="muted">Valor inicial</p></div></div><div style="height:16px"></div><div class="cards cash-detail-cards"><article class="card metric"><small>Total do sistema</small><strong>${money(detail.totais.sistema.total)}</strong></article><article class="card metric"><small>Total informado</small><strong>${cash.status === "fechado" ? money(detail.totais.informado.total) : "—"}</strong></article><article class="card metric ${Number(detail.totais.divergencia) ? "cash-difference" : ""}"><small>Diferença</small><strong>${cash.status === "fechado" ? money(detail.totais.divergencia) : "—"}</strong></article></div><div style="height:18px"></div><h3>Movimentações</h3><div style="height:10px"></div>${detail.movimentacoes.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Forma</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>${detail.movimentacoes.map((item) => `<tr><td>${date(item.created_at)}</td><td>${escapeHtml(item.tipo)}</td><td>${escapeHtml(item.forma_pagamento || "—")}</td><td>${escapeHtml(item.descricao || "—")}</td><td>${money(item.valor)}</td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma movimentação registrada.")}`);
+  }
+
+  async function openEditCash(id) {
+    const detail = await request(`/caixas/${id}`);
+    const cash = detail.caixa;
+    const closedFields = cash.status === "fechado" ? `<div class="field"><label>Dinheiro informado (R$)</label><input name="dinheiro" type="number" min="0" step="0.01" required value="${Number(cash.valor_informado_dinheiro || 0)}"></div><div class="field"><label>Pix informado (R$)</label><input name="pix" type="number" min="0" step="0.01" required value="${Number(cash.valor_informado_pix || 0)}"></div><div class="field"><label>Débito informado (R$)</label><input name="debito" type="number" min="0" step="0.01" required value="${Number(cash.valor_informado_debito || 0)}"></div><div class="field"><label>Crédito informado (R$)</label><input name="credito" type="number" min="0" step="0.01" required value="${Number(cash.valor_informado_credito || 0)}"></div><div class="field full"><label>Observação do fechamento</label><textarea name="observacoes_fechamento" maxlength="1000">${escapeHtml(cash.observacoes_fechamento || "")}</textarea></div>` : "";
+    openModal(`Editar caixa #${id}`, `<form data-form="edit-cash" data-id="${id}"><div class="field-grid"><div class="field"><label>Valor inicial (R$)</label><input name="valor_inicial" type="number" min="0" step="0.01" required value="${Number(cash.valor_inicial || 0)}"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="field full"><label>Observação da abertura</label><textarea name="observacoes_abertura" maxlength="1000">${escapeHtml(cash.observacoes_abertura || "")}</textarea></div>${closedFields}<div class="field full help">Os totais do sistema e a divergência serão recalculados automaticamente. Vendas e movimentações não serão alteradas.</div></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn">Salvar histórico</button></div></form>`);
+  }
+
+  async function submitEditCash(form) {
+    const data = formObject(form);
+    const pin = data.admin_pin;
+    delete data.admin_pin;
+    const payload = { ...data, valor_inicial: Number(data.valor_inicial) };
+    for (const field of ["dinheiro", "pix", "debito", "credito"]) if (data[field] !== undefined) payload[field] = Number(data[field]);
+    await request(`/caixas/${form.dataset.id}`, { method: "PUT", headers: { "X-Admin-Pin": pin }, body: JSON.stringify(payload) });
+    closeModal(); toast("Histórico do caixa atualizado."); await renderPdv();
+  }
+
+  function openDeleteCash(id) {
+    openModal(`Excluir caixa #${id}`, `<form data-form="delete-cash" data-id="${id}"><p class="help">A exclusão só será permitida se não houver vendas vinculadas. Movimentações avulsas desse caixa também serão removidas.</p><div style="height:16px"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Excluir histórico</button></div></form>`);
+  }
+
+  async function submitDeleteCash(form) {
+    const result = await request(`/caixas/${form.dataset.id}`, { method: "DELETE", headers: { "X-Admin-Pin": form.elements.admin_pin.value } });
+    closeModal(); toast(result.message); await renderPdv();
+  }
+
+  async function submitMachine(form) {
+    const data = formObject(form);
+    const id = form.dataset.id;
+    const pin = data.admin_pin;
+    delete data.admin_pin;
+    const payload = { ...data, ordem_exibicao: Number(data.ordem_exibicao || 0), ativo: form.elements.ativo.checked, mercado_pago_integrada: form.elements.mercado_pago_integrada.checked };
+    await request(`/maquininhas${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", headers: { "X-Admin-Pin": pin }, body: JSON.stringify(payload) });
+    closeModal();
+    toast(id ? "Maquininha atualizada." : "Maquininha cadastrada.");
+    await renderMachines();
+  }
+
+  async function submitDisableMachine(form) {
+    const pin = form.elements.admin_pin.value;
+    await request(`/maquininhas/${form.dataset.id}`, { method: "DELETE", headers: { "X-Admin-Pin": pin } });
+    closeModal();
+    toast("Maquininha desativada. O histórico foi preservado.");
+    await renderMachines();
+  }
+
   async function handleClick(event) {
     const close = event.target.closest("[data-close-modal]"); if (close) { closeModal(); return; }
     const nav = event.target.closest("[data-nav]"); if (nav) { await navigate(nav.dataset.nav); return; }
@@ -474,6 +725,21 @@
       else if (action === "delete-freight") await deleteFreight(id);
       else if (action === "new-admin") openModal("Novo administrador", adminForm());
       else if (action === "delete-admin") await deleteAdmin(id);
+      else if (action === "pdv-add" || action === "pdv-plus") changePdvItem(id, 1);
+      else if (action === "pdv-minus") changePdvItem(id, -1);
+      else if (action === "pdv-remove") { state.pdvCart = state.pdvCart.filter((item) => item.variacao_id !== id); updatePdvCart(); }
+      else if (action === "pdv-clear") { state.pdvCart = []; updatePdvCart(); }
+      else if (action === "pdv-close-cash") openPdvCloseCash();
+      else if (action === "new-machine") openModal("Cadastrar maquininha", machineForm());
+      else if (action === "edit-machine") openModal("Editar maquininha", machineForm(state.machines.find((item) => item.id === id)));
+      else if (action === "disable-machine") openModal("Desativar maquininha", disableMachineForm(state.machines.find((item) => item.id === id)));
+      else if (action === "cash-details") await showCashDetails(id);
+      else if (action === "edit-cash") await openEditCash(id);
+      else if (action === "delete-cash") openDeleteCash(id);
+      else if (action === "generate-label-codes") {
+        const result = await request("/produtos/gerar-codigos", { method: "POST", body: "{}" });
+        toast(`${result.total_preenchido} código(s) gerado(s).`); await renderLabels();
+      }
     } catch (error) { toast(error.message, true); }
   }
 
@@ -543,6 +809,7 @@
       try { const result = await request(`/pedidos-site/${select.dataset.id}/status-entrega`, { method: "POST", body: JSON.stringify({ status_entrega: select.value }) }); toast(result.message); }
       catch (error) { toast(error.message, true); await renderOrders(); }
     }
+    if (event.target.id === "labelSelectAll") document.querySelectorAll(".label-select").forEach((input) => { input.checked = event.target.checked; });
   }
 
   function bindEvents() {
@@ -557,7 +824,14 @@
     document.addEventListener("click", handleClick);
     document.addEventListener("submit", handleSubmit);
     document.addEventListener("change", handleChange);
-    document.addEventListener("input", (event) => { if (event.target.name === "faixa_superior") { const preview = document.getElementById("topbarPreview"); if (preview) preview.textContent = event.target.value; } });
+    document.addEventListener("input", (event) => {
+      if (event.target.name === "faixa_superior") { const preview = document.getElementById("topbarPreview"); if (preview) preview.textContent = event.target.value; }
+      if (event.target.name === "pdv_desconto") updatePdvCart();
+      if (event.target.name === "pdv_busca") {
+        const search = event.target.value.trim().toLowerCase();
+        document.querySelectorAll(".pdv-product").forEach((item) => { item.hidden = search && !item.dataset.search.includes(search); });
+      }
+    });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !modal.hidden) closeModal(); });
   }
 

@@ -387,11 +387,71 @@ async function detalharCaixa(req, res) {
   }
 }
 
+async function atualizarCaixa(req, res) {
+  const caixaId = Number(req.params.id);
+  const valorInicial = toMoney(req.body.valor_inicial, null);
+  if (!Number.isInteger(caixaId) || caixaId <= 0) return res.status(400).json({ message: "Caixa inválido." });
+  if (!Number.isFinite(valorInicial) || valorInicial < 0) return res.status(400).json({ message: "Valor inicial inválido." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const atual = (await client.query("SELECT * FROM caixas WHERE id=$1 FOR UPDATE", [caixaId])).rows[0];
+    if (!atual) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Caixa não encontrado." }); }
+    const sistema = await calcularTotaisSistema(client, caixaId, valorInicial);
+    const fechado = atual.status === "fechado";
+    const informado = {
+      dinheiro: fechado ? toMoney(req.body.dinheiro ?? req.body.valor_informado_dinheiro ?? atual.valor_informado_dinheiro) : null,
+      pix: fechado ? toMoney(req.body.pix ?? req.body.valor_informado_pix ?? atual.valor_informado_pix) : null,
+      debito: fechado ? toMoney(req.body.debito ?? req.body.valor_informado_debito ?? atual.valor_informado_debito) : null,
+      credito: fechado ? toMoney(req.body.credito ?? req.body.valor_informado_credito ?? atual.valor_informado_credito) : null,
+    };
+    if (fechado && Object.values(informado).some(value => value < 0)) throw Object.assign(new Error("Valores informados não podem ser negativos."), { statusCode: 400 });
+    const totalInformado = fechado ? informado.dinheiro + informado.pix + informado.debito + informado.credito : 0;
+    const result = await client.query(`UPDATE caixas SET valor_inicial=$2,observacoes_abertura=$3,
+      observacoes_fechamento=$4,valor_sistema_dinheiro=$5,valor_sistema_pix=$6,
+      valor_sistema_debito=$7,valor_sistema_credito=$8,total_sistema=$9,
+      valor_informado_dinheiro=$10,valor_informado_pix=$11,valor_informado_debito=$12,
+      valor_informado_credito=$13,total_informado=$14,divergencia=$15,updated_at=NOW()
+      WHERE id=$1 RETURNING *`, [caixaId, valorInicial, normalizeOptional(req.body.observacoes_abertura),
+      normalizeOptional(req.body.observacoes_fechamento), sistema.dinheiro, sistema.pix, sistema.debito,
+      sistema.credito, sistema.total, informado.dinheiro, informado.pix, informado.debito, informado.credito,
+      totalInformado, fechado ? totalInformado - sistema.total : 0]);
+    await client.query("COMMIT");
+    res.json(result.rows[0]);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao atualizar caixa:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Não foi possível atualizar o caixa." });
+  } finally { client.release(); }
+}
+
+async function excluirCaixa(req, res) {
+  const caixaId = Number(req.params.id);
+  if (!Number.isInteger(caixaId) || caixaId <= 0) return res.status(400).json({ message: "Caixa inválido." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const caixa = (await client.query("SELECT id,status FROM caixas WHERE id=$1 FOR UPDATE", [caixaId])).rows[0];
+    if (!caixa) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Caixa não encontrado." }); }
+    const vendas = Number((await client.query("SELECT COUNT(*)::int AS total FROM vendas WHERE caixa_id=$1", [caixaId])).rows[0].total);
+    if (vendas > 0) { await client.query("ROLLBACK"); return res.status(409).json({ message: `Este caixa possui ${vendas} venda(s) vinculada(s) e não pode ser excluído. Edite o histórico para preservar a auditoria.` }); }
+    await client.query("DELETE FROM caixas WHERE id=$1", [caixaId]);
+    await client.query("COMMIT");
+    res.json({ ok: true, message: "Histórico de caixa excluído." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao excluir caixa:", error);
+    res.status(500).json({ message: "Não foi possível excluir o caixa." });
+  } finally { client.release(); }
+}
+
 module.exports = {
   buscarCaixaAberto,
   abrirCaixa,
   fecharCaixa,
   listarCaixas,
   detalharCaixa,
+  atualizarCaixa,
+  excluirCaixa,
   criarMovimentacao,
 };
