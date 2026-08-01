@@ -242,7 +242,8 @@ async function obterConfig(req, res) {
   try {
     const result = await pool.query("SELECT * FROM mercado_pago_config ORDER BY id LIMIT 1");
     const config = result.rows[0] || { ambiente: process.env.MERCADO_PAGO_ENV || "sandbox", ativo: false };
-    res.json({ ...config, access_token_configurado: Boolean(String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim()), public_key: config.public_key || null, webhook_url_sugerida: urlWebhookSugerida(), webhook_fase_2: true, webhook_ativo: webhookAtivo() });
+    const ambienteEfetivo = ["production", "producao"].includes(String(process.env.MERCADO_PAGO_ENV || "sandbox").toLowerCase()) ? "producao" : "sandbox";
+    res.json({ ...config, ambiente_efetivo:ambienteEfetivo, access_token_configurado: Boolean(String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim()), public_key: config.public_key || null, webhook_url_sugerida: urlWebhookSugerida(), webhook_fase_2: true, webhook_ativo: webhookAtivo() });
   } catch { res.status(500).json({ message: "Não foi possível carregar a configuração do Mercado Pago." }); }
 }
 
@@ -250,8 +251,11 @@ async function salvarConfig(req, res) {
   const b = req.body || {}, ambiente = ["sandbox", "producao"].includes(b.ambiente) ? b.ambiente : "sandbox";
   try {
     const tokenConfigurado=Boolean(String(process.env.MERCADO_PAGO_ACCESS_TOKEN||"").trim());
+    const ambienteEfetivo=["production","producao"].includes(String(process.env.MERCADO_PAGO_ENV||"sandbox").toLowerCase())?"producao":"sandbox";
+    if(b.ativo===true&&!tokenConfigurado)return res.status(409).json({message:"Configure o Access Token no servidor antes de ativar o Mercado Pago."});
+    if(b.ativo===true&&ambiente!==ambienteEfetivo)return res.status(409).json({message:`O servidor está em ${ambienteEfetivo}. Ajuste MERCADO_PAGO_ENV antes de ativar ${ambiente}.`});
     const result = await pool.query(`INSERT INTO mercado_pago_config (id,ambiente,ativo,public_key,access_token_configurado,webhook_url,success_url,failure_url,pending_url) VALUES (1,$1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET ambiente=$1,ativo=$2,public_key=$3,access_token_configurado=$4,webhook_url=$5,success_url=$6,failure_url=$7,pending_url=$8,updated_at=NOW() RETURNING *`, [ambiente, b.ativo === true, texto(b.public_key), tokenConfigurado, texto(b.webhook_url), texto(b.success_url), texto(b.failure_url), texto(b.pending_url)]);
-    res.json({ ...result.rows[0], access_token_configurado: tokenConfigurado, webhook_url_sugerida: urlWebhookSugerida(), webhook_fase_2: true, webhook_ativo: webhookAtivo() });
+    res.json({ ...result.rows[0], ambiente_efetivo:ambienteEfetivo, access_token_configurado: tokenConfigurado, webhook_url_sugerida: urlWebhookSugerida(), webhook_fase_2: true, webhook_ativo: webhookAtivo() });
   } catch (error) { console.error("Erro ao salvar config Mercado Pago:", error); res.status(500).json({ message: "Não foi possível salvar a configuração do Mercado Pago." }); }
 }
 

@@ -27,6 +27,7 @@
     freight: [],
     users: [],
     settings: {},
+    mercadoPagoConfig: null,
     product: null,
     pdvProducts: [],
     pdvCart: [],
@@ -505,8 +506,12 @@
 
   async function renderSettings() {
     loading("Carregando dados do site...");
-    state.settings = await request("/configuracoes-site");
+    [state.settings, state.mercadoPagoConfig] = await Promise.all([
+      request("/configuracoes-site"),
+      request("/mercado-pago/config").catch(() => null),
+    ]);
     const s = state.settings;
+    const mp = state.mercadoPagoConfig;
     const carouselImages = Array.isArray(s.carrossel_imagens) ? s.carrossel_imagens : [];
     view.innerHTML = `<section class="section"><div class="section-heading"><h2>Conteúdo da loja</h2><a class="btn secondary small" href="/" target="_blank" rel="noreferrer">Abrir site</a></div>
       <form data-form="settings"><div class="field-grid">
@@ -561,6 +566,20 @@
         ${s.imagem_informativa ? `<div class="informative-preview"><img src="${escapeHtml(s.imagem_informativa)}" alt="Prévia da imagem informativa"></div>` : `<div class="empty-state"><strong>Nenhuma imagem informativa anexada.</strong></div>`}
         <form data-form="informative-upload" class="upload-zone"><label>Selecionar imagem informativa</label><input name="imagem" type="file" accept="image/jpeg,image/png,image/webp" required><small>JPG, PNG ou WEBP · máximo de 10 MB.</small><div class="form-actions"><button class="btn" type="submit">Anexar imagem</button></div></form>
       </div>
+      ${mp ? `<div class="carousel-settings"><h3>Mercado Pago</h3><p class="help">Checkout e confirmação automática de pagamentos. O Access Token é protegido no servidor e não é exibido no painel.</p>
+        <form data-form="mercado-pago-config"><div class="field-grid">
+          <div class="field"><label>Ambiente</label><select name="ambiente"><option value="sandbox" ${selected(mp.ambiente || "sandbox", "sandbox")}>Sandbox (testes)</option><option value="producao" ${selected(mp.ambiente, "producao")}>Produção</option></select></div>
+          <div class="field"><label>Status das credenciais</label><input disabled value="${mp.access_token_configurado ? "Access Token configurado" : "Access Token ausente"}"><small>Ambiente efetivo do servidor: ${escapeHtml(mp.ambiente_efetivo || mp.ambiente || "sandbox")}</small></div>
+          <div class="field full"><label>Public Key</label><input name="public_key" maxlength="300" value="${escapeHtml(mp.public_key || "")}" placeholder="Opcional para o checkout atual"></div>
+          <div class="field full"><label>URL do webhook</label><input name="webhook_url" type="url" required value="${escapeHtml(mp.webhook_url || mp.webhook_url_sugerida || "")}"></div>
+          <div class="field"><label>Retorno — sucesso</label><input name="success_url" type="url" required value="${escapeHtml(mp.success_url || "https://giseleflavia.com/?pagamento=sucesso")}"></div>
+          <div class="field"><label>Retorno — falha</label><input name="failure_url" type="url" required value="${escapeHtml(mp.failure_url || "https://giseleflavia.com/?pagamento=falha")}"></div>
+          <div class="field"><label>Retorno — pendente</label><input name="pending_url" type="url" required value="${escapeHtml(mp.pending_url || "https://giseleflavia.com/?pagamento=pendente")}"></div>
+          <div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div>
+          <div class="field full"><label class="checkbox"><input name="ativo" type="checkbox" ${mp.ativo ? "checked" : ""}> Ativar integração Mercado Pago</label></div>
+          <div class="field full help">Webhook: ${mp.webhook_ativo ? "habilitado" : "desabilitado"} · ${escapeHtml(mp.webhook_url_sugerida || "")}</div>
+        </div><div class="form-actions"><button class="btn" type="submit">Salvar Mercado Pago</button></div></form>
+      </div>` : ""}
     </section>`;
   }
 
@@ -600,6 +619,7 @@
       else if (kind === "category") await submitCategory(form);
       else if (kind === "freight") await submitFreight(form);
       else if (kind === "settings") await submitSettings(form);
+      else if (kind === "mercado-pago-config") await submitMercadoPagoConfig(form);
       else if (kind === "carousel-upload") await submitCarouselUpload(form);
       else if (kind === "informative-upload") await submitInformativeUpload(form);
       else if (kind === "delete-product-permanent") await submitDeleteProductPermanent(form);
@@ -669,6 +689,23 @@
     data.instagram_usuario = data.instagram_usuario.replace(/^@/, "");
     const result = await request("/configuracoes-site", { method: "PUT", body: JSON.stringify(data) });
     state.settings = result.configuracoes; toast("Dados do site atualizados."); await renderSettings();
+  }
+
+  async function submitMercadoPagoConfig(form) {
+    const data = formObject(form);
+    const payload = {
+      ambiente: data.ambiente,
+      ativo: form.elements.ativo.checked,
+      public_key: data.public_key || null,
+      webhook_url: data.webhook_url,
+      success_url: data.success_url,
+      failure_url: data.failure_url,
+      pending_url: data.pending_url,
+    };
+    const result = await request("/mercado-pago/config", { method:"PUT", headers:{ "X-Admin-Pin":data.admin_pin }, body:JSON.stringify(payload) });
+    state.mercadoPagoConfig = result;
+    toast(`Mercado Pago ${result.ativo ? "ativado" : "desativado"} em ${result.ambiente}.`);
+    await renderSettings();
   }
 
   async function submitCarouselUpload(form) {
