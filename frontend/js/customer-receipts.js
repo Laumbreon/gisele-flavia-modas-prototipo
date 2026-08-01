@@ -36,6 +36,7 @@
     document.querySelectorAll("article").forEach(article => {
       const heading = Array.from(article.querySelectorAll("p")).find(element => /^Pedido #\d+$/.test(element.textContent.trim()));
       if (!heading || article.querySelector(".customer-receipt-button")) return;
+      if (!/\bpago\b|pagamento\s+confirmado/i.test(article.textContent)) return;
       const id = Number(heading.textContent.match(/\d+/)?.[0]); if (!id) return;
       const button = document.createElement("button");
       button.type = "button"; button.className = "customer-receipt-button"; button.textContent = "Ver comprovante";

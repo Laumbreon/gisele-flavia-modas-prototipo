@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
 
 const FORMAS_PAGAMENTO = new Set(["pix", "dinheiro", "cartao"]);
 const STATUS_ENTREGA = new Set(["pendente", "separando", "pronto_retirada", "saiu_entrega", "entregue", "cancelado"]);
@@ -123,6 +124,7 @@ async function confirmarPagamento(req, res) {
       [id, formaConfirmada, pedido.total, observacoes]
     );
     await client.query("COMMIT");
+    await enviarComprovanteVendaPaga(id);
     res.json({ ok: true, message: "Pagamento confirmado.", pedido_id: id });
   } catch (error) {
     await client.query("ROLLBACK");

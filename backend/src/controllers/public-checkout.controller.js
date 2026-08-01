@@ -1,6 +1,5 @@
 const { pool } = require("../config/db");
 const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
-const { enviarEmailCupomPedido } = require("../services/email.service");
 
 function erroValidacao(message) { const error = new Error(message); error.statusCode = 400; return error; }
 function texto(value) { const result = String(value || "").trim(); return result || null; }
@@ -97,8 +96,6 @@ async function checkoutPublico(req, res) {
       await client.query(`INSERT INTO venda_entregas (venda_id,tipo_entrega,status_entrega,valor_frete,destinatario_nome,destinatario_telefone,estado,cidade,bairro,endereco,numero,complemento,referencia,observacoes) VALUES ($1,'entrega_local','pendente',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [vendaId,frete,texto(entrega.destinatario_nome)||texto(cliente.nome),texto(entrega.destinatario_telefone)||texto(cliente.telefone),texto(entrega.estado)||"SP",texto(entrega.cidade),texto(entrega.bairro),texto(entrega.endereco),texto(entrega.numero),texto(entrega.complemento),texto(entrega.referencia),texto(req.body.observacoes)]);
     }
     await client.query("COMMIT");
-    const clienteEmail=(await pool.query("SELECT nome,email,telefone FROM clientes WHERE id=$1",[clienteId])).rows[0];
-    if(clienteEmail?.email)enviarEmailCupomPedido({para:clienteEmail.email,nome:clienteEmail.nome,pedido:{id:vendaId,subtotal,frete_valor:frete,total,tipo_entrega:tipoEntrega,telefone:clienteEmail.telefone,itens:processados,...entrega}}).catch(error=>console.error(`Falha ao enviar cupom do pedido #${vendaId}:`,error.code||error.message));
     let mercadoPago={disponivel:false,status:"nao_aplicavel",message:"Forma de pagamento sem link Mercado Pago."};
     if(["pix","cartao"].includes(formaPagamento)){
       try{

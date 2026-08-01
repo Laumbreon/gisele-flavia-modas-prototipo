@@ -2,6 +2,7 @@ const { pool } = require("../config/db");
 const { criarPreferenciaPagamentoVenda, consultarPagamento, buscarPagamentoPorReferencia } = require("../services/mercado-pago.service");
 const { validarAssinaturaWebhookMercadoPago } = require("../utils/mercado-pago-webhook");
 const { criarOrderPoint, consultarOrderPoint } = require("../services/mercado-pago-point.service");
+const { enviarComprovanteVendaPaga } = require("../services/comprovante.service");
 const crypto = require("crypto");
 
 const idValido = value => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
@@ -128,6 +129,7 @@ async function aplicarPagamentoMercadoPago(pagamento, { webhook = null, logId = 
       await prepararEmissaoFiscalAposPagamento(client, vendaId, { origem: "mercado_pago_approved_idempotente", payment_id: String(pagamento.id) });
       await atualizarLog(client, logId, "processado", "Venda já paga; webhook processado sem duplicar pagamento.", pagamento, vendaId);
       await client.query("COMMIT");
+      await enviarComprovanteVendaPaga(vendaId);
       return { status: "approved", venda_id: vendaId, ja_processado: true, message: "Venda já estava paga." };
     }
 
@@ -163,6 +165,7 @@ async function aplicarPagamentoMercadoPago(pagamento, { webhook = null, logId = 
     await prepararEmissaoFiscalAposPagamento(client, vendaId, { origem: "mercado_pago_approved", payment_id: String(pagamento.id) });
     await atualizarLog(client, logId, "processado", "Pagamento aprovado e pedido do site confirmado automaticamente.", pagamento, vendaId);
     await client.query("COMMIT");
+    await enviarComprovanteVendaPaga(vendaId);
     return { status: "approved", venda_id: vendaId, message: "Pagamento confirmado automaticamente." };
   } catch (error) {
     await client.query("ROLLBACK");
