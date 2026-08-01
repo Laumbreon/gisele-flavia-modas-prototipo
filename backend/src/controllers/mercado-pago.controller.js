@@ -382,7 +382,9 @@ function resumoOrderPoint(row) {
 async function criarOrderPointPdv(req, res) {
   const caixaId = idValido(req.body?.caixa_id), maquininhaId = idValido(req.body?.maquininha_id);
   const valor = Number(req.body?.valor), forma = String(req.body?.forma_pagamento || "").toLowerCase();
+  const parcelas = forma === "credito" ? Number(req.body?.parcelas || 1) : 1;
   if (!caixaId || !maquininhaId || !Number.isFinite(valor) || valor <= 0 || !["pix", "debito", "credito"].includes(forma)) return res.status(400).json({ message: "Caixa, maquininha, valor e forma de pagamento são obrigatórios." });
+  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 3) return res.status(400).json({ message: "Selecione de 1 a 3 parcelas sem juros." });
   try {
     const caixa = (await pool.query("SELECT id FROM caixas WHERE id=$1 AND status='aberto'", [caixaId])).rows[0];
     if (!caixa) return res.status(409).json({ message: "O caixa informado não está aberto." });
@@ -392,7 +394,7 @@ async function criarOrderPointPdv(req, res) {
     const nonce = crypto.randomUUID(), externalReference = `pdv_${caixaId}_${Date.now()}_${nonce.slice(0, 8)}`;
     const local = (await pool.query(`INSERT INTO mercado_pago_point_orders (caixa_id,maquininha_id,terminal_id,external_reference,status,valor,forma_pagamento) VALUES ($1,$2,$3,$4,'creating',$5,$6) RETURNING *`, [caixaId, maquininhaId, maquina.mercado_pago_terminal_id, externalReference, valor, forma])).rows[0];
     try {
-      const mp = await criarOrderPoint({ valor, descricao: texto(req.body?.descricao) || "Venda no PDV Gisele Flávia Modas", terminal_id: maquina.mercado_pago_terminal_id, external_reference: externalReference, forma_pagamento: forma, idempotency_key: nonce });
+      const mp = await criarOrderPoint({ valor, descricao: texto(req.body?.descricao) || "Venda no PDV Gisele Flávia Modas", terminal_id: maquina.mercado_pago_terminal_id, external_reference: externalReference, forma_pagamento: forma, parcelas, idempotency_key: nonce });
       const status = statusOrderPoint(mp.resposta);
       const row = (await pool.query(`UPDATE mercado_pago_point_orders SET order_id=$2,status=$3,status_detail=$4,request_payload=$5,response_payload=$6,last_response_payload=$6,approved_at=CASE WHEN $3='approved' THEN NOW() ELSE NULL END,erro=NULL,updated_at=NOW() WHERE id=$1 RETURNING *`, [local.id, texto(mp.resposta?.id), status, texto(mp.resposta?.status_detail), mp.payload, mp.resposta])).rows[0];
       return res.status(201).json(resumoOrderPoint(row));

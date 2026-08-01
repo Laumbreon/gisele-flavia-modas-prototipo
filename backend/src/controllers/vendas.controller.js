@@ -346,6 +346,10 @@ async function criarVenda(req, res) {
     }
 
     const pagamentos = buildPagamentos(req.body, total);
+    const parcelas = normalizeLower(req.body.forma_pagamento) === "credito" ? Number(req.body.parcelas || 1) : 1;
+    if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 3) {
+      throw validationError("Selecione de 1 a 3 parcelas sem juros.");
+    }
     const financeiro = validarPagamentos(pagamentos, total);
     const formaPagamentoPrincipal = pagamentos.length === 1
       ? pagamentos[0].forma_pagamento
@@ -382,6 +386,7 @@ async function criarVenda(req, res) {
           troco,
           valor_faltante,
           forma_pagamento,
+          parcelas,
           canal_venda,
           origem_venda,
           tem_entrega,
@@ -392,7 +397,7 @@ async function criarVenda(req, res) {
           status,
           observacoes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'finalizada', $18)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'finalizada', $19)
         RETURNING
           id,
           cliente_id,
@@ -405,6 +410,7 @@ async function criarVenda(req, res) {
           troco,
           valor_faltante,
           forma_pagamento,
+          parcelas,
           canal_venda,
           origem_venda,
           tem_entrega,
@@ -427,6 +433,7 @@ async function criarVenda(req, res) {
         financeiro.troco,
         financeiro.valorFaltante,
         formaPagamentoPrincipal,
+        parcelas,
         canalVenda,
         origemVenda,
         temEntrega,

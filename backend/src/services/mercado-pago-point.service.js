@@ -37,7 +37,7 @@ async function chamadaPoint(path, options = {}) {
   return data;
 }
 
-async function criarOrderPoint({ valor, descricao, terminal_id, external_reference, notification_url, forma_pagamento, idempotency_key }) {
+async function criarOrderPoint({ valor, descricao, terminal_id, external_reference, notification_url, forma_pagamento, parcelas = 1, idempotency_key }) {
   const payload = {
     type: "point",
     external_reference,
@@ -46,6 +46,15 @@ async function criarOrderPoint({ valor, descricao, terminal_id, external_referen
     transactions: { payments: [{ amount: Number(valor).toFixed(2) }] },
     config: { point: { terminal_id, print_on_terminal: "no_ticket" } }
   };
+  if (forma_pagamento === "credito") {
+    payload.config.payment_method = {
+      default_type: "credit_card",
+      default_installments: parcelas,
+      installments_cost: "seller"
+    };
+  } else if (forma_pagamento === "debito") {
+    payload.config.payment_method = { default_type: "debit_card" };
+  }
   if (notification_url) payload.notification_url = notification_url;
   const resposta = await chamadaPoint("/v1/orders", {
     method: "POST",
