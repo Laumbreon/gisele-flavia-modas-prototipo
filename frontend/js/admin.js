@@ -221,6 +221,21 @@
     if (cart) cart.innerHTML = pdvCartHtml();
     const submit = document.querySelector('[data-form="pdv-sale"] button[type="submit"], [data-form="pdv-sale"] button:not([type])');
     if (submit) submit.disabled = !state.pdvCart.length;
+    updatePdvCashPayment();
+  }
+
+  function updatePdvCashPayment() {
+    const form = document.querySelector('[data-form="pdv-sale"]');
+    if (!form) return;
+    const isCash = form.elements.forma_pagamento?.value === "dinheiro";
+    const field = document.getElementById("pdvCashReceivedField");
+    const received = Number(form.elements.valor_recebido_dinheiro?.value || 0);
+    const total = pdvTotals().total;
+    if (field) field.hidden = !isCash;
+    const change = document.getElementById("pdvCashChange");
+    if (change) change.textContent = isCash && received >= total
+      ? `Troco a devolver: ${money(received - total)}`
+      : "Informe quanto a cliente entregou para calcular o troco.";
   }
 
   function cashHistoryHtml() {
@@ -244,7 +259,8 @@
     const productCards = state.pdvProducts.flatMap((product) => (product.variacoes || [])
       .filter((variation) => variation.ativo !== false && Number(variation.quantidade_estoque) > 0)
       .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(normalizeSearch(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""} ${variation.codigo_ref || ""}`))}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span>${variation.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(variation.codigo_ref)}</small>` : ""}<small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
-    view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Pagamento</label><select name="forma_pagamento" required><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
+    view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Pagamento</label><select name="forma_pagamento" required><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></div><div class="field full" id="pdvCashReceivedField"><label>Valor entregue pela cliente (R$)</label><input name="valor_recebido_dinheiro" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"><small id="pdvCashChange">Informe quanto a cliente entregou para calcular o troco.</small></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
+    updatePdvCashPayment();
     const machineSelect = view.querySelector('[name="maquininha_id"]');
     if (machineSelect) {
       machineSelect.closest(".field").querySelector("label").textContent = "Maquininha / Point (opcional para Pix)";
@@ -818,6 +834,8 @@
     const totals = pdvTotals();
     if (totals.discount > totals.subtotal) throw new Error("O desconto não pode ser maior que o subtotal.");
     if (["debito", "credito"].includes(data.forma_pagamento) && !data.maquininha_id) throw new Error("Selecione a maquininha usada no pagamento.");
+    const cashReceived = Number(data.valor_recebido_dinheiro || 0);
+    if (data.forma_pagamento === "dinheiro" && (!Number.isFinite(cashReceived) || cashReceived < totals.total)) throw new Error(`O valor entregue em dinheiro deve ser igual ou maior que ${money(totals.total)}.`);
     const machine = selectedPdvMachine();
     if (machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo && state.pdvPointOrder?.status !== "approved") throw new Error("Envie a cobrança ao Point e aguarde a aprovação antes de finalizar.");
     const payload = {
@@ -828,6 +846,7 @@
       desconto: totals.discount,
       frete: 0,
       forma_pagamento: data.forma_pagamento,
+      pagamentos: data.forma_pagamento === "dinheiro" ? [{ forma_pagamento: "dinheiro", valor: cashReceived }] : undefined,
       maquininha_id: data.maquininha_id ? Number(data.maquininha_id) : null,
       mercado_pago_point_order_id: state.pdvPointOrder?.order_id || null,
       itens: state.pdvCart.map((item) => ({ produto_id: item.produto_id, variacao_id: item.variacao_id, quantidade: item.quantidade, preco_unitario: item.preco })),
@@ -860,7 +879,7 @@
       <div class="receipt-meta"><span>${date(sale.created_at)}</span><span>Caixa #${Number(sale.caixa_id || state.pdvCash?.id || 0)}</span></div>
       <p class="receipt-customer"><b>Cliente:</b> ${escapeHtml(sale.cliente || "Consumidor não identificado")}</p>
       <div class="receipt-lines">${items.map((item) => `<div class="receipt-item"><div><b>${escapeHtml(item.produto_nome || item.produto || "Produto")}</b><small>${escapeHtml([item.tamanho, item.cor].filter(Boolean).join(" · "))}</small><small class="receipt-codes">Ref./lote: ${escapeHtml(item.codigo_ref || item.codigo_interno || item.sku || "Não informado")}<br>Cód. barras: ${escapeHtml(item.codigo_barras || "Não informado")}</small></div><span>${Number(item.quantidade)} × ${money(item.preco_unitario ?? item.preco)}</span><strong>${money(item.subtotal ?? Number(item.quantidade) * Number(item.preco_unitario ?? item.preco))}</strong></div>`).join("")}</div>
-      <div class="receipt-totals"><div><span>Subtotal</span><b>${money(sale.subtotal)}</b></div><div><span>Desconto</span><b>− ${money(sale.desconto)}</b></div><div class="receipt-total"><span>Total da compra</span><b>${money(sale.total)}</b></div><div><span>Total pago pelo cliente</span><b>${money(sale.total_pago || sale.total)}</b></div>${Number(sale.troco || 0) > 0 ? `<div><span>Troco devolvido</span><b>${money(sale.troco)}</b></div>` : ""}</div>
+      <div class="receipt-totals"><div><span>Subtotal</span><b>${money(sale.subtotal)}</b></div><div><span>Desconto</span><b>− ${money(sale.desconto)}</b></div><div class="receipt-total"><span>Total da compra</span><b>${money(sale.total)}</b></div><div><span>${sale.forma_pagamento === "dinheiro" ? "Valor entregue em dinheiro" : "Total pago pelo cliente"}</span><b>${money(sale.total_pago || sale.total)}</b></div>${sale.forma_pagamento === "dinheiro" ? `<div><span>Troco a devolver</span><b>${money(sale.troco || 0)}</b></div>` : ""}</div>
       <div class="receipt-payments"><b>Valores por meio de pagamento</b>${Object.entries(paidByMethod).map(([method, value]) => `<div><span>${escapeHtml(paymentLabel(method))}</span><strong>${money(value)}</strong></div>`).join("")}</div>
       <footer><div class="receipt-business"><b>Código(s) Ref.</b><span>${escapeHtml([...new Set(items.map(item => item.codigo_ref || item.codigo_interno || item.sku).filter(Boolean))].join(", ") || "Não informado")}</span><b>CNPJ</b><span>11.293.505/0001-08</span><b>Endereço</b><span>Rua Amando de Barros, 993 — Centro</span><b>CEP</b><span>18.600-050</span></div><p>Obrigada pela preferência!</p><small>Documento comercial sem validade fiscal.</small></footer>
     </article>`;
@@ -1094,6 +1113,7 @@
 
   async function handleChange(event) {
     if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="maquininha_id"]')) invalidatePdvPoint();
+    if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="valor_recebido_dinheiro"], [data-form="pdv-sale"] [name="pdv_desconto"]')) updatePdvCashPayment();
     const select = event.target.closest('[data-action="delivery-status"]');
     if (select) {
       try { const result = await request(`/pedidos-site/${select.dataset.id}/status-entrega`, { method: "POST", body: JSON.stringify({ status_entrega: select.value }) }); toast(result.message); }
@@ -1117,6 +1137,7 @@
     document.addEventListener("input", (event) => {
       if (event.target.name === "faixa_superior") { const preview = document.getElementById("topbarPreview"); if (preview) preview.textContent = event.target.value; }
       if (event.target.name === "pdv_desconto") { invalidatePdvPoint(); updatePdvCart(); }
+      if (event.target.name === "valor_recebido_dinheiro") updatePdvCashPayment();
       if (event.target.name === "pdv_busca") {
         const search = normalizeSearch(event.target.value);
         document.querySelectorAll(".pdv-product").forEach((item) => { item.hidden = Boolean(search && !item.dataset.search.includes(search)); });
