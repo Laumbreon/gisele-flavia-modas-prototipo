@@ -146,6 +146,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .pdv-layout .section { margin: 0; }
 .pdv-products { display: grid; grid-template-columns: repeat(auto-fill,minmax(170px,1fr)); gap: 10px; margin-top: 16px; max-height: 60vh; overflow-y: auto; padding-right: 3px; }
 .pdv-product { min-height: 138px; padding: 15px; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; border: 1px solid var(--line); border-radius: 13px; color: var(--ink); background: #fff; text-align: left; }
+.pdv-product[hidden] { display: none; }
 .pdv-product:hover { border-color: var(--pink); box-shadow: 0 8px 22px rgba(239,0,127,.09); }
 .pdv-product span, .pdv-product small { color: var(--muted); }
 .pdv-product b { margin-top: auto; color: var(--pink-dark); font-size: 16px; }
