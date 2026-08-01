@@ -251,6 +251,10 @@ async function criarVenda(req, res) {
     return res.status(400).json({ message: "Informe os dados da entrega." });
   }
 
+  if (origemVenda === "pdv_admin" && req.body.pagamento_confirmado !== true) {
+    return res.status(400).json({ message: "Confirme o recebimento do pagamento antes de finalizar a venda no PDV." });
+  }
+
   const client = await pool.connect();
 
   try {
