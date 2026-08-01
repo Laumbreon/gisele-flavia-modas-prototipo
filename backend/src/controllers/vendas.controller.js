@@ -357,7 +357,7 @@ async function criarVenda(req, res) {
     const idsMaquininhas = [...new Set(pagamentos.map(p => p.maquininha_id).filter(Boolean))];
     let pointOrder = null;
     if (idsMaquininhas.length) {
-      const integradas = (await client.query("SELECT id FROM maquininhas WHERE id=ANY($1::int[]) AND ativo=TRUE AND mercado_pago_modo='point' AND mercado_pago_ativo=TRUE", [idsMaquininhas])).rows;
+      const integradas = (await client.query("SELECT id FROM maquininhas WHERE id=ANY($1::int[]) AND ativo=TRUE AND mercado_pago_modo='point' AND mercado_pago_ativo=TRUE AND mercado_pago_integrada=TRUE AND NULLIF(TRIM(mercado_pago_terminal_id),'') IS NOT NULL", [idsMaquininhas])).rows;
       if (integradas.length) {
         if (!pointOrderId) throw validationError("Envie a cobrança ao Mercado Pago Point e aguarde a aprovação antes de finalizar a venda.");
         pointOrder = (await client.query("SELECT * FROM mercado_pago_point_orders WHERE order_id=$1 FOR UPDATE", [pointOrderId])).rows[0];

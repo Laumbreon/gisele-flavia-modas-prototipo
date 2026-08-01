@@ -388,7 +388,7 @@ async function criarOrderPointPdv(req, res) {
     if (!caixa) return res.status(409).json({ message: "O caixa informado não está aberto." });
     const maquina = (await pool.query("SELECT * FROM maquininhas WHERE id=$1 AND ativo=TRUE", [maquininhaId])).rows[0];
     if (!maquina) return res.status(404).json({ message: "Maquininha não encontrada." });
-    if (maquina.mercado_pago_modo !== "point" || !maquina.mercado_pago_ativo || !maquina.mercado_pago_terminal_id) return res.status(409).json({ message: "Esta maquininha não está configurada como Point integrada." });
+    if (maquina.mercado_pago_modo !== "point" || !maquina.mercado_pago_ativo || !maquina.mercado_pago_integrada || !maquina.mercado_pago_terminal_id) return res.status(409).json({ message: "Esta maquininha não está configurada como Point integrada." });
     const nonce = crypto.randomUUID(), externalReference = `pdv_${caixaId}_${Date.now()}_${nonce.slice(0, 8)}`;
     const local = (await pool.query(`INSERT INTO mercado_pago_point_orders (caixa_id,maquininha_id,terminal_id,external_reference,status,valor,forma_pagamento) VALUES ($1,$2,$3,$4,'creating',$5,$6) RETURNING *`, [caixaId, maquininhaId, maquina.mercado_pago_terminal_id, externalReference, valor, forma])).rows[0];
     try {

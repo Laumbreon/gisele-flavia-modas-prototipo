@@ -202,10 +202,15 @@
     return Number(variation.preco_promocional ?? variation.preco_venda ?? product.preco_promocional ?? product.preco ?? 0);
   }
 
+  function isPointIntegrated(machine) {
+    return machine?.mercado_pago_modo === "point"
+      && machine?.mercado_pago_ativo === true
+      && machine?.mercado_pago_integrada === true
+      && Boolean(String(machine?.mercado_pago_terminal_id || "").trim());
+  }
+
   function machineIntegrationLabel(machine) {
-    if (machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo) return "Point integrado";
-    if (machine?.mercado_pago_integrada || machine?.provedor_pagamento === "mercado_pago") return "Mercado Pago";
-    return "Manual";
+    return isPointIntegrated(machine) ? "Point integrada" : "Manual";
   }
 
   function pdvTotals() {
@@ -231,6 +236,7 @@
     const paymentConfirmation = view.querySelector('[name="pagamento_confirmado"]');
     if (paymentConfirmation) paymentConfirmation.required = false;
     updatePdvCashPayment();
+    updatePdvMachinePaymentUi();
   }
 
   function ensurePdvMixedPaymentFields() {
@@ -310,10 +316,13 @@
     const payment = document.querySelector('[data-form="pdv-sale"] [name="forma_pagamento"]')?.value;
     if (!["pix","debito","credito","misto"].includes(payment)) return `<p>Selecione Pix, débito, crédito ou pagamento misto para usar uma maquininha.</p>`;
     if (!machine) return `<p>${payment === "pix" ? "A maquininha é opcional para Pix." : "Selecione a maquininha utilizada no pagamento."}</p>`;
-    if (machine.mercado_pago_modo !== "point" || !machine.mercado_pago_ativo) return `<p><b>Maquininha ${escapeHtml(machineIntegrationLabel(machine))}:</b> realize a cobrança na ${escapeHtml(machine.nome)}. Depois da aprovação, marque “Confirmo que o pagamento foi recebido” e finalize a venda.</p>`;
+    if (!isPointIntegrated(machine)) return `<p><b>Maquininha Manual:</b> realize a cobrança na ${escapeHtml(machine.nome)}. Depois da aprovação, marque “Confirmo que o pagamento foi recebido” e finalize a venda.</p>`;
     if (payment === "misto") return `<p>Pagamento misto não pode ser enviado em uma única cobrança Point. Use uma maquininha manual.</p>`;
     const order = state.pdvPointOrder;
-    if (!order) return `<p>Ao escolher um Point integrado, envie a cobrança antes de finalizar. O PDV manual continua disponível.</p><button type="button" class="btn secondary small" data-action="pdv-point-send">Enviar cobrança ao Point</button>`;
+    if (!order) {
+      const enabled=state.pdvCart.length>0&&["pix","debito","credito"].includes(payment);
+      return `<p>Envie a cobrança para a Point e aguarde a aprovação.</p><button type="button" class="btn secondary small" data-action="pdv-point-send" ${enabled?"":"disabled"}>Enviar cobrança ao Point</button>`;
+    }
     const approved = order.status === "approved";
     return `<div><strong>Cobrança Point: ${escapeHtml(order.status || "pendente")}</strong><small>${money(order.valor)} · ${escapeHtml(order.order_id || "criando")}</small></div>${approved ? `<span class="badge">Aprovada</span>` : `<button type="button" class="btn secondary small" data-action="pdv-point-sync">Consultar status</button>`}`;
   }
@@ -500,6 +509,18 @@
     const pinField = grid?.querySelector('[name="admin_pin"]')?.closest(".field");
     if (!grid || !pinField) return;
     pinField.insertAdjacentHTML("beforebegin", `<div class="field"><label>Modo de operação</label><select name="mercado_pago_modo"><option value="manual" ${item?.mercado_pago_modo !== "point" ? "selected" : ""}>Manual (fallback)</option><option value="point" ${item?.mercado_pago_modo === "point" ? "selected" : ""}>Mercado Pago Point integrado</option></select></div><div class="field"><label>Terminal ID do Point</label><input name="mercado_pago_terminal_id" maxlength="180" value="${escapeHtml(item?.mercado_pago_terminal_id || "")}" placeholder="Identificador do dispositivo no Mercado Pago"></div><div class="field"><label>Serial do equipamento</label><input name="mercado_pago_serial" maxlength="180" value="${escapeHtml(item?.mercado_pago_serial || "")}"></div><div class="field"><label>Ambiente</label><select name="mercado_pago_ambiente"><option value="producao" ${item?.mercado_pago_ambiente !== "sandbox" ? "selected" : ""}>Produção</option><option value="sandbox" ${item?.mercado_pago_ambiente === "sandbox" ? "selected" : ""}>Sandbox</option></select></div><div class="field full"><label class="checkbox"><input name="mercado_pago_operacional" type="checkbox" ${item?.mercado_pago_operacional ? "checked" : ""}> Terminal conferido e operacional</label></div><div class="field full"><label class="checkbox"><input name="mercado_pago_ativo" type="checkbox" ${item?.mercado_pago_ativo ? "checked" : ""}> Permitir cobrança integrada no PDV</label></div>`);
+    const form=modalBody.querySelector('[data-form="machine"]');
+    const environment=form?.elements.mercado_pago_ambiente;
+    if(environment){const productionOption=environment.querySelector('option[value="producao"]');if(productionOption)productionOption.value="production";environment.value=item?.mercado_pago_ambiente==="sandbox"?"sandbox":"production";}
+    const syncPointFields=()=>{
+      const point=form?.elements.mercado_pago_modo?.value==="point";
+      if(form?.elements.mercado_pago_integrada)form.elements.mercado_pago_integrada.checked=point;
+      if(form?.elements.mercado_pago_ativo)form.elements.mercado_pago_ativo.checked=point;
+      if(form?.elements.provedor_pagamento)form.elements.provedor_pagamento.value=point?"mercado_pago":"manual";
+      if(form?.elements.mercado_pago_terminal_id)form.elements.mercado_pago_terminal_id.required=point;
+    };
+    form?.elements.mercado_pago_modo?.addEventListener("change",syncPointFields);
+    syncPointFields();
   }
 
   async function renderMachines() {
@@ -847,7 +868,7 @@
   async function sendPdvPointOrder() {
     if (!state.pdvCart.length) throw new Error("Adicione produtos antes de enviar a cobrança.");
     const form = document.querySelector('[data-form="pdv-sale"]'), data = formObject(form), machine = selectedPdvMachine(), totals = pdvTotals();
-    if (!machine || machine.mercado_pago_modo !== "point" || !machine.mercado_pago_ativo) throw new Error("Selecione uma maquininha Point integrada e ativa.");
+    if (!isPointIntegrated(machine)) throw new Error("Selecione uma maquininha Point integrada, ativa e com Terminal ID.");
     if (!["pix", "debito", "credito"].includes(data.forma_pagamento)) throw new Error("O Point aceita Pix, débito ou crédito neste fluxo.");
     state.pdvPointOrder = await request("/mercado-pago/point/pdv/criar-order", { method: "POST", body: JSON.stringify({ caixa_id: state.pdvCash.id, maquininha_id: machine.id, valor: totals.total, forma_pagamento: data.forma_pagamento }) });
     document.getElementById("pdvPointStatus").innerHTML = pdvPointStatusHtml();
@@ -892,8 +913,8 @@
     const cashReceived = Number(data.valor_recebido_dinheiro || 0);
     if (data.forma_pagamento === "dinheiro" && (!Number.isFinite(cashReceived) || cashReceived < totals.total)) throw new Error(`O valor entregue em dinheiro deve ser igual ou maior que ${money(totals.total)}.`);
     const machine = selectedPdvMachine();
-    if (data.forma_pagamento === "misto" && machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo) throw new Error("Para pagamento misto, selecione uma maquininha manual. O Point integrado aceita uma cobrança por vez.");
-    if (machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo && state.pdvPointOrder?.status !== "approved") throw new Error("Envie a cobrança ao Point e aguarde a aprovação antes de finalizar.");
+    if (data.forma_pagamento === "misto" && isPointIntegrated(machine)) throw new Error("Para pagamento misto, selecione uma maquininha manual. O Point integrado aceita uma cobrança por vez.");
+    if (isPointIntegrated(machine) && state.pdvPointOrder?.status !== "approved") throw new Error("Envie a cobrança ao Point e aguarde a aprovação antes de finalizar.");
     const payload = {
       cliente_id: data.cliente_id ? Number(data.cliente_id) : null,
       caixa_id: state.pdvCash.id,
@@ -1019,7 +1040,21 @@
     const id = form.dataset.id;
     const pin = data.admin_pin;
     delete data.admin_pin;
-    const payload = { ...data, ordem_exibicao: Number(data.ordem_exibicao || 0), ativo: form.elements.ativo.checked, mercado_pago_integrada: form.elements.mercado_pago_integrada.checked, mercado_pago_operacional: form.elements.mercado_pago_operacional?.checked || false, mercado_pago_ativo: form.elements.mercado_pago_ativo?.checked || false };
+    const point = data.mercado_pago_modo === "point";
+    const payload = {
+      ...data,
+      pdv_codigo:data.pdv_codigo || null,
+      terminal_tipo:data.terminal_tipo || null,
+      provedor_pagamento:point ? "mercado_pago" : "manual",
+      mercado_pago_modo:point ? "point" : "manual",
+      mercado_pago_ambiente:data.mercado_pago_ambiente === "sandbox" ? "sandbox" : "production",
+      ordem_exibicao:Number(data.ordem_exibicao || 0),
+      ativo:form.elements.ativo.checked,
+      mercado_pago_integrada:point,
+      mercado_pago_operacional:point && (form.elements.mercado_pago_operacional?.checked || false),
+      mercado_pago_ativo:point,
+    };
+    if(point&&!String(payload.mercado_pago_terminal_id||"").trim())throw new Error("Informe o Terminal ID para ativar o Mercado Pago Point integrado.");
     await request(`/maquininhas${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", headers: { "X-Admin-Pin": pin }, body: JSON.stringify(payload) });
     closeModal();
     toast(id ? "Maquininha atualizada." : "Maquininha cadastrada.");

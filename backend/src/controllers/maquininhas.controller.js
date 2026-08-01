@@ -21,20 +21,35 @@ async function buscarMaquininha(req, res) {
   } catch (error) { console.error(error); res.status(500).json({ message: "Não foi possível buscar a maquininha." }); }
 }
 
-function dados(body) {
-  return [String(body.nome || "").trim(), body.tipo || "loja", body.ativo !== false,
-    body.observacoes || null, body.codigo_externo || null, body.provedor_pagamento || "manual",
-    body.mercado_pago_pos_id || null, body.mercado_pago_store_id || null,
-    Boolean(body.mercado_pago_integrada), body.pdv_codigo || null, body.terminal_tipo || null,
-    Number(body.ordem_exibicao || 0), body.mercado_pago_terminal_id || null,
-    body.mercado_pago_serial || null, body.mercado_pago_modo === "point" ? "point" : "manual",
-    body.mercado_pago_ambiente === "sandbox" ? "sandbox" : "producao",
-    Boolean(body.mercado_pago_operacional), Boolean(body.mercado_pago_ativo)];
+function texto(value) { const result=String(value ?? "").trim(); return result || null; }
+function booleano(value) { return value === true || value === "true" || value === 1 || value === "1"; }
+
+function dados(body = {}) {
+  const modoPoint = body.mercado_pago_modo === "point";
+  return {
+    valores:[
+      texto(body.nome), body.tipo || "loja", body.ativo === undefined ? true : booleano(body.ativo),
+      texto(body.observacoes), texto(body.codigo_externo), modoPoint ? "mercado_pago" : (body.provedor_pagamento || "manual"),
+      texto(body.mercado_pago_pos_id), texto(body.mercado_pago_store_id), modoPoint,
+      texto(body.pdv_codigo), texto(body.terminal_tipo), Number(body.ordem_exibicao || 0),
+      texto(body.mercado_pago_terminal_id), texto(body.mercado_pago_serial), modoPoint ? "point" : "manual",
+      body.mercado_pago_ambiente === "sandbox" ? "sandbox" : "production",
+      modoPoint && booleano(body.mercado_pago_operacional), modoPoint,
+    ],
+    modoPoint,
+  };
+}
+
+function validarDados(normalizados) {
+  const valores=normalizados.valores;
+  if (!valores[0]) return "Nome é obrigatório.";
+  if (normalizados.modoPoint && !valores[12]) return "Informe o Terminal ID para ativar o Mercado Pago Point integrado.";
+  return null;
 }
 
 async function criarMaquininha(req, res) {
-  const valores = dados(req.body);
-  if (!valores[0]) return res.status(400).json({ message: "Nome é obrigatório." });
+  const normalizados = dados(req.body), valores=normalizados.valores;
+  const erro=validarDados(normalizados); if(erro)return res.status(400).json({message:erro});
   try {
     const result = await query(`INSERT INTO maquininhas
       (nome,tipo,ativo,observacoes,codigo_externo,provedor_pagamento,mercado_pago_pos_id,
@@ -47,8 +62,8 @@ async function criarMaquininha(req, res) {
 }
 
 async function atualizarMaquininha(req, res) {
-  const valores = dados(req.body);
-  if (!valores[0]) return res.status(400).json({ message: "Nome é obrigatório." });
+  const normalizados = dados(req.body), valores=normalizados.valores;
+  const erro=validarDados(normalizados); if(erro)return res.status(400).json({message:erro});
   try {
     const result = await query(`UPDATE maquininhas SET nome=$1,tipo=$2,ativo=$3,observacoes=$4,
       codigo_externo=$5,provedor_pagamento=$6,mercado_pago_pos_id=$7,mercado_pago_store_id=$8,
