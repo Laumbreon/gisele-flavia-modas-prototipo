@@ -85,9 +85,14 @@ function validarPagamentos(pagamentos, totalVenda) {
   const troco = roundMoney(Math.max(totalPago - totalVenda, 0));
   const valorFaltante = roundMoney(Math.max(totalVenda - totalPago, 0));
   const temDinheiro = pagamentos.some((pagamento) => pagamento.forma_pagamento === "dinheiro");
+  const totalDinheiro = roundMoney(pagamentos.filter((pagamento) => pagamento.forma_pagamento === "dinheiro").reduce((sum, pagamento) => sum + pagamento.valor, 0));
 
   if (troco > 0 && !temDinheiro) {
     throw validationError("Troco só pode ser calculado quando há pagamento em dinheiro.");
+  }
+
+  if (troco > totalDinheiro) {
+    throw validationError("O troco não pode ser maior que o valor recebido em dinheiro.");
   }
 
   return {
