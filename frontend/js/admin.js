@@ -896,8 +896,18 @@
     state.pdvPointOrder = null;
     state.lastSale = sale;
     toast(`Venda #${sale.id} finalizada — ${money(sale.total)}.`);
-    await renderPdv();
-    openPdvReceipt(state.lastPdvReceipt);
+    try {
+      openPdvReceipt(state.lastPdvReceipt);
+    } catch (receiptError) {
+      console.error("Venda finalizada, mas o comprovante não abriu:", receiptError);
+      toast(`Venda #${sale.id} finalizada. Use o histórico para abrir o comprovante.`, true);
+    }
+    try {
+      await renderPdv();
+    } catch (refreshError) {
+      console.error("Venda finalizada, mas o PDV não atualizou:", refreshError);
+      toast(`Venda #${sale.id} foi finalizada. Atualize a tela para recarregar o PDV.`, true);
+    }
   }
 
   function paymentLabel(value) {
