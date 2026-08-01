@@ -20,8 +20,8 @@ async function checkoutPublico(req, res) {
   if (cpfCliente && cpfCliente.length !== 11) return res.status(400).json({ message: "O CPF deve conter exatamente 11 dígitos." });
   if (!itens.length) return res.status(400).json({ message: "Adicione ao menos um item ao pedido." });
   if (!formaPagamento) return res.status(400).json({ message: "Selecione uma forma de pagamento válida." });
-  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 12) {
-    return res.status(400).json({ message: "Selecione uma quantidade de parcelas entre 1 e 12." });
+  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 3) {
+    return res.status(400).json({ message: "Selecione uma quantidade de parcelas entre 1 e 3." });
   }
   if (tipoEntrega === "entrega_local" && (!texto(entrega.bairro) || !texto(entrega.cidade) || !texto(entrega.endereco) || !texto(entrega.numero))) {
     return res.status(400).json({ message: "Preencha os dados obrigatórios da entrega." });

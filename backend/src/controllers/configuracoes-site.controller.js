@@ -12,7 +12,7 @@ const CARROSSEL_PADRAO = [
 
 const CONFIGURACOES = {
   faixa_superior: {
-    padrao: "Frete grátis em compras acima de R$ 299,00 · Parcele em até 12x sem juros",
+    padrao: "Frete grátis em compras acima de R$ 299,00 · Parcele em até 3x sem juros",
     limite: 180,
     descricao: "Mensagem exibida na faixa superior do site",
   },
@@ -50,7 +50,7 @@ const CONFIGURACOES = {
     descricao: "Valor do frete promocional",
   },
   parcelas_sem_juros: {
-    padrao: "12",
+    padrao: "3",
     limite: 3,
     descricao: "Quantidade máxima de parcelas anunciadas",
   },
@@ -144,8 +144,8 @@ async function salvarConfiguracoes(req, res) {
     if (["frete_gratis_minimo", "frete_promocional_minimo", "frete_promocional_valor"].includes(chave) && (!Number.isFinite(Number(valor)) || Number(valor) < 0)) {
       return res.status(400).json({ message: "Informe valores válidos para as regras de frete." });
     }
-    if (chave === "parcelas_sem_juros" && (!Number.isInteger(Number(valor)) || Number(valor) < 1 || Number(valor) > 24)) {
-      return res.status(400).json({ message: "As parcelas devem estar entre 1 e 24." });
+    if (chave === "parcelas_sem_juros" && (!Number.isInteger(Number(valor)) || Number(valor) < 1 || Number(valor) > 3)) {
+      return res.status(400).json({ message: "As parcelas devem estar entre 1 e 3." });
     }
 
     valores.push([chave, chave === "instagram_usuario" ? valor.replace(/^@/, "") : valor, definicao.descricao]);

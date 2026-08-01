@@ -528,7 +528,7 @@
         <div class="field"><label>Compra mínima para frete promocional (R$)</label><input name="frete_promocional_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_promocional_minimo)}"></div>
         <div class="field"><label>Valor do frete promocional (R$)</label><input name="frete_promocional_valor" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_promocional_valor)}"></div>
         <div class="field"><label>Frete grátis acima de (R$)</label><input name="frete_gratis_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_gratis_minimo)}"><small>Use 0 para desativar o frete grátis.</small></div>
-        <div class="field"><label>Parcelas sem juros</label><input name="parcelas_sem_juros" type="number" min="1" max="24" step="1" required value="${escapeHtml(s.parcelas_sem_juros)}"></div>
+        <div class="field"><label>Parcelas sem juros</label><input name="parcelas_sem_juros" type="number" min="1" max="3" step="1" required value="${escapeHtml(s.parcelas_sem_juros)}"></div>
         <div class="field full"><h3>Seção de categorias</h3></div>
         <div class="field"><label>Título</label><input name="categorias_titulo" maxlength="100" required value="${escapeHtml(s.categorias_titulo)}"></div>
         <div class="field"><label>Subtítulo</label><input name="categorias_subtitulo" maxlength="180" required value="${escapeHtml(s.categorias_subtitulo)}"></div>

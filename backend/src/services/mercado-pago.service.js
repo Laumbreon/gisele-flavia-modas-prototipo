@@ -111,8 +111,8 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
     back_urls: { success, failure, pending },
   };
   if (vendaCompleta.forma_pagamento === "cartao") {
-    const parcelas = Math.min(12, Math.max(1, Number(vendaCompleta.parcelas || 1)));
-    payload.payment_methods = { installments: 12, default_installments: parcelas };
+    const parcelas = Math.min(3, Math.max(1, Number(vendaCompleta.parcelas || 1)));
+    payload.payment_methods = { installments: 3, default_installments: parcelas };
     payload.metadata = { parcelas_escolhidas: parcelas };
   }
   const successHost = new URL(success).hostname;
