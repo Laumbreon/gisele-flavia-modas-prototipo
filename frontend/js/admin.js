@@ -91,6 +91,7 @@
   const date = (value) => value ? new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
   const firstLetter = (value) => String(value || "A").trim().charAt(0).toUpperCase();
   const valueOrEmpty = (value) => value === null || value === undefined ? "" : value;
+  const selected = (value, expected) => String(value ?? "") === String(expected ?? "") ? "selected" : "";
 
   function toast(message, error = false) {
     toastElement.textContent = message;
