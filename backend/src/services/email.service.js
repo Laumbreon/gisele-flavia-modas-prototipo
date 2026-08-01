@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const PDFDocument = require("pdfkit");
 
 function smtpConfigurado() {
   return String(process.env.EMAIL_ENVIO_ATIVO || "false").toLowerCase() === "true"
@@ -7,6 +8,33 @@ function smtpConfigurado() {
 
 function escapeHtml(valor) {
   return String(valor || "").replace(/[&<>"']/g, caractere => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[caractere]));
+}
+
+function gerarComprovantePdf({ nome, pedido }) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size:"A4", margin:48, info:{ Title:`Comprovante de compra #${pedido.id}`, Author:"Gisele Flávia Modas", Subject:"Comprovante de compra" } });
+    const chunks=[];
+    doc.on("data", chunk => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    const moeda=valor=>Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+    doc.fillColor("#F80080").fontSize(22).text("Gisele Flávia Modas",{align:"center"});
+    doc.fillColor("#222222").fontSize(15).text(`Comprovante de compra #${Number(pedido.id)}`,{align:"center"});
+    doc.moveDown().fontSize(10).text(`Cliente: ${nome || "Consumidor não identificado"}`);
+    if(pedido.tipo_entrega==="entrega_local") doc.text(`Entrega: ${[pedido.endereco,pedido.numero,pedido.bairro,pedido.cidade,pedido.estado].filter(Boolean).join(", ")}`).text(`Taxa de entrega: ${moeda(pedido.frete_valor)}`);
+    else doc.text(`Retirada na loja · Telefone: ${pedido.telefone || "Não informado"}`);
+    doc.moveDown().strokeColor("#F3B4D3").moveTo(48,doc.y).lineTo(547,doc.y).stroke().moveDown(.7);
+    (pedido.itens||[]).forEach(item=>{
+      const descricao=[item.produto_nome,[item.tamanho,item.cor].filter(Boolean).join(" / ")].filter(Boolean).join(" · ");
+      doc.fontSize(10).fillColor("#222222").text(`${Number(item.quantidade)}x ${descricao}`,{continued:true}).text(moeda(item.subtotal),{align:"right"});
+      doc.fontSize(8).fillColor("#666666").text(`Ref.: ${item.codigo_ref||item.codigo_interno||item.sku||"—"} · Código de barras: ${item.codigo_barras||"—"}`).moveDown(.5);
+    });
+    doc.moveDown().strokeColor("#F3B4D3").moveTo(48,doc.y).lineTo(547,doc.y).stroke().moveDown(.7);
+    doc.fillColor("#222222").fontSize(10).text(`Subtotal: ${moeda(pedido.subtotal)}`,{align:"right"}).text(`Frete: ${moeda(pedido.frete_valor)}`,{align:"right"});
+    doc.fillColor("#AD0257").fontSize(15).text(`Total: ${moeda(pedido.total)}`,{align:"right"});
+    doc.moveDown(2).fillColor("#444444").fontSize(9).text("CNPJ: 11.293.505/0001-08",{align:"center"}).text("Rua Amando de Barros, 993 — Centro · CEP 18.600-050",{align:"center"}).moveDown().text("Obrigada pela preferência!",{align:"center"});
+    doc.end();
+  });
 }
 
 async function enviarEmailRecuperacaoSenha({ para, nome, codigo, expiresMinutes }) {
@@ -48,10 +76,14 @@ async function enviarEmailCupomPedido({ para, nome, pedido }) {
     ? `<p><b>Entrega:</b> ${escapeHtml([pedido.endereco,pedido.numero,pedido.bairro,pedido.cidade,pedido.estado].filter(Boolean).join(", "))}<br><b>Taxa:</b> ${moeda(pedido.frete_valor)}</p>`
     : `<p><b>Retirada na loja</b><br>Cliente: ${escapeHtml(nome)}<br>Telefone: ${escapeHtml(pedido.telefone)}</p>`;
   const html=`<!doctype html><html><body style="margin:0;background:#fff5fa;font-family:Arial,sans-serif;color:#222"><div style="max-width:620px;margin:auto;padding:24px"><div style="background:#fff;border:1px solid #f7c8df;border-radius:16px;overflow:hidden"><div style="padding:22px;background:#F80080;color:#fff;text-align:center"><b style="font-size:22px">Gisele Flávia Modas</b><div>Comprovante de compra #${Number(pedido.id)}</div></div><div style="padding:24px"><p>Olá, <b>${escapeHtml(nome)}</b>!</p><p>Seu pagamento foi confirmado. Guarde este comprovante para acompanhar a compra.</p>${entrega}<table style="width:100%;border-collapse:collapse">${itens}</table><p style="text-align:right">Subtotal: <b>${moeda(pedido.subtotal)}</b><br>Frete: <b>${moeda(pedido.frete_valor)}</b><br><span style="font-size:20px;color:#AD0257">Total: <b>${moeda(pedido.total)}</b></span></p><p style="font-size:12px;color:#666">Documento comercial sem validade fiscal.</p></div></div></div></body></html>`;
+  const pdf=await gerarComprovantePdf({nome,pedido});
+  const textoEmail=`Olá, ${nome || "cliente"}!\n\nSeu pagamento do pedido #${pedido.id} foi confirmado.\nTotal: ${moeda(pedido.total)}\n\nO comprovante está anexado em PDF.\n\nGisele Flávia Modas`;
   await transport.sendMail({
     from:{name:loja,address:process.env.SMTP_FROM_EMAIL},to:para,
-    subject:`Comprovante de compra #${pedido.id} | Gisele Flávia Modas`,html,
-    attachments:[{filename:`comprovante-pedido-${Number(pedido.id)}.html`,content:html,contentType:"text/html; charset=utf-8"}],
+    replyTo:process.env.SMTP_REPLY_TO || process.env.SMTP_FROM_EMAIL,
+    subject:`Comprovante do pedido #${pedido.id} - Gisele Flávia Modas`,text:textoEmail,html,
+    headers:{"X-Entity-Ref-ID":`pedido-${Number(pedido.id)}`},
+    attachments:[{filename:`comprovante-pedido-${Number(pedido.id)}.pdf`,content:pdf,contentType:"application/pdf"}],
   });
   return {enviado:true};
 }
