@@ -1,5 +1,6 @@
 const nodemailer = require("nodemailer");
 const PDFDocument = require("pdfkit");
+const path = require("path");
 
 function smtpConfigurado() {
   return String(process.env.EMAIL_ENVIO_ATIVO || "false").toLowerCase() === "true"
@@ -18,7 +19,8 @@ function gerarComprovantePdf({ nome, pedido }) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
     const moeda=valor=>Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-    doc.fillColor("#F80080").fontSize(22).text("Gisele Flávia Modas",{align:"center"});
+    doc.image(path.join(__dirname,"../../assets/logo.jpeg"),243,48,{fit:[110,110],align:"center",valign:"center"});
+    doc.y=170;
     doc.fillColor("#222222").fontSize(15).text(`Comprovante de compra #${Number(pedido.id)}`,{align:"center"});
     doc.moveDown().fontSize(10).text(`Cliente: ${nome || "Consumidor não identificado"}`);
     if(pedido.tipo_entrega==="entrega_local") doc.text(`Entrega: ${[pedido.endereco,pedido.numero,pedido.bairro,pedido.cidade,pedido.estado].filter(Boolean).join(", ")}`).text(`Taxa de entrega: ${moeda(pedido.frete_valor)}`);
