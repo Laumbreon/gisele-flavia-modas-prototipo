@@ -854,7 +854,7 @@
     const paidByMethod = { dinheiro: 0, pix: 0, debito: 0, credito: 0 };
     payments.forEach((payment) => { if (payment.forma_pagamento in paidByMethod) paidByMethod[payment.forma_pagamento] += Number(payment.valor || 0); });
     if (!payments.length && sale.forma_pagamento in paidByMethod) paidByMethod[sale.forma_pagamento] = Number(sale.total_pago || sale.total || 0);
-    return `<article class="pdv-receipt">
+    return `<article class="pdv-receipt"><style>@media print{@page{size:80mm 297mm;margin:2mm}.pdv-receipt{width:74mm!important;font-size:8.5pt!important}.pdv-receipt .receipt-logo{width:27mm!important;height:27mm!important;margin-bottom:1mm!important}.pdv-receipt header{padding-bottom:1.5mm!important}.pdv-receipt header h3{margin:1.5mm 0!important}.receipt-meta,.receipt-customer,.receipt-totals,.receipt-payments{padding:1.2mm 0!important}.receipt-item{padding:1mm 0!important}.pdv-receipt footer{padding-top:1.5mm!important}.receipt-business{padding-bottom:1.5mm!important}}</style>
       <header><img class="receipt-logo" src="/assets/logo-termica.png" alt="Gisele Flávia" style="width:124px;height:124px;border-radius:50%;object-fit:cover"><h3>Comprovante de compra #${Number(sale.id)}</h3></header>
       <div class="receipt-meta"><span>${date(sale.created_at)}</span><span>Caixa #${Number(sale.caixa_id || state.pdvCash?.id || 0)}</span></div>
       <p class="receipt-customer"><b>Cliente:</b> ${escapeHtml(sale.cliente || "Consumidor não identificado")}</p>
