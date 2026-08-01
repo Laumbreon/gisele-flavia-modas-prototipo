@@ -23,7 +23,13 @@ async function chamadaPoint(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.message || data.error || "Não foi possível comunicar com o Mercado Pago Point.");
+    const detalhes = Array.isArray(data.errors)
+      ? data.errors
+          .map((item) => item?.message || item?.description || item?.code)
+          .filter(Boolean)
+          .join("; ")
+      : "";
+    const error = new Error(detalhes || data.message || data.error || "Não foi possível comunicar com o Mercado Pago Point.");
     error.statusCode = response.status;
     error.details = data;
     throw error;
