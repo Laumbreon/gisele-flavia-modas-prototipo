@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS vendas (
   status VARCHAR(30) NOT NULL DEFAULT 'finalizada',
   observacoes TEXT,
   excluido_painel BOOLEAN NOT NULL DEFAULT FALSE,
+  enviar_comprovante_email BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -311,5 +312,4 @@ CREATE TABLE IF NOT EXISTS admin_pins (
   ativo BOOLEAN NOT NULL DEFAULT TRUE, updated_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
 

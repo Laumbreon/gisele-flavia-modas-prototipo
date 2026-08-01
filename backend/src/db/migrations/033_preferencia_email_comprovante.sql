@@ -1,0 +1,2 @@
+ALTER TABLE vendas
+  ADD COLUMN IF NOT EXISTS enviar_comprovante_email BOOLEAN NOT NULL DEFAULT TRUE;

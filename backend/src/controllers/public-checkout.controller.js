@@ -15,8 +15,10 @@ async function checkoutPublico(req, res) {
   const parcelasInformadas = Number(req.body.parcelas ?? 1);
   const parcelas = formaPagamento === "cartao" ? parcelasInformadas : 1;
   const cpfCliente = cpfNormalizado(cliente.cpf);
+  const enviarComprovanteEmail = req.body.enviar_comprovante_email === true;
 
   if (!texto(cliente.nome) || !texto(cliente.telefone)) return res.status(400).json({ message: "Nome e telefone são obrigatórios." });
+  if (enviarComprovanteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto(cliente.email) || "")) return res.status(400).json({ message: "Informe um e-mail válido ou desmarque o envio do comprovante por e-mail." });
   if (formaPagamento === "pix" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto(cliente.email) || "")) return res.status(400).json({ message: "Informe um e-mail válido para gerar o PIX." });
   if (formaPagamento === "pix" && cpfCliente?.length !== 11) return res.status(400).json({ message: "Informe um CPF válido para gerar o PIX." });
   if (cpfCliente && cpfCliente.length !== 11) return res.status(400).json({ message: "O CPF deve conter exatamente 11 dígitos." });
@@ -87,7 +89,7 @@ async function checkoutPublico(req, res) {
       if (freteGratisMinimo > 0 && subtotal >= freteGratisMinimo) frete = 0;
     }
     const total = dinheiro(subtotal + frete);
-    const venda = await client.query(`INSERT INTO vendas (cliente_id,usuario_id,subtotal,desconto,frete_valor,total,total_pago,troco,valor_faltante,forma_pagamento,parcelas,canal_venda,origem_venda,tem_entrega,status_pagamento,status_entrega,caixa_id,maquininha_id,status,observacoes) VALUES ($1,NULL,$2,0,$3,$4,0,0,$4,$5,$6,'site','checkout_publico',$7,'pendente',$8,NULL,NULL,'pendente',$9) RETURNING id,total,status_pagamento,parcelas`, [clienteId,subtotal,frete,total,formaPagamento,parcelas,tipoEntrega === "entrega_local","pendente",texto(req.body.observacoes)]);
+    const venda = await client.query(`INSERT INTO vendas (cliente_id,usuario_id,subtotal,desconto,frete_valor,total,total_pago,troco,valor_faltante,forma_pagamento,parcelas,canal_venda,origem_venda,tem_entrega,status_pagamento,status_entrega,caixa_id,maquininha_id,status,observacoes,enviar_comprovante_email) VALUES ($1,NULL,$2,0,$3,$4,0,0,$4,$5,$6,'site','checkout_publico',$7,'pendente',$8,NULL,NULL,'pendente',$9,$10) RETURNING id,total,status_pagamento,parcelas,enviar_comprovante_email`, [clienteId,subtotal,frete,total,formaPagamento,parcelas,tipoEntrega === "entrega_local","pendente",texto(req.body.observacoes),enviarComprovanteEmail]);
     const vendaId = venda.rows[0].id;
     for (const item of processados) {
       await client.query(`INSERT INTO itens_venda (venda_id,produto_id,produto_variacao_id,produto_nome,tamanho,cor,codigo_ref,codigo_barras,quantidade,preco_unitario,subtotal) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [vendaId,item.produto_id,item.variacao_id,item.produto_nome,item.tamanho,item.cor,item.codigo_ref,item.codigo_barras,item.quantidade,item.preco,item.subtotal]);

@@ -7,7 +7,7 @@ async function enviarComprovanteVendaPaga(vendaId) {
 
   const claim = await pool.query(
     `UPDATE vendas SET comprovante_enviado_em=NOW(),updated_at=NOW()
-     WHERE id=$1 AND canal_venda='site' AND status_pagamento='pago' AND comprovante_enviado_em IS NULL
+     WHERE id=$1 AND canal_venda='site' AND status_pagamento='pago' AND enviar_comprovante_email=TRUE AND comprovante_enviado_em IS NULL
      RETURNING id`,
     [id]
   );
@@ -44,4 +44,3 @@ async function enviarComprovanteVendaPaga(vendaId) {
 }
 
 module.exports = { enviarComprovanteVendaPaga };
-
