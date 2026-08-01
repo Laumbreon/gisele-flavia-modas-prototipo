@@ -222,6 +222,8 @@
     const submit = document.querySelector('[data-form="pdv-sale"] button[type="submit"], [data-form="pdv-sale"] button:not([type])');
     if (submit) submit.disabled = !state.pdvCart.length;
     ensurePdvMixedPaymentFields();
+    const paymentConfirmation = view.querySelector('[name="pagamento_confirmado"]');
+    if (paymentConfirmation) paymentConfirmation.required = false;
     updatePdvCashPayment();
   }
 
@@ -293,14 +295,26 @@
       });
       const actions = view.querySelector(".pdv-actions");
       actions?.insertAdjacentHTML("beforebegin", `<div id="pdvPointStatus" class="point-payment-box">${pdvPointStatusHtml()}</div>`);
+      updatePdvMachinePaymentUi();
     }
   }
 
   function pdvPointStatusHtml() {
+    const machine = selectedPdvMachine();
+    const payment = document.querySelector('[data-form="pdv-sale"] [name="forma_pagamento"]')?.value;
+    if (!["pix","debito","credito","misto"].includes(payment)) return `<p>Selecione Pix, débito, crédito ou pagamento misto para usar uma maquininha.</p>`;
+    if (!machine) return `<p>${payment === "pix" ? "A maquininha é opcional para Pix." : "Selecione a maquininha utilizada no pagamento."}</p>`;
+    if (machine.mercado_pago_modo !== "point" || !machine.mercado_pago_ativo) return `<p><b>Pagamento manual:</b> realize a cobrança na ${escapeHtml(machine.nome)}. Depois da aprovação, marque “Confirmo que o pagamento foi recebido” e finalize a venda.</p>`;
+    if (payment === "misto") return `<p>Pagamento misto não pode ser enviado em uma única cobrança Point. Use uma maquininha manual.</p>`;
     const order = state.pdvPointOrder;
     if (!order) return `<p>Ao escolher um Point integrado, envie a cobrança antes de finalizar. O PDV manual continua disponível.</p><button type="button" class="btn secondary small" data-action="pdv-point-send">Enviar cobrança ao Point</button>`;
     const approved = order.status === "approved";
     return `<div><strong>Cobrança Point: ${escapeHtml(order.status || "pendente")}</strong><small>${money(order.valor)} · ${escapeHtml(order.order_id || "criando")}</small></div>${approved ? `<span class="badge">Aprovada</span>` : `<button type="button" class="btn secondary small" data-action="pdv-point-sync">Consultar status</button>`}`;
+  }
+
+  function updatePdvMachinePaymentUi() {
+    const box = document.getElementById("pdvPointStatus");
+    if (box) box.innerHTML = pdvPointStatusHtml();
   }
 
   function invalidatePdvPoint() {
@@ -1159,6 +1173,7 @@
 
   async function handleChange(event) {
     if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="maquininha_id"]')) invalidatePdvPoint();
+    if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="maquininha_id"]')) updatePdvMachinePaymentUi();
     if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="valor_recebido_dinheiro"], [data-form="pdv-sale"] [name="pdv_desconto"]')) updatePdvCashPayment();
     const select = event.target.closest('[data-action="delivery-status"]');
     if (select) {
