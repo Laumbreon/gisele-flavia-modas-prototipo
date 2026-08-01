@@ -51,6 +51,26 @@ async function buscarCaixaAberto(req, res) {
   }
 }
 
+async function resumoPdv(req, res) {
+  try {
+    const result = await query(`
+      SELECT c.id caixa_id,c.status,c.valor_inicial,
+        c.valor_inicial + COALESCE(SUM(CASE WHEN cm.tipo IN ('saida','sangria') THEN -cm.valor ELSE cm.valor END)
+          FILTER (WHERE COALESCE(v.canal_venda,'') <> 'site'),0) AS total_pdv
+      FROM caixas c
+      LEFT JOIN caixa_movimentacoes cm ON cm.caixa_id=c.id
+      LEFT JOIN vendas v ON v.id=cm.venda_id
+      WHERE c.status='aberto'
+      GROUP BY c.id
+      ORDER BY c.data_abertura DESC LIMIT 1`);
+    const caixa = result.rows[0];
+    res.json(caixa ? { caixa_id:caixa.caixa_id, status:caixa.status, total:Number(caixa.total_pdv || 0), pagamentos_site_incluidos:false } : { caixa_id:null, status:"fechado", total:0, pagamentos_site_incluidos:false });
+  } catch (error) {
+    console.error("Erro ao calcular resumo exclusivo do PDV:", error);
+    res.status(500).json({ message:"Não foi possível calcular o saldo do PDV." });
+  }
+}
+
 async function abrirCaixa(req, res) {
   const valorInicial = toMoney(req.body.valor_inicial);
 
@@ -450,6 +470,7 @@ async function excluirCaixa(req, res) {
 
 module.exports = {
   buscarCaixaAberto,
+  resumoPdv,
   abrirCaixa,
   fecharCaixa,
   listarCaixas,

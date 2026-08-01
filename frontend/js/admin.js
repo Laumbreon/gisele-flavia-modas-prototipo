@@ -161,8 +161,8 @@
 
   async function renderDashboard() {
     loading("Atualizando os dados da loja...");
-    const [products, orders, customers, freight] = await Promise.all([
-      safe("/produtos?status=todos"), safe("/pedidos-site"), safe("/clientes"), safe("/fretes-bairro"),
+    const [products, orders, customers, freight, pdvSummary] = await Promise.all([
+      safe("/produtos?status=todos"), safe("/pedidos-site"), safe("/clientes"), safe("/fretes-bairro"), request("/caixas/resumo-pdv").catch(() => ({ total:0, status:"indisponivel" })),
     ]);
     state.products = products; state.orders = orders; state.customers = customers; state.freight = freight;
     const activeProducts = products.filter((item) => item.ativo).length;
@@ -173,6 +173,7 @@
     view.innerHTML = `
       <div class="cards">
         <article class="card metric accent"><small>Vendas pagas no site</small><strong>${money(paidTotal)}</strong></article>
+        <article class="card metric"><small>Caixa atual do PDV</small><strong>${money(pdvSummary.total)}</strong><span class="muted">Sem pagamentos do site</span></article>
         <article class="card metric"><small>Produtos ativos</small><strong>${activeProducts}</strong></article>
         <article class="card metric"><small>Pedidos pendentes</small><strong>${pendingOrders}</strong></article>
         <article class="card metric"><small>Clientes cadastrados</small><strong>${customers.length}</strong></article>
