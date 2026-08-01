@@ -32,7 +32,7 @@ async function listarPedidosSite(req, res) {
   if (texto(req.query.data_fim)) adicionar("v.created_at < (?::date + INTERVAL '1 day')", texto(req.query.data_fim));
   if (texto(req.query.busca)) {
     valores.push(`%${texto(req.query.busca)}%`);
-    filtros.push(`(CAST(v.id AS TEXT) ILIKE $${valores.length} OR c.nome ILIKE $${valores.length} OR COALESCE(c.telefone, c.whatsapp, '') ILIKE $${valores.length})`);
+    filtros.push(`(CAST(v.id AS TEXT) ILIKE $${valores.length} OR c.nome ILIKE $${valores.length} OR COALESCE(c.telefone, c.whatsapp, '') ILIKE $${valores.length} OR EXISTS (SELECT 1 FROM itens_venda iv LEFT JOIN produto_variacoes pv ON pv.id=iv.produto_variacao_id WHERE iv.venda_id=v.id AND COALESCE(iv.codigo_ref,pv.codigo_ref,'') ILIKE $${valores.length}))`);
   }
 
   try {

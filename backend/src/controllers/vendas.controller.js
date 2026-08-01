@@ -233,6 +233,7 @@ async function criarVenda(req, res) {
   const temEntrega = req.body.tem_entrega === true;
   const entrega = req.body.entrega && typeof req.body.entrega === "object" ? req.body.entrega : null;
   const caixaId = req.body.caixa_id ? Number(req.body.caixa_id) : null;
+  const pointOrderId = normalizeOptional(req.body.mercado_pago_point_order_id);
 
   if (!itens.length) {
     return res.status(400).json({ message: "Informe pelo menos um item para a venda." });
@@ -286,6 +287,8 @@ async function criarVenda(req, res) {
             pv.id AS variacao_id,
             pv.tamanho,
             pv.cor,
+            pv.codigo_ref,
+            pv.codigo_barras,
             e.quantidade AS quantidade_estoque
           FROM produto_variacoes pv
           INNER JOIN produtos p ON p.id = pv.produto_id
@@ -315,6 +318,8 @@ async function criarVenda(req, res) {
         produto_nome: estoque.produto_nome,
         tamanho: estoque.tamanho,
         cor: estoque.cor,
+        codigo_ref: estoque.codigo_ref,
+        codigo_barras: estoque.codigo_barras,
         quantidade,
         preco_unitario: precoUnitario,
         subtotal: itemSubtotal,
@@ -336,6 +341,20 @@ async function criarVenda(req, res) {
       ? pagamentos[0].maquininha_id
       : req.body.maquininha_id ? Number(req.body.maquininha_id) : null;
     const statusEntrega = temEntrega ? normalizeOptional(entrega?.status_entrega) || "pendente" : "sem_entrega";
+    const idsMaquininhas = [...new Set(pagamentos.map(p => p.maquininha_id).filter(Boolean))];
+    let pointOrder = null;
+    if (idsMaquininhas.length) {
+      const integradas = (await client.query("SELECT id FROM maquininhas WHERE id=ANY($1::int[]) AND ativo=TRUE AND mercado_pago_modo='point' AND mercado_pago_ativo=TRUE", [idsMaquininhas])).rows;
+      if (integradas.length) {
+        if (!pointOrderId) throw validationError("Envie a cobrança ao Mercado Pago Point e aguarde a aprovação antes de finalizar a venda.");
+        pointOrder = (await client.query("SELECT * FROM mercado_pago_point_orders WHERE order_id=$1 FOR UPDATE", [pointOrderId])).rows[0];
+        if (!pointOrder) throw validationError("Cobrança Mercado Pago Point não encontrada.");
+        if (pointOrder.status !== "approved") throw validationError("A cobrança Mercado Pago Point ainda não foi aprovada.");
+        if (pointOrder.venda_id) throw validationError("Esta cobrança Mercado Pago Point já está vinculada a outra venda.");
+        if (Number(pointOrder.caixa_id) !== Number(caixaId) || !idsMaquininhas.includes(Number(pointOrder.maquininha_id))) throw validationError("A cobrança Point não corresponde ao caixa e à maquininha selecionados.");
+        if (pointOrder.forma_pagamento !== pagamentos[0]?.forma_pagamento || Math.abs(Number(pointOrder.valor) - total) > 0.009) throw validationError("A cobrança Point não corresponde à forma de pagamento ou ao total atual da venda.");
+      }
+    }
 
     const vendaResult = await client.query(
       `
@@ -407,6 +426,7 @@ async function criarVenda(req, res) {
     );
 
     const venda = vendaResult.rows[0];
+    if (pointOrder) await client.query("UPDATE mercado_pago_point_orders SET venda_id=$2,updated_at=NOW() WHERE id=$1 AND venda_id IS NULL", [pointOrder.id, venda.id]);
     let entregaCriada = null;
 
     if (temEntrega && entrega) {
@@ -556,12 +576,14 @@ async function criarVenda(req, res) {
             produto_nome,
             tamanho,
             cor,
+            codigo_ref,
+            codigo_barras,
             quantidade,
             preco_unitario,
             subtotal
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-          RETURNING id, produto_id, produto_variacao_id, produto_nome, tamanho, cor, quantidade, preco_unitario, subtotal;
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          RETURNING id, produto_id, produto_variacao_id, produto_nome, tamanho, cor, codigo_ref, codigo_barras, quantidade, preco_unitario, subtotal;
         `,
         [
           venda.id,
@@ -570,6 +592,8 @@ async function criarVenda(req, res) {
           item.produto_nome,
           item.tamanho,
           item.cor,
+          item.codigo_ref,
+          item.codigo_barras,
           item.quantidade,
           item.preco_unitario,
           item.subtotal,

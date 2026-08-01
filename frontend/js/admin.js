@@ -34,6 +34,9 @@
     cashHistory: [],
     machines: [],
     labelProducts: [],
+    pdvPointOrder: null,
+    lastSale: null,
+    currentOrder: null,
   };
 
   const view = document.getElementById("view");
@@ -197,7 +200,7 @@
   function pdvCartHtml() {
     const totals = pdvTotals();
     const lines = state.pdvCart.length
-      ? state.pdvCart.map((item) => `<div class="pdv-cart-line"><div><strong>${escapeHtml(item.produto)}</strong><small>${escapeHtml(item.tamanho)} · ${escapeHtml(item.cor)}</small></div><div class="pdv-quantity"><button type="button" data-action="pdv-minus" data-id="${item.variacao_id}" aria-label="Diminuir">−</button><span>${item.quantidade}</span><button type="button" data-action="pdv-plus" data-id="${item.variacao_id}" aria-label="Aumentar">＋</button></div><strong>${money(item.preco * item.quantidade)}</strong><button type="button" class="pdv-remove" data-action="pdv-remove" data-id="${item.variacao_id}" aria-label="Remover">×</button></div>`).join("")
+      ? state.pdvCart.map((item) => `<div class="pdv-cart-line"><div><strong>${escapeHtml(item.produto)}</strong><small>${escapeHtml(item.tamanho)} · ${escapeHtml(item.cor)}</small>${item.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</small>` : ""}</div><div class="pdv-quantity"><button type="button" data-action="pdv-minus" data-id="${item.variacao_id}" aria-label="Diminuir">−</button><span>${item.quantidade}</span><button type="button" data-action="pdv-plus" data-id="${item.variacao_id}" aria-label="Aumentar">＋</button></div><strong>${money(item.preco * item.quantidade)}</strong><button type="button" class="pdv-remove" data-action="pdv-remove" data-id="${item.variacao_id}" aria-label="Remover">×</button></div>`).join("")
       : `<div class="empty-state pdv-empty">Adicione produtos para iniciar a venda.</div>`;
     return `${lines}<div class="pdv-totals"><span>Subtotal <strong>${money(totals.subtotal)}</strong></span><span>Desconto <strong>${money(totals.discount)}</strong></span><span class="pdv-total">Total <strong>${money(totals.total)}</strong></span></div>`;
   }
@@ -229,8 +232,32 @@
     }
     const productCards = state.pdvProducts.flatMap((product) => (product.variacoes || [])
       .filter((variation) => variation.ativo !== false && Number(variation.quantidade_estoque) > 0)
-      .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""}`.toLowerCase())}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span><small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
+      .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""} ${variation.codigo_ref || ""}`.toLowerCase())}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span>${variation.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(variation.codigo_ref)}</small>` : ""}<small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
     view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field"><label>Pagamento</label><select name="forma_pagamento" required><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
+    const machineSelect = view.querySelector('[name="maquininha_id"]');
+    if (machineSelect) {
+      machineSelect.closest(".field").querySelector("label").textContent = "Maquininha / Point (opcional para Pix)";
+      [...machineSelect.options].slice(1).forEach((option) => {
+        const machine = state.machines.find((item) => Number(item.id) === Number(option.value));
+        option.textContent = `${machine?.nome || option.textContent} · ${machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo ? "Point integrado" : "Manual"}`;
+      });
+      const actions = view.querySelector(".pdv-actions");
+      actions?.insertAdjacentHTML("beforebegin", `<div id="pdvPointStatus" class="point-payment-box">${pdvPointStatusHtml()}</div>`);
+    }
+  }
+
+  function pdvPointStatusHtml() {
+    const order = state.pdvPointOrder;
+    if (!order) return `<p>Ao escolher um Point integrado, envie a cobrança antes de finalizar. O PDV manual continua disponível.</p><button type="button" class="btn secondary small" data-action="pdv-point-send">Enviar cobrança ao Point</button>`;
+    const approved = order.status === "approved";
+    return `<div><strong>Cobrança Point: ${escapeHtml(order.status || "pendente")}</strong><small>${money(order.valor)} · ${escapeHtml(order.order_id || "criando")}</small></div>${approved ? `<span class="badge">Aprovada</span>` : `<button type="button" class="btn secondary small" data-action="pdv-point-sync">Consultar status</button>`}`;
+  }
+
+  function invalidatePdvPoint() {
+    if (!state.pdvPointOrder) return;
+    state.pdvPointOrder = null;
+    const box = document.getElementById("pdvPointStatus");
+    if (box) box.innerHTML = pdvPointStatusHtml();
   }
 
   function findPdvVariation(variationId) {
@@ -245,9 +272,10 @@
     const found = findPdvVariation(variationId);
     if (!found) return;
     const current = state.pdvCart.find((item) => item.variacao_id === variationId);
-    if (!current && change > 0) state.pdvCart.push({ produto_id: found.product.id, variacao_id: variationId, produto: found.product.nome, tamanho: found.variation.tamanho, cor: found.variation.cor, preco: pdvUnitPrice(found.product, found.variation), quantidade: 1, estoque: Number(found.variation.quantidade_estoque) });
+    if (!current && change > 0) state.pdvCart.push({ produto_id: found.product.id, variacao_id: variationId, produto: found.product.nome, tamanho: found.variation.tamanho, cor: found.variation.cor, codigo_ref: found.variation.codigo_ref || null, codigo_barras: found.variation.codigo_barras || null, preco: pdvUnitPrice(found.product, found.variation), quantidade: 1, estoque: Number(found.variation.quantidade_estoque) });
     else if (current) current.quantidade = Math.max(0, Math.min(current.estoque, current.quantidade + change));
     state.pdvCart = state.pdvCart.filter((item) => item.quantidade > 0);
+    invalidatePdvPoint();
     updatePdvCart();
   }
 
@@ -308,6 +336,7 @@
         <div class="field"><label>Cor</label><input name="cor" required value="${escapeHtml(variation?.cor || "")}"></div>
         <div class="field"><label>SKU (opcional)</label><input name="sku" value="${escapeHtml(variation?.sku || "")}"></div>
         <div class="field"><label>Código de barras</label><input name="codigo_barras" value="${escapeHtml(variation?.codigo_barras || "")}"></div>
+        <div class="field"><label>REF / Código de referência</label><input name="codigo_ref" maxlength="80" value="${escapeHtml(variation?.codigo_ref || "")}" placeholder="Ex.: 702234"><small>Código interno usado para localizar e separar a peça.</small></div>
         <div class="field"><label>Preço específico (R$)</label><input name="preco_venda" type="number" min="0" step="0.01" value="${escapeHtml(valueOrEmpty(variation?.preco_venda))}"></div>
         <div class="field"><label>Preço promocional (R$)</label><input name="preco_promocional" type="number" min="0" step="0.01" value="${escapeHtml(valueOrEmpty(variation?.preco_promocional))}"></div>
         <div class="field"><label>Quantidade em estoque</label><input name="quantidade_estoque" type="number" min="0" step="1" required value="${escapeHtml(valueOrEmpty(variation?.quantidade_estoque ?? 0))}"></div>
@@ -331,7 +360,7 @@
         <div class="field-grid"><div><strong>${escapeHtml(product.nome)}</strong><p class="muted">${escapeHtml(product.categoria)} · ${money(product.preco_promocional || product.preco)}</p></div><div><strong>${Number(product.estoque_total || 0)} unidade(s)</strong><p class="muted">Estoque total de todas as variações</p></div><div class="field full help">${escapeHtml(product.descricao || "Sem descrição cadastrada.")}</div></div>
       </section>
       <section class="section"><div class="section-heading"><h2>Variações e estoque</h2><button class="btn small" data-action="new-variation">＋ Adicionar variação</button></div>
-        ${variations.length ? `<div class="table-wrap"><table><thead><tr><th>Tamanho</th><th>Cor</th><th>SKU</th><th>Estoque</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${variations.map((item) => `<tr><td>${escapeHtml(item.tamanho)}</td><td>${escapeHtml(item.cor)}</td><td>${escapeHtml(item.sku || "—")}</td><td>${Number(item.quantidade_estoque || 0)}</td><td>${item.preco_venda == null ? "Preço do produto" : money(item.preco_venda)}</td><td><div class="actions"><button class="btn secondary small" data-action="edit-variation" data-id="${item.id}">Editar</button><button class="btn secondary small" data-action="delete-variation" data-id="${item.id}">Remover</button></div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma variação cadastrada.")}
+        ${variations.length ? `<div class="table-wrap"><table><thead><tr><th>Tamanho</th><th>Cor</th><th>SKU / REF</th><th>Estoque</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${variations.map((item) => `<tr><td>${escapeHtml(item.tamanho)}</td><td>${escapeHtml(item.cor)}</td><td>${escapeHtml(item.sku || "—")}${item.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</small>` : ""}</td><td>${Number(item.quantidade_estoque || 0)}</td><td>${item.preco_venda == null ? "Preço do produto" : money(item.preco_venda)}</td><td><div class="actions"><button class="btn secondary small" data-action="edit-variation" data-id="${item.id}">Editar</button><button class="btn secondary small" data-action="delete-variation" data-id="${item.id}">Remover</button></div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma variação cadastrada.")}
       </section>
       <section class="section"><div class="section-heading"><h2>Fotos e vídeos</h2><span class="muted">Até 12 arquivos por envio</span></div>
         <form class="upload-zone" data-form="upload"><input name="arquivos" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" multiple required><small>Imagens: JPG, PNG ou WEBP (até 10 MB). Vídeos: MP4, MOV ou WEBM. A primeira imagem vira a capa.</small><div class="form-actions"><button class="btn">Enviar arquivos</button></div></form>
@@ -394,10 +423,24 @@
     return `<form data-form="machine" data-id="${item?.id || ""}"><div class="field-grid"><div class="field"><label>Nome da maquininha</label><input name="nome" maxlength="120" required value="${escapeHtml(item?.nome || "")}" placeholder="Ex.: Maquininha Balcão 1"></div><div class="field"><label>Uso</label><select name="tipo"><option value="loja" ${selected(item?.tipo || "loja", "loja")}>Loja</option><option value="motoboy" ${selected(item?.tipo, "motoboy")}>Motoboy</option><option value="outro" ${selected(item?.tipo, "outro")}>Outro</option></select></div><div class="field"><label>Provedor de pagamento</label><select name="provedor_pagamento"><option value="manual" ${selected(item?.provedor_pagamento || "manual", "manual")}>Manual / não integrada</option><option value="mercado_pago" ${selected(item?.provedor_pagamento, "mercado_pago")}>Mercado Pago</option></select></div><div class="field"><label>Código externo</label><input name="codigo_externo" maxlength="120" value="${escapeHtml(item?.codigo_externo || "")}" placeholder="Código no provedor"></div><div class="field"><label>Mercado Pago POS ID</label><input name="mercado_pago_pos_id" maxlength="160" value="${escapeHtml(item?.mercado_pago_pos_id || "")}"></div><div class="field"><label>Mercado Pago Store ID</label><input name="mercado_pago_store_id" maxlength="160" value="${escapeHtml(item?.mercado_pago_store_id || "")}"></div><div class="field"><label>Código no PDV</label><input name="pdv_codigo" maxlength="100" value="${escapeHtml(item?.pdv_codigo || "")}" placeholder="Ex.: BALCAO-01"></div><div class="field"><label>Tipo de terminal</label><input name="terminal_tipo" maxlength="100" value="${escapeHtml(item?.terminal_tipo || "")}" placeholder="Ex.: Point Smart"></div><div class="field"><label>Ordem de exibição</label><input name="ordem_exibicao" type="number" step="1" value="${Number(item?.ordem_exibicao || 0)}"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required placeholder="Obrigatório para salvar"></div><div class="field full"><label>Observações</label><textarea name="observacoes" maxlength="1000">${escapeHtml(item?.observacoes || "")}</textarea></div><div class="field full"><label class="checkbox"><input name="mercado_pago_integrada" type="checkbox" ${item?.mercado_pago_integrada ? "checked" : ""}> Integração Mercado Pago habilitada</label></div><div class="field full"><label class="checkbox"><input name="ativo" type="checkbox" ${item?.ativo !== false ? "checked" : ""}> Maquininha ativa no PDV</label></div><div class="field full help">O PIN administrativo é validado pelo servidor e não fica salvo no navegador.</div></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn">${item ? "Salvar alterações" : "Cadastrar maquininha"}</button></div></form>`;
   }
 
+  function openMachineModal(item = null) {
+    openModal(item ? "Editar maquininha" : "Cadastrar maquininha", machineForm(item));
+    const grid = modalBody.querySelector('[data-form="machine"] .field-grid');
+    const pinField = grid?.querySelector('[name="admin_pin"]')?.closest(".field");
+    if (!grid || !pinField) return;
+    pinField.insertAdjacentHTML("beforebegin", `<div class="field"><label>Modo de operação</label><select name="mercado_pago_modo"><option value="manual" ${item?.mercado_pago_modo !== "point" ? "selected" : ""}>Manual (fallback)</option><option value="point" ${item?.mercado_pago_modo === "point" ? "selected" : ""}>Mercado Pago Point integrado</option></select></div><div class="field"><label>Terminal ID do Point</label><input name="mercado_pago_terminal_id" maxlength="180" value="${escapeHtml(item?.mercado_pago_terminal_id || "")}" placeholder="Identificador do dispositivo no Mercado Pago"></div><div class="field"><label>Serial do equipamento</label><input name="mercado_pago_serial" maxlength="180" value="${escapeHtml(item?.mercado_pago_serial || "")}"></div><div class="field"><label>Ambiente</label><select name="mercado_pago_ambiente"><option value="producao" ${item?.mercado_pago_ambiente !== "sandbox" ? "selected" : ""}>Produção</option><option value="sandbox" ${item?.mercado_pago_ambiente === "sandbox" ? "selected" : ""}>Sandbox</option></select></div><div class="field full"><label class="checkbox"><input name="mercado_pago_operacional" type="checkbox" ${item?.mercado_pago_operacional ? "checked" : ""}> Terminal conferido e operacional</label></div><div class="field full"><label class="checkbox"><input name="mercado_pago_ativo" type="checkbox" ${item?.mercado_pago_ativo ? "checked" : ""}> Permitir cobrança integrada no PDV</label></div>`);
+  }
+
   async function renderMachines() {
     loading("Carregando maquininhas...");
     state.machines = await request("/maquininhas");
     view.innerHTML = `<div class="page-actions"><div><strong>${state.machines.length} maquininha(s) cadastrada(s)</strong><p>Configure os terminais disponíveis no PDV e a integração com o Mercado Pago.</p></div><button class="btn" data-action="new-machine">＋ Nova maquininha</button></div>${state.machines.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Uso</th><th>Provedor</th><th>Código PDV</th><th>Terminal</th><th>Integração</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.machines.map((item) => `<tr><td><strong>${escapeHtml(item.nome)}</strong><div class="muted">${escapeHtml(item.codigo_externo || "Sem código externo")}</div></td><td>${escapeHtml(item.tipo || "loja")}</td><td>${escapeHtml(item.provedor_pagamento || "manual")}</td><td>${escapeHtml(item.pdv_codigo || "—")}</td><td>${escapeHtml(item.terminal_tipo || "—")}</td><td><span class="badge ${item.mercado_pago_integrada ? "" : "inactive"}">${item.mercado_pago_integrada ? "Mercado Pago" : "Manual"}</span></td><td><span class="badge ${item.ativo ? "" : "inactive"}">${item.ativo ? "Ativa" : "Inativa"}</span></td><td><div class="actions"><button class="btn secondary small" data-action="edit-machine" data-id="${item.id}">Editar</button>${item.ativo ? `<button class="btn secondary small" data-action="disable-machine" data-id="${item.id}">Desativar</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma maquininha cadastrada.")}`;
+    view.querySelectorAll("tbody tr").forEach((row, index) => {
+      const machine = state.machines[index], cells = row.querySelectorAll("td");
+      if (!machine || cells.length < 7) return;
+      cells[4].innerHTML = `${escapeHtml(machine.terminal_tipo || "—")}${machine.mercado_pago_terminal_id ? `<small class="product-ref">ID: ${escapeHtml(machine.mercado_pago_terminal_id)}</small>` : ""}`;
+      cells[5].innerHTML = `<span class="badge ${machine.mercado_pago_modo === "point" && machine.mercado_pago_ativo ? "" : "inactive"}">${machine.mercado_pago_modo === "point" && machine.mercado_pago_ativo ? "Point integrado" : "Manual"}</span>`;
+    });
   }
 
   function disableMachineForm(item) {
@@ -603,12 +646,47 @@
     await renderPdv();
   }
 
+  function selectedPdvMachine() {
+    const id = Number(document.querySelector('[data-form="pdv-sale"] [name="maquininha_id"]')?.value);
+    return state.machines.find((item) => Number(item.id) === id) || null;
+  }
+
+  async function sendPdvPointOrder() {
+    if (!state.pdvCart.length) throw new Error("Adicione produtos antes de enviar a cobrança.");
+    const form = document.querySelector('[data-form="pdv-sale"]'), data = formObject(form), machine = selectedPdvMachine(), totals = pdvTotals();
+    if (!machine || machine.mercado_pago_modo !== "point" || !machine.mercado_pago_ativo) throw new Error("Selecione uma maquininha Point integrada e ativa.");
+    if (!["pix", "debito", "credito"].includes(data.forma_pagamento)) throw new Error("O Point aceita Pix, débito ou crédito neste fluxo.");
+    state.pdvPointOrder = await request("/mercado-pago/point/pdv/criar-order", { method: "POST", body: JSON.stringify({ caixa_id: state.pdvCash.id, maquininha_id: machine.id, valor: totals.total, forma_pagamento: data.forma_pagamento }) });
+    document.getElementById("pdvPointStatus").innerHTML = pdvPointStatusHtml();
+    toast("Cobrança enviada ao Point. Aguarde o pagamento e consulte o status.");
+  }
+
+  async function syncPdvPointOrder() {
+    if (!state.pdvPointOrder?.order_id) throw new Error("Nenhuma cobrança Point para consultar.");
+    state.pdvPointOrder = await request(`/mercado-pago/point/orders/${encodeURIComponent(state.pdvPointOrder.order_id)}/sincronizar`, { method: "POST", body: "{}" });
+    document.getElementById("pdvPointStatus").innerHTML = pdvPointStatusHtml();
+    toast(state.pdvPointOrder.status === "approved" ? "Pagamento aprovado. A venda já pode ser finalizada." : `Status atual: ${state.pdvPointOrder.status}.`);
+  }
+
+  function printableWindow(title, html) {
+    const popup = window.open("", "_blank", "width=720,height=900");
+    if (!popup) throw new Error("Permita pop-ups para abrir a impressão.");
+    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font:14px Arial;color:#111;margin:24px}.print-doc{max-width:760px;margin:auto}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #bbb;text-align:left}.product-ref{display:block;font-weight:700;margin-top:3px}.totals{text-align:right;margin-top:18px}@media print{body{margin:0}.no-print{display:none}}</style></head><body><main class="print-doc">${html}</main><script>window.onload=()=>window.print()<\/script></body></html>`);
+    popup.document.close();
+  }
+
+  function saleReceiptHtml(sale) {
+    return `<h1>Gisele Flávia Modas</h1><p>Comprovante interno · Venda #${sale.id}<br>${date(sale.created_at)}${sale.caixa_id ? `<br>Caixa #${sale.caixa_id}` : ""}</p><table><tbody>${(sale.itens || []).map((item) => `<tr><td><strong>${escapeHtml(item.produto_nome)}</strong><small>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / "))}</small>${item.codigo_ref ? `<span class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</span>` : ""}${item.codigo_barras ? `<small>Código: ${escapeHtml(item.codigo_barras)}</small>` : ""}</td><td>${item.quantidade} × ${money(item.preco_unitario)}</td><td>${money(item.subtotal)}</td></tr>`).join("")}</tbody></table><div class="totals"><p>Subtotal: ${money(sale.subtotal)}</p><p>Desconto: ${money(sale.desconto)}</p><h2>Total: ${money(sale.total)}</h2></div><p>Comprovante não fiscal</p>`;
+  }
+
   async function submitPdvSale(form) {
     if (!state.pdvCart.length) throw new Error("Adicione ao menos um produto à venda.");
     const data = formObject(form);
     const totals = pdvTotals();
     if (totals.discount > totals.subtotal) throw new Error("O desconto não pode ser maior que o subtotal.");
     if (["debito", "credito"].includes(data.forma_pagamento) && !data.maquininha_id) throw new Error("Selecione a maquininha usada no pagamento.");
+    const machine = selectedPdvMachine();
+    if (machine?.mercado_pago_modo === "point" && machine?.mercado_pago_ativo && state.pdvPointOrder?.status !== "approved") throw new Error("Envie a cobrança ao Point e aguarde a aprovação antes de finalizar.");
     const payload = {
       cliente_id: data.cliente_id ? Number(data.cliente_id) : null,
       caixa_id: state.pdvCash.id,
@@ -618,12 +696,16 @@
       frete: 0,
       forma_pagamento: data.forma_pagamento,
       maquininha_id: data.maquininha_id ? Number(data.maquininha_id) : null,
+      mercado_pago_point_order_id: state.pdvPointOrder?.order_id || null,
       itens: state.pdvCart.map((item) => ({ produto_id: item.produto_id, variacao_id: item.variacao_id, quantidade: item.quantidade, preco_unitario: item.preco })),
     };
     const sale = await request("/vendas", { method: "POST", body: JSON.stringify(payload) });
     state.pdvCart = [];
+    state.pdvPointOrder = null;
+    state.lastSale = sale;
     toast(`Venda #${sale.id} finalizada — ${money(sale.total)}.`);
     await renderPdv();
+    openModal(`Venda #${sale.id} finalizada`, `<div class="sale-success"><span class="badge">Venda concluída</span><h2>${money(sale.total)}</h2><p>Os códigos REF e de barras foram preservados no histórico.</p><div class="form-actions"><button class="btn secondary" data-close-modal>Nova venda</button><button class="btn" data-action="print-sale-receipt">Imprimir comprovante interno</button></div></div>`);
   }
 
   function openPdvCloseCash() {
@@ -681,7 +763,7 @@
     const id = form.dataset.id;
     const pin = data.admin_pin;
     delete data.admin_pin;
-    const payload = { ...data, ordem_exibicao: Number(data.ordem_exibicao || 0), ativo: form.elements.ativo.checked, mercado_pago_integrada: form.elements.mercado_pago_integrada.checked };
+    const payload = { ...data, ordem_exibicao: Number(data.ordem_exibicao || 0), ativo: form.elements.ativo.checked, mercado_pago_integrada: form.elements.mercado_pago_integrada.checked, mercado_pago_operacional: form.elements.mercado_pago_operacional?.checked || false, mercado_pago_ativo: form.elements.mercado_pago_ativo?.checked || false };
     await request(`/maquininhas${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", headers: { "X-Admin-Pin": pin }, body: JSON.stringify(payload) });
     closeModal();
     toast(id ? "Maquininha atualizada." : "Maquininha cadastrada.");
@@ -718,6 +800,7 @@
       else if (action === "edit-category") await editCategory(id);
       else if (action === "delete-category") await deleteCategory(id);
       else if (action === "order-details") await orderDetails(id);
+      else if (action === "print-order") printableWindow(`Separação do pedido #${state.currentOrder?.id}`, orderSeparationHtml(state.currentOrder));
       else if (action === "pay-order") await payOrder(id);
       else if (action === "cancel-order") await cancelOrder(id);
       else if (action === "new-freight") openModal("Novo bairro de entrega", freightForm());
@@ -727,11 +810,14 @@
       else if (action === "delete-admin") await deleteAdmin(id);
       else if (action === "pdv-add" || action === "pdv-plus") changePdvItem(id, 1);
       else if (action === "pdv-minus") changePdvItem(id, -1);
-      else if (action === "pdv-remove") { state.pdvCart = state.pdvCart.filter((item) => item.variacao_id !== id); updatePdvCart(); }
-      else if (action === "pdv-clear") { state.pdvCart = []; updatePdvCart(); }
+      else if (action === "pdv-remove") { state.pdvCart = state.pdvCart.filter((item) => item.variacao_id !== id); invalidatePdvPoint(); updatePdvCart(); }
+      else if (action === "pdv-clear") { state.pdvCart = []; invalidatePdvPoint(); updatePdvCart(); }
+      else if (action === "pdv-point-send") await sendPdvPointOrder();
+      else if (action === "pdv-point-sync") await syncPdvPointOrder();
+      else if (action === "print-sale-receipt") printableWindow(`Venda #${state.lastSale?.id}`, saleReceiptHtml(state.lastSale));
       else if (action === "pdv-close-cash") openPdvCloseCash();
-      else if (action === "new-machine") openModal("Cadastrar maquininha", machineForm());
-      else if (action === "edit-machine") openModal("Editar maquininha", machineForm(state.machines.find((item) => item.id === id)));
+      else if (action === "new-machine") openMachineModal();
+      else if (action === "edit-machine") openMachineModal(state.machines.find((item) => item.id === id));
       else if (action === "disable-machine") openModal("Desativar maquininha", disableMachineForm(state.machines.find((item) => item.id === id)));
       else if (action === "cash-details") await showCashDetails(id);
       else if (action === "edit-cash") await openEditCash(id);
@@ -780,7 +866,13 @@
 
   async function orderDetails(id) {
     const item = await request(`/pedidos-site/${id}`);
-    openModal(`Pedido #${id}`, `<div class="field-grid"><div><strong>${escapeHtml(item.cliente || "Cliente")}</strong><p class="muted">${escapeHtml(item.email || item.telefone || item.whatsapp || "")}</p></div><div><strong>${money(item.total)}</strong><p class="muted">${escapeHtml(item.forma_pagamento || "")}</p></div></div><div style="height:16px"></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th></tr></thead><tbody>${(item.itens || []).map((line) => `<tr><td>${escapeHtml(line.produto_nome)}</td><td>${line.quantidade}</td><td>${money(line.subtotal || Number(line.preco_unitario) * Number(line.quantidade))}</td></tr>`).join("")}</tbody></table></div>${item.entrega ? `<div class="help" style="margin-top:16px"><strong>Entrega:</strong> ${escapeHtml([item.entrega.endereco,item.entrega.bairro,item.entrega.cidade,item.entrega.estado].filter(Boolean).join(", "))}<br>${escapeHtml(item.entrega.observacoes || "")}</div>` : ""}`);
+    state.currentOrder = item;
+    openModal(`Pedido #${id}`, `<div class="field-grid"><div><strong>${escapeHtml(item.cliente || "Cliente")}</strong><p class="muted">${escapeHtml(item.email || item.telefone || item.whatsapp || "")}</p></div><div><strong>${money(item.total)}</strong><p class="muted">${escapeHtml(item.forma_pagamento || "")}</p></div></div><div style="height:16px"></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th></tr></thead><tbody>${(item.itens || []).map((line) => `<tr><td><strong>${escapeHtml(line.produto_nome)}</strong>${line.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(line.codigo_ref)}</small>` : ""}${line.codigo_barras ? `<small>Código: ${escapeHtml(line.codigo_barras)}</small>` : ""}</td><td>${line.quantidade}</td><td>${money(line.subtotal || Number(line.preco_unitario) * Number(line.quantidade))}</td></tr>`).join("")}</tbody></table></div>${item.entrega ? `<div class="help" style="margin-top:16px"><strong>Entrega:</strong> ${escapeHtml([item.entrega.endereco,item.entrega.bairro,item.entrega.cidade,item.entrega.estado].filter(Boolean).join(", "))}<br>${escapeHtml(item.entrega.observacoes || "")}</div>` : ""}<div class="form-actions"><button class="btn secondary" data-close-modal>Fechar</button><button class="btn" data-action="print-order">Imprimir separação</button></div>`);
+  }
+
+  function orderSeparationHtml(order) {
+    if (!order) return "";
+    return `<h1>Separação do pedido #${order.id}</h1><p><strong>Cliente:</strong> ${escapeHtml(order.cliente || "Cliente")}</p><table><thead><tr><th>Produto</th><th>Variação</th><th>Qtd.</th></tr></thead><tbody>${(order.itens || []).map((item) => `<tr><td><strong>${escapeHtml(item.produto_nome)}</strong>${item.codigo_ref ? `<span class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</span>` : ""}${item.codigo_barras ? `<small>Código: ${escapeHtml(item.codigo_barras)}</small>` : ""}</td><td>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / ") || "—")}</td><td><strong>${item.quantidade}</strong></td></tr>`).join("")}</tbody></table>`;
   }
 
   async function payOrder(id) {
@@ -804,6 +896,7 @@
   }
 
   async function handleChange(event) {
+    if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="maquininha_id"]')) invalidatePdvPoint();
     const select = event.target.closest('[data-action="delivery-status"]');
     if (select) {
       try { const result = await request(`/pedidos-site/${select.dataset.id}/status-entrega`, { method: "POST", body: JSON.stringify({ status_entrega: select.value }) }); toast(result.message); }
@@ -826,7 +919,7 @@
     document.addEventListener("change", handleChange);
     document.addEventListener("input", (event) => {
       if (event.target.name === "faixa_superior") { const preview = document.getElementById("topbarPreview"); if (preview) preview.textContent = event.target.value; }
-      if (event.target.name === "pdv_desconto") updatePdvCart();
+      if (event.target.name === "pdv_desconto") { invalidatePdvPoint(); updatePdvCart(); }
       if (event.target.name === "pdv_busca") {
         const search = event.target.value.trim().toLowerCase();
         document.querySelectorAll(".pdv-product").forEach((item) => { item.hidden = search && !item.dataset.search.includes(search); });

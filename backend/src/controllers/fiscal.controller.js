@@ -23,7 +23,7 @@ async function salvarConfig(req,res) {
 }
 
 async function listarProdutos(req,res) {
-  try { const result=await pool.query(`SELECT p.id produto_id,p.nome produto,p.categoria,pv.id produto_variacao_id,pv.tamanho,pv.cor,pv.sku,pv.codigo_barras,pv.codigo_interno,
+  try { const result=await pool.query(`SELECT p.id produto_id,p.nome produto,p.categoria,pv.id produto_variacao_id,pv.tamanho,pv.cor,pv.sku,pv.codigo_barras,pv.codigo_interno,pv.codigo_ref,
       COALESCE(pfv.id,pfb.id) fiscal_id,COALESCE(pfv.ncm,pfb.ncm) ncm,COALESCE(pfv.cest,pfb.cest) cest,COALESCE(pfv.cfop,pfb.cfop) cfop,COALESCE(pfv.origem,pfb.origem) origem,
       COALESCE(pfv.unidade_comercial,pfb.unidade_comercial,'UN') unidade_comercial,COALESCE(pfv.csosn,pfb.csosn) csosn,COALESCE(pfv.cst_icms,pfb.cst_icms) cst_icms,
       COALESCE(pfv.cst_pis,pfb.cst_pis) cst_pis,COALESCE(pfv.cst_cofins,pfb.cst_cofins) cst_cofins,
@@ -60,6 +60,7 @@ async function prepararVenda(req,res){const vendaId=validId(req.params.venda_id)
   const active=await client.query("SELECT id FROM documentos_fiscais WHERE venda_id=$1 AND status<>'cancelado'",[vendaId]);if(active.rows[0])throw Object.assign(new Error("Esta venda já possui documento fiscal ativo."),{statusCode:409});
   const empresa=(await client.query("SELECT * FROM configuracoes_fiscais_empresa ORDER BY id LIMIT 1")).rows[0]||{};
   const itens=(await client.query(`SELECT iv.*,jsonb_build_object('ncm',pf.ncm,'cest',pf.cest,'cfop',pf.cfop,'origem',pf.origem,'unidade_comercial',pf.unidade_comercial,'csosn',pf.csosn,'cst_icms',pf.cst_icms,'cst_pis',pf.cst_pis,'cst_cofins',pf.cst_cofins,'aliquota_icms',pf.aliquota_icms,'aliquota_pis',pf.aliquota_pis,'aliquota_cofins',pf.aliquota_cofins) fiscal FROM itens_venda iv LEFT JOIN LATERAL (SELECT * FROM produto_fiscal WHERE produto_id=iv.produto_id AND ativo=TRUE AND (produto_variacao_id=iv.produto_variacao_id OR produto_variacao_id IS NULL) ORDER BY (produto_variacao_id IS NOT NULL) DESC LIMIT 1) pf ON TRUE WHERE iv.venda_id=$1 ORDER BY iv.id`,[vendaId])).rows;
+  // Preparação apenas: codigo_ref fica disponível no item histórico para futura composição das informações adicionais pelo provedor fiscal.
   const pagamentos=(await client.query("SELECT forma_pagamento,valor,status FROM pagamentos_venda WHERE venda_id=$1 ORDER BY id",[vendaId])).rows;
   const alertas=[];if(!empresa.cnpj||!empresa.inscricao_estadual)alertas.push("Informe CNPJ e inscrição estadual da empresa.");if(!empresa.regime_tributario||!empresa.crt)alertas.push("Informe regime tributário e CRT.");if(!empresa.endereco||!empresa.numero||!empresa.bairro||!empresa.cidade||!empresa.estado)alertas.push("Complete o endereço fiscal da empresa.");
   itens.forEach(item=>{const f=item.fiscal||{};if(!f.ncm)alertas.push(`${item.produto_nome}: NCM não informado.`);if(!f.cfop)alertas.push(`${item.produto_nome}: CFOP não informado.`);if(!f.csosn&&!f.cst_icms)alertas.push(`${item.produto_nome}: CSOSN/CST não informado.`);if(!f.unidade_comercial)alertas.push(`${item.produto_nome}: unidade comercial não informada.`);});
