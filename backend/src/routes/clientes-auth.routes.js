@@ -9,6 +9,7 @@ router.post("/redefinir-senha",controller.redefinirSenha);
 router.get("/me",authClienteMiddleware,controller.me);
 router.put("/me",authClienteMiddleware,controller.atualizarMe);
 router.get("/me/pedidos",authClienteMiddleware,controller.meusPedidos);
+router.post("/me/pedidos/:venda_id/cancelar",authClienteMiddleware,controller.cancelarMeuPedido);
 router.get("/me/pedidos/:venda_id/cupom",authClienteMiddleware,controller.cupomPedido);
 router.get("/me/compras-salvas",authClienteMiddleware,controller.comprasSalvas);
 router.put("/me/compras-salvas",authClienteMiddleware,controller.salvarCompras);

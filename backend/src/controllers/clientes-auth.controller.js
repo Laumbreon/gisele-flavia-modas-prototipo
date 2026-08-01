@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { pool, query } = require("../config/db");
 const { smtpConfigurado, enviarEmailRecuperacaoSenha } = require("../services/email.service");
 const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
+const { consultarPagamento, cancelarPagamentoPendente } = require("../services/mercado-pago.service");
 
 const emailValido = email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const texto = (valor, limite) => String(valor || "").trim().slice(0, limite);
@@ -67,6 +68,40 @@ async function atualizarMe(req,res){
 }
 
 async function meusPedidos(req,res){try{const result=await query(`SELECT v.id,v.created_at,v.total,v.status_pagamento,v.status_entrega,v.forma_pagamento,v.parcelas,v.tem_entrega,COALESCE(json_agg(json_build_object('produto',iv.produto_nome,'tamanho',iv.tamanho,'cor',iv.cor,'quantidade',iv.quantidade,'subtotal',iv.subtotal) ORDER BY iv.id) FILTER (WHERE iv.id IS NOT NULL),'[]'::json) itens FROM vendas v LEFT JOIN itens_venda iv ON iv.venda_id=v.id WHERE v.cliente_id=$1 AND v.canal_venda='site' GROUP BY v.id ORDER BY v.created_at DESC LIMIT 50`,[req.cliente.cliente_id]);res.json(result.rows);}catch(error){console.error("Erro ao listar pedidos do cliente:",error);res.status(500).json({message:"Não foi possível carregar seus pedidos."});}}
+
+async function cancelarMeuPedido(req,res){
+  const vendaId=Number(req.params.venda_id),clienteId=Number(req.cliente.cliente_id);
+  if(!Number.isInteger(vendaId)||vendaId<=0)return res.status(400).json({message:"Pedido inválido."});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const venda=(await client.query("SELECT * FROM vendas WHERE id=$1 AND cliente_id=$2 AND canal_venda='site' FOR UPDATE",[vendaId,clienteId])).rows[0];
+    if(!venda){await client.query("ROLLBACK");return res.status(404).json({message:"Pedido não encontrado na sua conta."});}
+    if(venda.status_pagamento==="pago"||Number(venda.total_pago||0)>0)throw Object.assign(new Error("A compra não pode ser cancelada depois que o pagamento foi efetivado."),{statusCode:409});
+    if(["cancelado","cancelada"].includes(String(venda.status_pagamento).toLowerCase())||["cancelado","cancelada"].includes(String(venda.status).toLowerCase()))throw Object.assign(new Error("Este pedido já foi cancelado."),{statusCode:409});
+    const mp=(await client.query("SELECT * FROM mercado_pago_pagamentos WHERE venda_id=$1 ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[vendaId])).rows[0];
+    if(mp?.payment_id){
+      const pagamento=await consultarPagamento(mp.payment_id);
+      if(String(pagamento.status).toLowerCase()==="approved")throw Object.assign(new Error("O pagamento já foi aprovado e a compra não pode mais ser cancelada."),{statusCode:409});
+      if(["pending","in_process","authorized"].includes(String(pagamento.status).toLowerCase()))await cancelarPagamentoPendente(mp.payment_id);
+    }
+    const itens=(await client.query("SELECT produto_id,produto_variacao_id,produto_nome,quantidade FROM itens_venda WHERE venda_id=$1",[vendaId])).rows;
+    for(const item of itens){
+      if(item.produto_variacao_id)await client.query("UPDATE estoque SET quantidade=quantidade+$1,updated_at=NOW() WHERE produto_variacao_id=$2",[item.quantidade,item.produto_variacao_id]);
+      await client.query("INSERT INTO movimentacoes_estoque (produto_id,produto_variacao_id,tipo,quantidade,motivo,responsavel,observacoes) VALUES ($1,$2,'entrada',$3,$4,$5,$6)",[item.produto_id,item.produto_variacao_id,item.quantidade,`Cancelamento pela cliente · pedido #${vendaId}`,"Cliente",item.produto_nome]);
+    }
+    await client.query("UPDATE vendas SET status='cancelada',status_pagamento='cancelado',status_entrega='cancelado',updated_at=NOW() WHERE id=$1",[vendaId]);
+    await client.query("UPDATE pagamentos_venda SET status='cancelado' WHERE venda_id=$1",[vendaId]);
+    await client.query("UPDATE venda_entregas SET status_entrega='cancelado',updated_at=NOW() WHERE venda_id=$1",[vendaId]);
+    await client.query("UPDATE mercado_pago_pagamentos SET status='cancelled',payment_status='cancelled',resultado_processamento='cancelado_pela_cliente',updated_at=NOW() WHERE venda_id=$1",[vendaId]);
+    await client.query("COMMIT");
+    res.json({ok:true,message:"Compra cancelada e estoque devolvido.",pedido_id:vendaId});
+  }catch(error){
+    await client.query("ROLLBACK");
+    console.error("Erro ao cancelar pedido pela cliente:",error.message);
+    res.status(error.statusCode||500).json({message:error.statusCode?error.message:"Não foi possível cancelar a compra agora."});
+  }finally{client.release();}
+}
 
 async function cupomPedido(req,res){
   const vendaId=Number(req.params.venda_id);if(!Number.isInteger(vendaId)||vendaId<=0)return res.status(400).json({message:"Pedido inválido."});
@@ -160,4 +195,4 @@ async function redefinirSenha(req,res){
   }catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.statusCode?error.message:"Não foi possível redefinir a senha agora."});}finally{client.release();}
 }
 
-module.exports={cadastro,login,me,atualizarMe,meusPedidos,cupomPedido,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};
+module.exports={cadastro,login,me,atualizarMe,meusPedidos,cancelarMeuPedido,cupomPedido,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};

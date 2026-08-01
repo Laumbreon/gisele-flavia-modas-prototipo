@@ -42,6 +42,21 @@ function getJson(url, headers) {
   });
 }
 
+async function cancelarPagamentoPendente(paymentId) {
+  const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
+  if (!token) throw Object.assign(new Error("Token Mercado Pago não configurado."), { statusCode: 503 });
+  const id = String(paymentId || "").trim();
+  if (!id) return null;
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "cancelled" }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok && response.status !== 409) throw Object.assign(new Error(data.message || "Não foi possível cancelar a cobrança Mercado Pago."), { statusCode: 502, mercadoPago: data });
+  return data;
+}
+
 async function consultarPagamento(paymentId) {
   const token = String(process.env.MERCADO_PAGO_ACCESS_TOKEN || "").trim();
   if (!token) throw Object.assign(new Error("Token Mercado Pago não configurado."), { statusCode: 503, code: "MP_TOKEN_NAO_CONFIGURADO" });
@@ -164,4 +179,4 @@ async function criarPreferenciaPagamentoVenda(vendaCompleta) {
   return { preference_id: response.data.id, init_point: response.data.init_point, sandbox_init_point: response.data.sandbox_init_point, payload, resposta: response.data };
 }
 
-module.exports = { criarPreferenciaPagamentoVenda, criarPagamentoPixVenda, consultarPagamento, consultarPagamentoMercadoPago: consultarPagamento, buscarPagamentoPorReferencia };
+module.exports = { criarPreferenciaPagamentoVenda, criarPagamentoPixVenda, consultarPagamento, consultarPagamentoMercadoPago: consultarPagamento, buscarPagamentoPorReferencia, cancelarPagamentoPendente };
