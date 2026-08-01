@@ -1,0 +1,36 @@
+.store-policy-notice { padding: 48px 24px; background: linear-gradient(180deg, #fafafa 0%, #fff3f9 100%); font-family: var(--font-body); }
+.store-policy-card { width: min(1180px, 100%); margin: 0 auto; padding: 28px; border: 1px solid rgba(254, 1, 130, .24); border-left: 5px solid #fe0182; border-radius: 18px; background: #fff; box-shadow: 0 14px 38px rgba(173, 2, 87, .09); }
+.store-policy-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.store-policy-icon { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; color: #fff; background: linear-gradient(135deg, #fe0182, #ad0257); font-size: 25px; font-weight: 700; box-shadow: 0 7px 18px rgba(254, 1, 130, .25); }
+.store-policy-kicker { display: block; margin-bottom: 2px; color: #ad0257; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.store-policy-heading h2 { margin: 0; color: #111; font-family: var(--font-display); font-size: 28px; font-weight: 600; line-height: 1.15; }
+.store-policy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.store-policy-grid article { padding: 19px 20px; border-radius: 13px; background: #fff7fb; color: #4b3b44; }
+.store-policy-grid article strong { display: block; margin-bottom: 9px; color: #ad0257; font-size: 15px; }
+.store-policy-grid p { margin: 7px 0; font-size: 13px; line-height: 1.65; }
+.store-policy-grid b { color: #111; font-weight: 700; }
+.home-informative-image { padding: 30px 24px; background: #fafafa; }
+.home-informative-image > div { width: min(860px, 100%); margin: 0 auto; overflow: hidden; border-radius: 16px; box-shadow: 0 12px 34px rgba(17, 17, 17, .1); }
+.home-informative-image img { display: block; width: 100%; height: auto; }
+.customer-receipt-button { margin-top: 14px; padding: 9px 18px; border: 1px solid #fe0182; color: #ad0257; background: #fff; font-size: 13px; font-weight: 700; }
+.customer-receipt-modal { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 18px; }
+.customer-receipt-backdrop { position: absolute; inset: 0; background: rgba(17,17,17,.72); }
+.customer-receipt-card { position: relative; width: min(430px,100%); max-height: 92vh; overflow: auto; padding: 24px; border-radius: 16px; background: #fff; color: #222; box-shadow: 0 25px 70px rgba(0,0,0,.25); font: 13px var(--font-body); }
+.customer-receipt-close { position: absolute; top: 10px; right: 12px; border: 0; background: none; font-size: 28px; }
+.customer-receipt-card header { padding-bottom: 14px; border-bottom: 1px dashed #bbb; text-align: center; }
+.customer-receipt-card header img { width: 74px; height: 74px; margin: 0 auto 7px; border-radius: 50%; object-fit: cover; }
+.customer-receipt-card header h2 { margin: 0; font-size: 20px; }.customer-receipt-card header small,.customer-receipt-items small{color:#777}
+.customer-receipt-delivery { display: grid; gap: 5px; margin: 12px 0; padding: 12px; background: #fff3f9; }
+.customer-receipt-items { border-top: 1px dashed #bbb; }.customer-receipt-items>div{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px dotted #ccc}.customer-receipt-items span:last-child{text-align:right}.customer-receipt-items b,.customer-receipt-items small{display:block}
+.customer-receipt-totals { display: grid; gap: 6px; padding: 13px 0; }.customer-receipt-totals span,.customer-receipt-totals>strong{display:flex;justify-content:space-between}.customer-receipt-totals>strong{color:#ad0257;font-size:17px}
+.customer-receipt-card footer { padding: 13px 0; border-top: 1px dashed #bbb; text-align: center; line-height: 1.6; }.customer-receipt-print{width:100%;padding:11px;border:0;color:#fff;background:#fe0182;font-weight:700}
+@media print{body>*{display:none!important}.customer-receipt-modal,.customer-receipt-card{display:block!important;position:static;box-shadow:none;max-height:none}.customer-receipt-backdrop,.customer-receipt-close,.customer-receipt-print{display:none!important}}
+
+@media (max-width: 700px) {
+  .store-policy-notice { padding: 32px 16px; }
+  .store-policy-card { padding: 21px 17px; }
+  .store-policy-grid { grid-template-columns: 1fr; }
+  .store-policy-heading h2 { font-size: 24px; }
+  .home-informative-image { padding: 20px 14px; }
+  .home-informative-image > div { border-radius: 11px; }
+}

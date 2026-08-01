@@ -33,6 +33,12 @@ const port = process.env.PORT || 3001;
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
+app.use("/api", (_req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  next();
+});
 app.use("/uploads", express.static(path.join(__dirname, "uploads"), { fallthrough: false, index: false }));
 
 app.use("/api/auth", authRoutes);

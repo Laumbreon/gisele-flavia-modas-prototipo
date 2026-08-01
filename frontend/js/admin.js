@@ -37,6 +37,7 @@
     pdvPointOrder: null,
     lastSale: null,
     currentOrder: null,
+    lastPdvReceipt: null,
   };
 
   const view = document.getElementById("view");
@@ -62,11 +63,16 @@
 
   async function request(path, options = {}) {
     const headers = new Headers(options.headers || {});
+    const method = String(options.method || "GET").toUpperCase();
     if (state.session?.token) headers.set("Authorization", `Bearer ${state.session.token}`);
+    if (method === "GET") {
+      headers.set("Cache-Control", "no-cache");
+      headers.set("Pragma", "no-cache");
+    }
     if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    const response = await fetch(`${API}${path}`, { ...options, headers });
+    const response = await fetch(`${API}${path}`, { ...options, method, headers, cache: "no-store" });
     let payload = null;
     try { payload = await response.json(); } catch { payload = {}; }
     if (response.status === 401 || response.status === 403 && /token|autent/i.test(payload?.message || "")) {
@@ -272,7 +278,7 @@
     const found = findPdvVariation(variationId);
     if (!found) return;
     const current = state.pdvCart.find((item) => item.variacao_id === variationId);
-    if (!current && change > 0) state.pdvCart.push({ produto_id: found.product.id, variacao_id: variationId, produto: found.product.nome, tamanho: found.variation.tamanho, cor: found.variation.cor, codigo_ref: found.variation.codigo_ref || null, codigo_barras: found.variation.codigo_barras || null, preco: pdvUnitPrice(found.product, found.variation), quantidade: 1, estoque: Number(found.variation.quantidade_estoque) });
+    if (!current && change > 0) state.pdvCart.push({ produto_id: found.product.id, variacao_id: variationId, produto: found.product.nome, tamanho: found.variation.tamanho, cor: found.variation.cor, codigo_ref: found.variation.codigo_ref || null, sku: found.variation.sku, codigo_interno: found.variation.codigo_interno, codigo_barras: found.variation.codigo_barras || null, preco: pdvUnitPrice(found.product, found.variation), quantidade: 1, estoque: Number(found.variation.quantidade_estoque) });
     else if (current) current.quantidade = Math.max(0, Math.min(current.estoque, current.quantidade + change));
     state.pdvCart = state.pdvCart.filter((item) => item.quantidade > 0);
     invalidatePdvPoint();
@@ -304,7 +310,7 @@
           <td><div class="product-cell">${productImage(product)}<div><strong>${escapeHtml(product.nome)}</strong><div class="muted">${(product.variacoes || []).length} variação(ões) · ${(product.midias || []).length} mídia(s)</div></div></div></td>
           <td>${escapeHtml(product.categoria)}</td><td>${money(product.preco_promocional || product.preco)}</td><td>${Number(product.estoque_total || 0)}</td>
           <td><span class="badge ${product.ativo ? "" : "inactive"}">${product.ativo ? "Ativo" : "Arquivado"}</span></td>
-          <td><div class="actions"><button class="btn small" data-action="edit-product" data-id="${product.id}">Gerenciar</button>${product.ativo ? `<button class="btn secondary small" data-action="archive-product" data-id="${product.id}">Arquivar</button>` : `<button class="btn secondary small" data-action="restore-product" data-id="${product.id}">Restaurar</button>`}<button class="btn secondary small" data-action="delete-product" data-id="${product.id}">Excluir</button></div></td>
+          <td><div class="actions"><button class="btn small" data-action="edit-product" data-id="${product.id}">Gerenciar</button>${product.ativo ? `<button class="btn secondary small" data-action="archive-product" data-id="${product.id}">Arquivar</button>` : `<button class="btn secondary small" data-action="restore-product" data-id="${product.id}">Restaurar</button>`}<button class="btn danger small" data-action="delete-product-permanent" data-id="${product.id}">Excluir definitivamente</button></div></td>
         </tr>`).join("")}
       </tbody></table></div>` : empty("Nenhum produto cadastrado. Use “Novo produto” para começar.")}`;
   }
@@ -335,6 +341,7 @@
         <div class="field"><label>Tamanho</label><input name="tamanho" required value="${escapeHtml(variation?.tamanho || "")}"></div>
         <div class="field"><label>Cor</label><input name="cor" required value="${escapeHtml(variation?.cor || "")}"></div>
         <div class="field"><label>SKU (opcional)</label><input name="sku" value="${escapeHtml(variation?.sku || "")}"></div>
+        <div class="field"><label>Código de referência / lote</label><input name="codigo_interno" value="${escapeHtml(variation?.codigo_interno || "")}" placeholder="Ex.: LOTE-2026-01"></div>
         <div class="field"><label>Código de barras</label><input name="codigo_barras" value="${escapeHtml(variation?.codigo_barras || "")}"></div>
         <div class="field"><label>REF / Código de referência</label><input name="codigo_ref" maxlength="80" value="${escapeHtml(variation?.codigo_ref || "")}" placeholder="Ex.: 702234"><small>Código interno usado para localizar e separar a peça.</small></div>
         <div class="field"><label>Preço específico (R$)</label><input name="preco_venda" type="number" min="0" step="0.01" value="${escapeHtml(valueOrEmpty(variation?.preco_venda))}"></div>
@@ -500,6 +507,7 @@
     loading("Carregando dados do site...");
     state.settings = await request("/configuracoes-site");
     const s = state.settings;
+    const carouselImages = Array.isArray(s.carrossel_imagens) ? s.carrossel_imagens : [];
     view.innerHTML = `<section class="section"><div class="section-heading"><h2>Conteúdo da loja</h2><a class="btn secondary small" href="/" target="_blank" rel="noreferrer">Abrir site</a></div>
       <form data-form="settings"><div class="field-grid">
         <div class="field full"><label>Mensagem da faixa superior</label><input name="faixa_superior" maxlength="180" required value="${escapeHtml(s.faixa_superior)}"><div id="topbarPreview" class="settings-preview">${escapeHtml(s.faixa_superior)}</div></div>
@@ -508,8 +516,40 @@
         <div class="field"><label>Instagram</label><input name="instagram_usuario" required value="@${escapeHtml(s.instagram_usuario)}"></div>
         <div class="field"><label>Frete grátis acima de (R$)</label><input name="frete_gratis_minimo" type="number" min="0" step="0.01" required value="${escapeHtml(s.frete_gratis_minimo)}"></div>
         <div class="field"><label>Parcelas sem juros</label><input name="parcelas_sem_juros" type="number" min="1" max="24" step="1" required value="${escapeHtml(s.parcelas_sem_juros)}"></div>
-        <div class="field full help">Depois de salvar, os textos e o Instagram são atualizados na página pública. Produtos, fotos e vídeos são administrados na área “Produtos e uploads”.</div>
+        <div class="field full"><h3>Seção de categorias</h3></div>
+        <div class="field"><label>Título</label><input name="categorias_titulo" maxlength="100" required value="${escapeHtml(s.categorias_titulo)}"></div>
+        <div class="field"><label>Subtítulo</label><input name="categorias_subtitulo" maxlength="180" required value="${escapeHtml(s.categorias_subtitulo)}"></div>
+        <div class="field full"><h3>Seção de mais vendidos</h3></div>
+        <div class="field"><label>Chamada</label><input name="vendidos_selo" maxlength="60" required value="${escapeHtml(s.vendidos_selo)}"></div>
+        <div class="field"><label>Título</label><input name="vendidos_titulo" maxlength="100" required value="${escapeHtml(s.vendidos_titulo)}"></div>
+        <div class="field full"><h3>Banner de campanha</h3></div>
+        <div class="field"><label>Chamada</label><input name="campanha_selo" maxlength="60" required value="${escapeHtml(s.campanha_selo)}"></div>
+        <div class="field"><label>Título</label><input name="campanha_titulo" maxlength="120" required value="${escapeHtml(s.campanha_titulo)}"></div>
+        <div class="field full"><label>Descrição</label><input name="campanha_texto" maxlength="220" required value="${escapeHtml(s.campanha_texto)}"></div>
+        <div class="field full"><h3>Novidades e looks</h3></div>
+        <div class="field"><label>Chamada de novidades</label><input name="novidades_selo" maxlength="60" required value="${escapeHtml(s.novidades_selo)}"></div>
+        <div class="field"><label>Título de novidades</label><input name="novidades_titulo" maxlength="100" required value="${escapeHtml(s.novidades_titulo)}"></div>
+        <div class="field"><label>Chamada de looks</label><input name="looks_selo" maxlength="60" required value="${escapeHtml(s.looks_selo)}"></div>
+        <div class="field"><label>Título de looks</label><input name="looks_titulo" maxlength="100" required value="${escapeHtml(s.looks_titulo)}"></div>
+        <div class="field full"><label>Título dos depoimentos</label><input name="depoimentos_titulo" maxlength="120" required value="${escapeHtml(s.depoimentos_titulo)}"></div>
+        <div class="field full"><h3>Seção do Instagram</h3></div>
+        <div class="field"><label>Chamada</label><input name="instagram_selo" maxlength="60" required value="${escapeHtml(s.instagram_selo)}"></div>
+        <div class="field"><label>Título</label><input name="instagram_titulo" maxlength="140" required value="${escapeHtml(s.instagram_titulo)}"></div>
+        <div class="field full"><label>Descrição</label><input name="instagram_texto" maxlength="220" required value="${escapeHtml(s.instagram_texto)}"></div>
+        <div class="field full help">As fotos de categorias e looks são obtidas dos produtos e podem ser alteradas em “Produtos e uploads”.</div>
       </div><div class="form-actions"><button class="btn">Salvar dados do site</button></div></form>
+      <div class="carousel-settings"><h3>Imagens do carrossel</h3><p class="help">Envie de 1 a 3 imagens. O novo conjunto substituirá as imagens atuais. Para melhor resultado, use imagens horizontais com pelo menos 1400 × 900 px.</p>
+        <div class="carousel-previews">${carouselImages.map((url, index) => `<figure><img src="${escapeHtml(url)}" alt="Imagem ${index + 1} do carrossel"><figcaption><span>Imagem ${index + 1}</span><button type="button" class="btn danger small" data-action="delete-carousel-image" data-id="${index}" ${carouselImages.length <= 1 ? "disabled title=\"O carrossel precisa manter uma imagem\"" : ""}>Excluir</button></figcaption></figure>`).join("")}</div>
+        <form data-form="carousel-upload" class="upload-zone"><label>Selecionar novas imagens</label><input name="imagens" type="file" accept="image/jpeg,image/png,image/webp" multiple required><small>JPG, PNG ou WEBP · máximo de 10 MB por imagem.</small><div class="form-actions"><button class="btn" type="submit">Atualizar carrossel</button></div></form>
+      </div>
+      <div class="carousel-settings"><h3>Imagem do banner de campanha</h3><p class="help">Esta imagem aparece na seção “Nova Coleção”, depois de Mais Vendidos.</p>
+        <div class="informative-preview"><img src="${escapeHtml(s.campanha_imagem)}" alt="Prévia do banner de campanha"></div>
+        <form data-form="campaign-upload" class="upload-zone"><label>Selecionar nova imagem</label><input name="imagem" type="file" accept="image/jpeg,image/png,image/webp" required><small>JPG, PNG ou WEBP · máximo de 10 MB.</small><div class="form-actions"><button class="btn" type="submit">Atualizar imagem da seção</button></div></form>
+      </div>
+      <div class="carousel-settings"><h3>Imagem informativa abaixo do carrossel</h3><p class="help">Anexe uma arte horizontal contendo informações da loja. Ela aparecerá logo abaixo do carrossel principal.</p>
+        ${s.imagem_informativa ? `<div class="informative-preview"><img src="${escapeHtml(s.imagem_informativa)}" alt="Prévia da imagem informativa"></div>` : `<div class="empty-state"><strong>Nenhuma imagem informativa anexada.</strong></div>`}
+        <form data-form="informative-upload" class="upload-zone"><label>Selecionar imagem informativa</label><input name="imagem" type="file" accept="image/jpeg,image/png,image/webp" required><small>JPG, PNG ou WEBP · máximo de 10 MB.</small><div class="form-actions"><button class="btn" type="submit">Anexar imagem</button></div></form>
+      </div>
     </section>`;
   }
 
@@ -549,6 +589,10 @@
       else if (kind === "category") await submitCategory(form);
       else if (kind === "freight") await submitFreight(form);
       else if (kind === "settings") await submitSettings(form);
+      else if (kind === "carousel-upload") await submitCarouselUpload(form);
+      else if (kind === "informative-upload") await submitInformativeUpload(form);
+      else if (kind === "delete-product-permanent") await submitDeleteProductPermanent(form);
+      else if (kind === "campaign-upload") await submitCampaignUpload(form);
       else if (kind === "edit-category") await submitEditCategory(form);
       else if (kind === "pay-order") await submitPayOrder(form);
       else if (kind === "admin") await submitAdmin(form);
@@ -578,8 +622,10 @@
     const data = formObject(form); const id = form.dataset.id;
     const payload = { ...data, preco_venda: data.preco_venda === "" ? null : Number(data.preco_venda), preco_promocional: data.preco_promocional === "" ? null : Number(data.preco_promocional), quantidade_estoque: Number(data.quantidade_estoque), estoque_minimo: Number(data.estoque_minimo), ativo: form.elements.ativo.checked };
     if (!id) payload.quantidade_inicial = payload.quantidade_estoque;
-    await request(`/produtos/${state.product.id}/variacoes${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
-    closeModal(); toast("Variação salva."); await renderProductEditor(state.product.id);
+    const saved = await request(`/produtos/${state.product.id}/variacoes${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
+    closeModal();
+    toast(`Variação salva. Estoque atual: ${Number(saved.quantidade_estoque ?? payload.quantidade_estoque)} unidade(s).`);
+    await renderProductEditor(state.product.id);
   }
 
   async function submitUpload(form) {
@@ -612,6 +658,28 @@
     data.instagram_usuario = data.instagram_usuario.replace(/^@/, "");
     const result = await request("/configuracoes-site", { method: "PUT", body: JSON.stringify(data) });
     state.settings = result.configuracoes; toast("Dados do site atualizados."); await renderSettings();
+  }
+
+  async function submitCarouselUpload(form) {
+    const files = form.elements.imagens.files;
+    if (!files.length || files.length > 3) throw new Error("Selecione de 1 a 3 imagens.");
+    const result = await request("/configuracoes-site/carrossel/upload", { method: "POST", body: new FormData(form) });
+    toast(result.message || "Imagens do carrossel atualizadas.");
+    await renderSettings();
+  }
+
+  async function submitInformativeUpload(form) {
+    if (!form.elements.imagem.files.length) throw new Error("Selecione uma imagem.");
+    const result = await request("/configuracoes-site/informativo/upload", { method: "POST", body: new FormData(form) });
+    toast(result.message || "Imagem informativa atualizada.");
+    await renderSettings();
+  }
+
+  async function submitCampaignUpload(form) {
+    if (!form.elements.imagem.files.length) throw new Error("Selecione uma imagem.");
+    const result = await request("/configuracoes-site/campanha/upload", { method: "POST", body: new FormData(form) });
+    toast(result.message || "Imagem da seção atualizada.");
+    await renderSettings();
   }
 
   async function submitEditCategory(form) {
@@ -676,7 +744,7 @@
   }
 
   function saleReceiptHtml(sale) {
-    return `<h1>Gisele Flávia Modas</h1><p>Comprovante interno · Venda #${sale.id}<br>${date(sale.created_at)}${sale.caixa_id ? `<br>Caixa #${sale.caixa_id}` : ""}</p><table><tbody>${(sale.itens || []).map((item) => `<tr><td><strong>${escapeHtml(item.produto_nome)}</strong><small>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / "))}</small>${item.codigo_ref ? `<span class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</span>` : ""}${item.codigo_barras ? `<small>Código: ${escapeHtml(item.codigo_barras)}</small>` : ""}</td><td>${item.quantidade} × ${money(item.preco_unitario)}</td><td>${money(item.subtotal)}</td></tr>`).join("")}</tbody></table><div class="totals"><p>Subtotal: ${money(sale.subtotal)}</p><p>Desconto: ${money(sale.desconto)}</p><h2>Total: ${money(sale.total)}</h2></div><p>Comprovante não fiscal</p>`;
+    return `<h1>Gisele Flávia Modas</h1><p>Comprovante de compra · Venda #${sale.id}<br>${date(sale.created_at)}${sale.caixa_id ? `<br>Caixa #${sale.caixa_id}` : ""}</p><table><tbody>${(sale.itens || []).map((item) => `<tr><td><strong>${escapeHtml(item.produto_nome)}</strong><small>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / "))}</small>${item.codigo_ref ? `<span class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</span>` : ""}${item.codigo_barras ? `<small>Código: ${escapeHtml(item.codigo_barras)}</small>` : ""}</td><td>${item.quantidade} × ${money(item.preco_unitario)}</td><td>${money(item.subtotal)}</td></tr>`).join("")}</tbody></table><div class="totals"><p>Subtotal: ${money(sale.subtotal)}</p><p>Desconto: ${money(sale.desconto)}</p><h2>Total: ${money(sale.total)}</h2></div><p>Documento comercial sem validade fiscal.</p>`;
   }
 
   async function submitPdvSale(form) {
@@ -699,13 +767,50 @@
       mercado_pago_point_order_id: state.pdvPointOrder?.order_id || null,
       itens: state.pdvCart.map((item) => ({ produto_id: item.produto_id, variacao_id: item.variacao_id, quantidade: item.quantidade, preco_unitario: item.preco })),
     };
+    const cartDetails = new Map(state.pdvCart.map((item) => [item.variacao_id, item]));
     const sale = await request("/vendas", { method: "POST", body: JSON.stringify(payload) });
+    const customer = state.customers.find((item) => item.id === Number(sale.cliente_id || data.cliente_id));
+    const receiptItems = (sale.itens || []).map((item) => ({ ...item, ...(cartDetails.get(Number(item.produto_variacao_id)) || {}) }));
+    state.lastPdvReceipt = { ...sale, itens: receiptItems, cliente: customer?.nome || "Consumidor não identificado" };
     state.pdvCart = [];
     state.pdvPointOrder = null;
     state.lastSale = sale;
     toast(`Venda #${sale.id} finalizada — ${money(sale.total)}.`);
     await renderPdv();
-    openModal(`Venda #${sale.id} finalizada`, `<div class="sale-success"><span class="badge">Venda concluída</span><h2>${money(sale.total)}</h2><p>Os códigos REF e de barras foram preservados no histórico.</p><div class="form-actions"><button class="btn secondary" data-close-modal>Nova venda</button><button class="btn" data-action="print-sale-receipt">Imprimir comprovante interno</button></div></div>`);
+    openPdvReceipt(state.lastPdvReceipt);
+  }
+
+  function paymentLabel(value) {
+    return ({ dinheiro: "Dinheiro", pix: "Pix", debito: "Cartão de débito", credito: "Cartão de crédito" })[value] || String(value || "—");
+  }
+
+  function pdvReceiptMarkup(sale) {
+    const items = sale.itens || [];
+    const payments = sale.pagamentos || [];
+    const paidByMethod = { dinheiro: 0, pix: 0, debito: 0, credito: 0 };
+    payments.forEach((payment) => { if (payment.forma_pagamento in paidByMethod) paidByMethod[payment.forma_pagamento] += Number(payment.valor || 0); });
+    if (!payments.length && sale.forma_pagamento in paidByMethod) paidByMethod[sale.forma_pagamento] = Number(sale.total_pago || sale.total || 0);
+    return `<article class="pdv-receipt">
+      <header><img class="receipt-logo" src="/assets/logo.jpeg" alt="Gisele Flávia Moda Feminina"><strong>Gisele Flávia</strong><span>Moda Feminina</span><h3>Comprovante de compra #${Number(sale.id)}</h3></header>
+      <div class="receipt-meta"><span>${date(sale.created_at)}</span><span>Caixa #${Number(sale.caixa_id || state.pdvCash?.id || 0)}</span></div>
+      <p class="receipt-customer"><b>Cliente:</b> ${escapeHtml(sale.cliente || "Consumidor não identificado")}</p>
+      <div class="receipt-lines">${items.map((item) => `<div class="receipt-item"><div><b>${escapeHtml(item.produto_nome || item.produto || "Produto")}</b><small>${escapeHtml([item.tamanho, item.cor].filter(Boolean).join(" · "))}</small><small class="receipt-codes">Ref./lote: ${escapeHtml(item.codigo_ref || item.codigo_interno || item.sku || "Não informado")}<br>Cód. barras: ${escapeHtml(item.codigo_barras || "Não informado")}</small></div><span>${Number(item.quantidade)} × ${money(item.preco_unitario ?? item.preco)}</span><strong>${money(item.subtotal ?? Number(item.quantidade) * Number(item.preco_unitario ?? item.preco))}</strong></div>`).join("")}</div>
+      <div class="receipt-totals"><div><span>Subtotal</span><b>${money(sale.subtotal)}</b></div><div><span>Desconto</span><b>− ${money(sale.desconto)}</b></div><div class="receipt-total"><span>Total da compra</span><b>${money(sale.total)}</b></div><div><span>Total pago pelo cliente</span><b>${money(sale.total_pago || sale.total)}</b></div>${Number(sale.troco || 0) > 0 ? `<div><span>Troco devolvido</span><b>${money(sale.troco)}</b></div>` : ""}</div>
+      <div class="receipt-payments"><b>Valores por meio de pagamento</b>${Object.entries(paidByMethod).map(([method, value]) => `<div><span>${escapeHtml(paymentLabel(method))}</span><strong>${money(value)}</strong></div>`).join("")}</div>
+      <footer><div class="receipt-business"><b>Código(s) Ref.</b><span>${escapeHtml([...new Set(items.map(item => item.codigo_ref || item.codigo_interno || item.sku).filter(Boolean))].join(", ") || "Não informado")}</span><b>CNPJ</b><span>11.293.505/0001-08</span><b>Endereço</b><span>Rua Amando de Barros, 993 — Centro</span><b>CEP</b><span>18.600-050</span></div><p>Obrigada pela preferência!</p><small>Documento comercial sem validade fiscal.</small></footer>
+    </article>`;
+  }
+
+  function openPdvReceipt(sale) {
+    openModal(`Venda #${sale.id} finalizada`, `${pdvReceiptMarkup(sale)}<div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Fechar</button><button type="button" class="btn" data-action="print-pdv-receipt">Imprimir comprovante</button></div>`);
+  }
+
+  function printPdvReceipt() {
+    if (!state.lastPdvReceipt) throw new Error("Nenhum comprovante disponível para impressão.");
+    const popup = window.open("", "_blank", "width=460,height=720");
+    if (!popup) throw new Error("O navegador bloqueou a impressão. Permita pop-ups e tente novamente.");
+    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Cupom venda #${state.lastPdvReceipt.id}</title><style>@page{size:80mm auto;margin:4mm}*{box-sizing:border-box}body{margin:0;color:#111;font-family:Arial,sans-serif}.pdv-receipt{width:72mm;margin:auto;font-size:10pt}.pdv-receipt header{text-align:center;border-bottom:1px dashed #555;padding-bottom:3mm}.receipt-logo{display:block;width:24mm;height:24mm;margin:0 auto 2mm;object-fit:contain;filter:grayscale(1) contrast(1.15)}.pdv-receipt header strong{display:block;font:700 18pt Georgia,serif}.pdv-receipt header span,.pdv-receipt header small{display:block}.pdv-receipt h3{margin:3mm 0 1mm}.receipt-meta,.receipt-item,.receipt-totals>div,.receipt-payments>div{display:flex;justify-content:space-between;gap:3mm}.receipt-meta,.receipt-customer{padding:2.5mm 0;border-bottom:1px dashed #777}.receipt-lines{padding:1mm 0}.receipt-item{align-items:end;padding:2mm 0;border-bottom:1px dotted #aaa}.receipt-item>div{flex:1}.receipt-item b,.receipt-item small{display:block}.receipt-codes{margin-top:1mm;font-size:7.5pt}.receipt-item>span{white-space:nowrap;font-size:8pt}.receipt-totals,.receipt-payments{padding:2.5mm 0;border-bottom:1px dashed #777}.receipt-totals>div,.receipt-payments>div{margin:1mm 0}.receipt-total{font-size:13pt}.pdv-receipt footer{text-align:center;padding-top:3mm}.receipt-business{display:grid;grid-template-columns:auto 1fr;gap:1mm 2mm;padding-bottom:3mm;border-bottom:1px dashed #777;text-align:left}.pdv-receipt footer p{font-weight:bold}.pdv-receipt footer small{font-size:7.5pt}@media print{body{width:72mm}}</style></head><body>${pdvReceiptMarkup(state.lastPdvReceipt)}<script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script></body></html>`);
+    popup.document.close();
   }
 
   function openPdvCloseCash() {
@@ -790,12 +895,13 @@
       else if (action === "edit-product-data") openModal("Editar dados do produto", productForm(state.product));
       else if (action === "archive-product") await updateProductStatus(id, "arquivar");
       else if (action === "restore-product") await updateProductStatus(id, "restaurar");
-      else if (action === "delete-product") await deleteProduct(id);
+      else if (action === "delete-product-permanent") openDeleteProductPermanent(id);
       else if (action === "new-variation") openModal("Adicionar variação", variationForm());
       else if (action === "edit-variation") openModal("Editar variação", variationForm(state.product.variacoes.find((item) => item.id === id)));
       else if (action === "delete-variation") await deleteVariation(id);
       else if (action === "main-media") await mainMedia(id);
       else if (action === "delete-media") await deleteMedia(id);
+      else if (action === "delete-carousel-image") await deleteCarouselImage(id);
       else if (action === "categories") categoriesModal();
       else if (action === "edit-category") await editCategory(id);
       else if (action === "delete-category") await deleteCategory(id);
@@ -826,6 +932,7 @@
         const result = await request("/produtos/gerar-codigos", { method: "POST", body: "{}" });
         toast(`${result.total_preenchido} código(s) gerado(s).`); await renderLabels();
       }
+      else if (action === "print-pdv-receipt") printPdvReceipt();
     } catch (error) { toast(error.message, true); }
   }
 
@@ -833,9 +940,16 @@
     const result = await request(`/produtos/${id}/${action}`, { method: "PATCH" }); toast(result.message); await renderProducts();
   }
 
-  async function deleteProduct(id) {
-    if (!confirm("Excluir este produto? Se houver histórico, ele será arquivado com segurança.")) return;
-    const result = await request(`/produtos/${id}`, { method: "DELETE" }); toast(result.message); await renderProducts();
+  function openDeleteProductPermanent(id) {
+    const product = state.products.find((item) => item.id === id);
+    if (!product) return;
+    openModal("Excluir produto definitivamente", `<form data-form="delete-product-permanent" data-id="${id}"><div class="help"><strong>Atenção:</strong> esta ação apaga definitivamente o produto, suas variações, estoque, fotos e vídeos. O histórico das vendas já realizadas será preservado.</div><div style="height:16px"></div><div class="field"><label>Produto</label><input value="${escapeHtml(product.nome)}" disabled></div><div style="height:12px"></div><div class="field"><label>PIN administrativo</label><input name="admin_pin" type="password" inputmode="numeric" autocomplete="off" required></div><div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn danger">Excluir definitivamente</button></div></form>`);
+  }
+
+  async function submitDeleteProductPermanent(form) {
+    if (!confirm("Esta exclusão é permanente e não poderá ser desfeita. Deseja continuar?")) return;
+    const result = await request(`/produtos/${form.dataset.id}/definitivo`, { method: "DELETE", headers: { "X-Admin-Pin": form.elements.admin_pin.value } });
+    closeModal(); toast(result.message); await renderProducts();
   }
 
   async function deleteVariation(id) {
@@ -852,6 +966,13 @@
   async function deleteMedia(id) {
     if (!confirm("Remover esta foto ou vídeo do produto?")) return;
     const result = await request(`/produtos/${state.product.id}/midias/${id}`, { method: "DELETE" }); toast(result.message); await renderProductEditor(state.product.id);
+  }
+
+  async function deleteCarouselImage(index) {
+    if (!confirm("Excluir esta imagem do carrossel?")) return;
+    const result = await request(`/configuracoes-site/carrossel/${index}`, { method: "DELETE" });
+    toast(result.message || "Imagem excluída do carrossel.");
+    await renderSettings();
   }
 
   async function editCategory(id) {

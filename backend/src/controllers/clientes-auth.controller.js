@@ -68,6 +68,17 @@ async function atualizarMe(req,res){
 
 async function meusPedidos(req,res){try{const result=await query(`SELECT v.id,v.created_at,v.total,v.status_pagamento,v.status_entrega,v.forma_pagamento,v.parcelas,v.tem_entrega,COALESCE(json_agg(json_build_object('produto',iv.produto_nome,'tamanho',iv.tamanho,'cor',iv.cor,'quantidade',iv.quantidade,'subtotal',iv.subtotal) ORDER BY iv.id) FILTER (WHERE iv.id IS NOT NULL),'[]'::json) itens FROM vendas v LEFT JOIN itens_venda iv ON iv.venda_id=v.id WHERE v.cliente_id=$1 AND v.canal_venda='site' GROUP BY v.id ORDER BY v.created_at DESC LIMIT 50`,[req.cliente.cliente_id]);res.json(result.rows);}catch(error){console.error("Erro ao listar pedidos do cliente:",error);res.status(500).json({message:"Não foi possível carregar seus pedidos."});}}
 
+async function cupomPedido(req,res){
+  const vendaId=Number(req.params.venda_id);if(!Number.isInteger(vendaId)||vendaId<=0)return res.status(400).json({message:"Pedido inválido."});
+  try{
+    const venda=(await query(`SELECT v.*,c.nome cliente_nome,c.telefone cliente_telefone,c.email cliente_email,ve.tipo_entrega,ve.valor_frete,ve.destinatario_nome,ve.destinatario_telefone,ve.estado,ve.cidade,ve.bairro,ve.endereco,ve.numero,ve.complemento,ve.referencia FROM vendas v JOIN clientes c ON c.id=v.cliente_id LEFT JOIN venda_entregas ve ON ve.venda_id=v.id WHERE v.id=$1 AND v.cliente_id=$2 AND v.canal_venda='site' LIMIT 1`,[vendaId,req.cliente.cliente_id])).rows[0];
+    if(!venda)return res.status(404).json({message:"Cupom não encontrado."});
+    const itens=(await query(`SELECT iv.produto_nome,iv.tamanho,iv.cor,iv.quantidade,iv.preco_unitario,iv.subtotal,pv.sku,pv.codigo_interno,pv.codigo_barras FROM itens_venda iv LEFT JOIN produto_variacoes pv ON pv.id=iv.produto_variacao_id WHERE iv.venda_id=$1 ORDER BY iv.id`,[vendaId])).rows;
+    const pagamentos=(await query("SELECT forma_pagamento,valor,status FROM pagamentos_venda WHERE venda_id=$1 ORDER BY id",[vendaId])).rows;
+    res.json({...venda,tipo_entrega:venda.tipo_entrega||(venda.tem_entrega?"entrega_local":"retirada"),itens,pagamentos});
+  }catch(error){console.error("Erro ao carregar cupom do cliente:",error);res.status(500).json({message:"Não foi possível carregar o cupom."});}
+}
+
 function listaCompraSegura(valor,limite){
   if(!Array.isArray(valor))return[];
   return valor.slice(0,limite);
@@ -148,4 +159,4 @@ async function redefinirSenha(req,res){
   }catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.statusCode?error.message:"Não foi possível redefinir a senha agora."});}finally{client.release();}
 }
 
-module.exports={cadastro,login,me,atualizarMe,meusPedidos,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};
+module.exports={cadastro,login,me,atualizarMe,meusPedidos,cupomPedido,comprasSalvas,salvarCompras,gerarLinkPagamento,esqueciSenha,redefinirSenha};

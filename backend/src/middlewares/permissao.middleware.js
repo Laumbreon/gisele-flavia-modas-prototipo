@@ -6,6 +6,10 @@ function permissaoMiddleware(permissao) {
       return res.status(401).json({ message: "Usuário não autenticado." });
     }
 
+    if (["dona", "super_admin"].includes(req.usuario.tipo)) {
+      return next();
+    }
+
     try {
       const result = await query(
         `

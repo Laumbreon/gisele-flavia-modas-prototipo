@@ -288,6 +288,8 @@ async function criarVenda(req, res) {
             pv.tamanho,
             pv.cor,
             pv.codigo_ref,
+            pv.sku,
+            pv.codigo_interno,
             pv.codigo_barras,
             e.quantidade AS quantidade_estoque
           FROM produto_variacoes pv
@@ -319,6 +321,8 @@ async function criarVenda(req, res) {
         tamanho: estoque.tamanho,
         cor: estoque.cor,
         codigo_ref: estoque.codigo_ref,
+        sku: estoque.sku,
+        codigo_interno: estoque.codigo_interno,
         codigo_barras: estoque.codigo_barras,
         quantidade,
         preco_unitario: precoUnitario,
@@ -631,7 +635,7 @@ async function criarVenda(req, res) {
         ]
       );
 
-      itensCriados.push(itemResult.rows[0]);
+      itensCriados.push({ ...itemResult.rows[0], sku:item.sku, codigo_interno:item.codigo_interno, codigo_barras:item.codigo_barras });
     }
 
     await client.query("COMMIT");

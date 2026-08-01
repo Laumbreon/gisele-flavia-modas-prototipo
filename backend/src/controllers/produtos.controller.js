@@ -495,6 +495,28 @@ async function excluirProduto(req,res){
   }catch(error){await client.query("ROLLBACK");res.status(error.statusCode||500).json({message:error.message||"Não foi possível excluir o produto."});}finally{client.release();}
 }
 
+async function excluirProdutoDefinitivamente(req, res) {
+  const id = inteiroPositivo(req.params.id);
+  if (!id) return res.status(400).json({ message: "Produto inválido." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const produto = (await client.query("SELECT id, nome FROM produtos WHERE id=$1 FOR UPDATE", [id])).rows[0];
+    if (!produto) throw Object.assign(new Error("Produto não encontrado."), { statusCode: 404 });
+    const midias = (await client.query("SELECT url FROM produto_midias WHERE produto_id=$1", [id])).rows;
+    await client.query("DELETE FROM produtos WHERE id=$1", [id]);
+    await client.query("COMMIT");
+    midias.forEach(item => excluirArquivoLocal(item.url));
+    return res.json({ ok: true, message: `Produto ${produto.nome} excluído definitivamente.` });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao excluir produto definitivamente:", error);
+    return res.status(error.statusCode || 500).json({ message: error.message || "Não foi possível excluir o produto definitivamente." });
+  } finally {
+    client.release();
+  }
+}
+
 async function excluirVariacao(req, res) {
   const produtoId = inteiroPositivo(req.params.id), id = inteiroPositivo(req.params.variacao_id); if (!produtoId || !id) return res.status(400).json({ message: "Variação inválida." });
   try { const usada = await query("SELECT 1 FROM itens_venda WHERE produto_variacao_id=$1 LIMIT 1", [id]); if (usada.rows.length) { await query("UPDATE produto_variacoes SET ativo=FALSE,updated_at=NOW() WHERE id=$1 AND produto_id=$2", [id, produtoId]); return res.json({ ok: true, message: "Variação inativada porque possui histórico de vendas." }); } const result = await query("DELETE FROM produto_variacoes WHERE id=$1 AND produto_id=$2 RETURNING id", [id, produtoId]); if (!result.rows[0]) return res.status(404).json({ message: "Variação não encontrada." }); res.json({ ok: true, message: "Variação removida." }); }
@@ -580,6 +602,7 @@ module.exports = {
   arquivarProduto,
   restaurarProduto,
   excluirProduto,
+  excluirProdutoDefinitivamente,
   criarVariacao,
   atualizarVariacao,
   excluirVariacao,

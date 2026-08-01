@@ -32,4 +32,22 @@ async function enviarEmailRecuperacaoSenha({ para, nome, codigo, expiresMinutes 
   return { enviado:true };
 }
 
-module.exports={smtpConfigurado,enviarEmailRecuperacaoSenha};
+async function enviarEmailCupomPedido({ para, nome, pedido }) {
+  if (!smtpConfigurado()) return { enviado:false, motivo:"smtp_nao_configurado" };
+  const transport = nodemailer.createTransport({
+    host:process.env.SMTP_HOST, port:Number(process.env.SMTP_PORT || 587),
+    secure:String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+    auth:{ user:process.env.SMTP_USER, pass:process.env.SMTP_PASS },
+  });
+  const loja=process.env.SMTP_FROM_NAME || "Gisele Flávia Modas";
+  const moeda=valor=>Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+  const itens=(pedido.itens||[]).map(item=>`<tr><td style="padding:9px;border-bottom:1px solid #eee"><b>${escapeHtml(item.produto_nome)}</b><br><small>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / "))}</small><br><small>Ref.: ${escapeHtml(item.codigo_interno||item.sku||"—")} · Barras: ${escapeHtml(item.codigo_barras||"—")}</small></td><td style="padding:9px;text-align:center;border-bottom:1px solid #eee">${Number(item.quantidade)}</td><td style="padding:9px;text-align:right;border-bottom:1px solid #eee">${moeda(item.subtotal)}</td></tr>`).join("");
+  const entrega=pedido.tipo_entrega==="entrega_local"
+    ? `<p><b>Entrega:</b> ${escapeHtml([pedido.endereco,pedido.numero,pedido.bairro,pedido.cidade,pedido.estado].filter(Boolean).join(", "))}<br><b>Taxa:</b> ${moeda(pedido.frete_valor)}</p>`
+    : `<p><b>Retirada na loja</b><br>Cliente: ${escapeHtml(nome)}<br>Telefone: ${escapeHtml(pedido.telefone)}</p>`;
+  const html=`<!doctype html><html><body style="margin:0;background:#fff5fa;font-family:Arial,sans-serif;color:#222"><div style="max-width:620px;margin:auto;padding:24px"><div style="background:#fff;border:1px solid #f7c8df;border-radius:16px;overflow:hidden"><div style="padding:22px;background:#F80080;color:#fff;text-align:center"><b style="font-size:22px">Gisele Flávia Modas</b><div>Comprovante de compra #${Number(pedido.id)}</div></div><div style="padding:24px"><p>Olá, <b>${escapeHtml(nome)}</b>!</p><p>Seu pedido foi recebido. Guarde este comprovante para acompanhar a compra.</p>${entrega}<table style="width:100%;border-collapse:collapse">${itens}</table><p style="text-align:right">Subtotal: <b>${moeda(pedido.subtotal)}</b><br>Frete: <b>${moeda(pedido.frete_valor)}</b><br><span style="font-size:20px;color:#AD0257">Total: <b>${moeda(pedido.total)}</b></span></p><p style="font-size:12px;color:#666">Documento comercial sem validade fiscal.</p></div></div></div></body></html>`;
+  await transport.sendMail({from:{name:loja,address:process.env.SMTP_FROM_EMAIL},to:para,subject:`Comprovante de compra #${pedido.id} | Gisele Flávia Modas`,html});
+  return {enviado:true};
+}
+
+module.exports={smtpConfigurado,enviarEmailRecuperacaoSenha,enviarEmailCupomPedido};

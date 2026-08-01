@@ -1,5 +1,6 @@
 const { pool } = require("../config/db");
 const { criarOuObterPreferenciaVenda } = require("./mercado-pago.controller");
+const { enviarEmailCupomPedido } = require("../services/email.service");
 
 function erroValidacao(message) { const error = new Error(message); error.statusCode = 400; return error; }
 function texto(value) { const result = String(value || "").trim(); return result || null; }
@@ -62,7 +63,7 @@ async function checkoutPublico(req, res) {
     for (const item of itensAgrupados) {
       const produtoId = Number(item.produto_id), variacaoId = Number(item.variacao_id), quantidade = Number(item.quantidade);
       if (!Number.isInteger(produtoId) || !Number.isInteger(variacaoId) || !Number.isInteger(quantidade) || quantidade <= 0) throw erroValidacao("Item ou quantidade inválida.");
-      const result = await client.query(`SELECT p.id produto_id,p.nome produto_nome,p.preco produto_preco,p.preco_promocional produto_promocional,pv.id variacao_id,pv.tamanho,pv.cor,pv.codigo_ref,pv.codigo_barras,pv.preco_venda,pv.preco_promocional,e.quantidade estoque FROM produto_variacoes pv JOIN produtos p ON p.id=pv.produto_id JOIN estoque e ON e.produto_variacao_id=pv.id WHERE p.id=$1 AND pv.id=$2 AND p.status='ativo' AND pv.ativo=TRUE FOR UPDATE OF e`, [produtoId, variacaoId]);
+      const result = await client.query(`SELECT p.id produto_id,p.nome produto_nome,p.preco produto_preco,p.preco_promocional produto_promocional,pv.id variacao_id,pv.tamanho,pv.cor,pv.sku,pv.codigo_interno,pv.codigo_ref,pv.codigo_barras,pv.preco_venda,pv.preco_promocional,e.quantidade estoque FROM produto_variacoes pv JOIN produtos p ON p.id=pv.produto_id JOIN estoque e ON e.produto_variacao_id=pv.id WHERE p.id=$1 AND pv.id=$2 AND p.status='ativo' AND pv.ativo=TRUE FOR UPDATE OF e`, [produtoId, variacaoId]);
       const row = result.rows[0];
       if (!row) throw erroValidacao("Produto ou variação não encontrado.");
       if (Number(row.estoque) < quantidade) throw erroValidacao(`Estoque insuficiente para ${row.produto_nome} (${row.tamanho}/${row.cor}).`);
@@ -92,6 +93,8 @@ async function checkoutPublico(req, res) {
       await client.query(`INSERT INTO venda_entregas (venda_id,tipo_entrega,status_entrega,valor_frete,destinatario_nome,destinatario_telefone,estado,cidade,bairro,endereco,numero,complemento,referencia,observacoes) VALUES ($1,'entrega_local','pendente',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [vendaId,frete,texto(entrega.destinatario_nome)||texto(cliente.nome),texto(entrega.destinatario_telefone)||texto(cliente.telefone),texto(entrega.estado)||"SP",texto(entrega.cidade),texto(entrega.bairro),texto(entrega.endereco),texto(entrega.numero),texto(entrega.complemento),texto(entrega.referencia),texto(req.body.observacoes)]);
     }
     await client.query("COMMIT");
+    const clienteEmail=(await pool.query("SELECT nome,email,telefone FROM clientes WHERE id=$1",[clienteId])).rows[0];
+    if(clienteEmail?.email)enviarEmailCupomPedido({para:clienteEmail.email,nome:clienteEmail.nome,pedido:{id:vendaId,subtotal,frete_valor:frete,total,tipo_entrega:tipoEntrega,telefone:clienteEmail.telefone,itens:processados,...entrega}}).catch(error=>console.error(`Falha ao enviar cupom do pedido #${vendaId}:`,error.code||error.message));
     let mercadoPago={disponivel:false,status:"nao_aplicavel",message:"Forma de pagamento sem link Mercado Pago."};
     if(["pix","cartao"].includes(formaPagamento)){
       try{

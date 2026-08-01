@@ -2,6 +2,7 @@
 const produtosController = require("../controllers/produtos.controller");
 const permissoes = require("../middlewares/permissoes.middleware");
 const { middlewareUploadProdutos } = require("../middlewares/upload-produtos.middleware");
+const adminPin = require("../middlewares/admin-pin.middleware");
 
 const router = express.Router();
 
@@ -21,6 +22,7 @@ router.put("/:id", editar, produtosController.atualizarProduto);
 router.patch("/:id/arquivar", editar, produtosController.arquivarProduto);
 router.patch("/:id/restaurar", editar, produtosController.restaurarProduto);
 router.delete("/:id", editar, produtosController.excluirProduto);
+router.delete("/:id/definitivo", editar, adminPin, produtosController.excluirProdutoDefinitivamente);
 router.post("/:id/variacoes", editar, produtosController.criarVariacao);
 router.post("/:id/variacoes/:variacao_id/gerar-codigo-curto", gerarEtiquetas, produtosController.gerarCodigoCurtoVariacao);
 router.put("/:id/variacoes/:variacao_id", editar, produtosController.atualizarVariacao);
