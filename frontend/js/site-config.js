@@ -53,21 +53,25 @@
   function ensureContacts() {
     const footer = document.querySelector("footer");
     if (!footer) return;
-    let contacts = footer.querySelector(".store-dynamic-contacts");
+    const heading = Array.from(footer.querySelectorAll("h4")).find(element => /^contato$/i.test(normalizedText(element)));
+    const column = heading?.parentElement;
+    if (!column) return;
+    let contacts = column.querySelector(".store-dynamic-contacts");
     if (!contacts) {
       contacts = document.createElement("div");
-      contacts.className = "store-dynamic-contacts";
-      footer.prepend(contacts);
+      contacts.className = "store-dynamic-contacts space-y-3";
+      Array.from(column.children).forEach(child => { if (child !== heading) child.remove(); });
+      column.appendChild(contacts);
     }
     const whatsappDigits = String(settings.contato_whatsapp || "").replace(/\D/g, "");
     const whatsapp = whatsappDigits.length <= 11 ? `55${whatsappDigits}` : whatsappDigits;
     const links = [
-      settings.contato_telefone ? `<a href="tel:${escapeHtml(String(settings.contato_telefone).replace(/[^\d+]/g, ""))}">${escapeHtml(settings.contato_telefone)}</a>` : "",
-      whatsappDigits ? `<a href="https://wa.me/${escapeHtml(whatsapp)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : "",
-      settings.contato_email ? `<a href="mailto:${escapeHtml(settings.contato_email)}">${escapeHtml(settings.contato_email)}</a>` : "",
-      `<a href="https://www.instagram.com/${escapeHtml(String(settings.instagram_usuario || "").replace(/^@/, ""))}/" target="_blank" rel="noopener noreferrer">@${escapeHtml(String(settings.instagram_usuario || "").replace(/^@/, ""))}</a>`,
-    ].join("");
-    const markup = `<strong>Contato</strong>${links}`;
+      settings.contato_telefone ? `<a class="block text-sm hover:text-white" href="tel:${escapeHtml(String(settings.contato_telefone).replace(/[^\d+]/g, ""))}"><strong>Telefone:</strong> ${escapeHtml(settings.contato_telefone)}</a>` : "",
+      whatsappDigits ? `<a class="block text-sm hover:text-white" href="https://wa.me/${escapeHtml(whatsapp)}" target="_blank" rel="noopener noreferrer"><strong>WhatsApp:</strong> ${escapeHtml(settings.contato_whatsapp)}</a>` : "",
+      settings.contato_email ? `<a class="block text-sm hover:text-white" href="mailto:${escapeHtml(settings.contato_email)}"><strong>E-mail:</strong> ${escapeHtml(settings.contato_email)}</a>` : "",
+      settings.instagram_usuario ? `<a class="block text-sm hover:text-white" href="https://www.instagram.com/${escapeHtml(String(settings.instagram_usuario).replace(/^@/, ""))}/" target="_blank" rel="noopener noreferrer"><strong>Instagram:</strong> @${escapeHtml(String(settings.instagram_usuario).replace(/^@/, ""))}</a>` : "",
+    ].filter(Boolean).join("");
+    const markup = links || `<span class="text-sm">Cadastre os contatos no painel administrativo.</span>`;
     if (contacts.innerHTML !== markup) contacts.innerHTML = markup;
   }
 
