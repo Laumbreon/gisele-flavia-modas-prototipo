@@ -11,7 +11,7 @@ async function checkoutPublico(req, res) {
   const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
   const tipoEntrega = req.body.tipo_entrega === "entrega_local" ? "entrega_local" : "retirada";
   const entrega = req.body.entrega || {};
-  const formaPagamento = ["pix", "dinheiro", "cartao"].includes(req.body.forma_pagamento) ? req.body.forma_pagamento : null;
+  const formaPagamento = ["pix", "cartao"].includes(req.body.forma_pagamento) ? req.body.forma_pagamento : null;
   const parcelasInformadas = Number(req.body.parcelas ?? 1);
   const parcelas = formaPagamento === "cartao" ? parcelasInformadas : 1;
   const cpfCliente = cpfNormalizado(cliente.cpf);
