@@ -46,6 +46,9 @@ button { cursor: pointer; }
 .page-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 22px; }
 .page-actions p { margin: 4px 0 0; color: var(--muted); }
 .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.orders-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+.order-delivery-filters { display: flex; gap: 8px; max-width: 100%; overflow-x: auto; padding: 2px; scrollbar-width: thin; }
+.order-delivery-filters .btn { flex: 0 0 auto; }
 .btn { min-height: 40px; padding: 9px 15px; border: 1px solid transparent; border-radius: 10px; background: var(--pink); color: #fff; font-weight: 750; }
 .btn:hover { background: var(--pink-dark); }
 .btn.secondary { color: var(--ink); border-color: var(--line); background: #fff; }
@@ -196,6 +199,7 @@ tbody tr:last-child td { border-bottom: 0; }
   .user-chip div { display: none; }
   .view { padding: 18px 14px 30px; }
   .page-actions { align-items: flex-start; flex-direction: column; }
+  .orders-toolbar { align-items: stretch; flex-direction: column; }
   .cards, .field-grid { grid-template-columns: 1fr; }
   .field.full { grid-column: auto; }
   .modal { padding: 9px; }

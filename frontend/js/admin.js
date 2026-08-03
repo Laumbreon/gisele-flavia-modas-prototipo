@@ -24,6 +24,7 @@
     categories: [],
     orders: [],
     ordersView: "ativos",
+    orderDeliveryFilter: "todos",
     customers: [],
     freight: [],
     users: [],
@@ -464,12 +465,26 @@
   async function renderOrders() {
     loading("Carregando pedidos...");
     state.orders = await request(`/pedidos-site?visao=${state.ordersView}`);
-    view.innerHTML = `<div class="page-actions"><div><strong>${state.orders.length} pedido(s) ${state.ordersView === "cancelados" ? "cancelado(s)" : "ativo(s)"}</strong><p>${state.ordersView === "cancelados" ? "Histórico preservado das compras canceladas." : "Confirme pagamentos e acompanhe retirada ou entrega."}</p></div><button class="btn secondary" data-action="refresh">Atualizar</button></div><div class="button-row" style="margin-bottom:18px"><button class="btn ${state.ordersView === "ativos" ? "" : "secondary"}" data-action="orders-view" data-view="ativos">Ativos</button><button class="btn ${state.ordersView === "cancelados" ? "" : "secondary"}" data-action="orders-view" data-view="cancelados">Cancelados</button></div>
-      ${state.orders.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th>Data</th><th>Ações</th></tr></thead><tbody>${state.orders.map((item) => `<tr>
+    renderOrdersContent();
+  }
+
+  function getOrderDeliveryType(order) {
+    const raw = String(order?.tipo_entrega || order?.canal_entrega || order?.entrega?.tipo_entrega || order?.metodo_entrega || order?.canal_venda || "").trim().toLowerCase();
+    return ["entrega", "delivery", "motoboy"].some((term) => raw.includes(term)) ? "entrega" : "retirada";
+  }
+
+  function renderOrdersContent() {
+    const filteredOrders = state.orderDeliveryFilter === "todos"
+      ? state.orders
+      : state.orders.filter((order) => getOrderDeliveryType(order) === state.orderDeliveryFilter);
+    const filterButtons = [["todos","Todos"],["retirada","Retirada"],["entrega","Entrega"]]
+      .map(([value,label]) => `<button type="button" class="btn small ${state.orderDeliveryFilter === value ? "" : "secondary"}" data-action="orders-delivery-filter" data-filter="${value}" aria-pressed="${state.orderDeliveryFilter === value}">${label}</button>`).join("");
+    view.innerHTML = `<div class="page-actions"><div><strong>${filteredOrders.length} pedido(s) ${state.ordersView === "cancelados" ? "cancelado(s)" : "ativo(s)"}</strong><p>${state.ordersView === "cancelados" ? "Histórico preservado das compras canceladas." : "Confirme pagamentos e acompanhe retirada ou entrega."}</p></div><button class="btn secondary" data-action="refresh">Atualizar</button></div><div class="orders-toolbar"><div class="button-row"><button class="btn ${state.ordersView === "ativos" ? "" : "secondary"}" data-action="orders-view" data-view="ativos">Ativos</button><button class="btn ${state.ordersView === "cancelados" ? "" : "secondary"}" data-action="orders-view" data-view="cancelados">Cancelados</button></div><div class="order-delivery-filters" role="group" aria-label="Filtrar pedidos por tipo de entrega">${filterButtons}</div></div>
+      ${filteredOrders.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th>Data</th><th>Ações</th></tr></thead><tbody>${filteredOrders.map((item) => `<tr>
         <td><strong>#${item.id}</strong><div class="muted">${escapeHtml(item.tipo_entrega || "retirada")}</div></td><td>${escapeHtml(item.cliente || "Cliente")}<div class="muted">${escapeHtml(item.telefone || "")}</div></td><td>${money(item.total)}</td><td><span class="badge ${item.status_pagamento === "pago" ? "" : item.status_pagamento === "cancelado" ? "cancelado" : "pending"}">${escapeHtml(item.status_pagamento || "pendente")}</span></td>
         <td><select data-action="delivery-status" data-id="${item.id}" ${item.status === "cancelada" ? "disabled" : ""}>${deliveryOptions(item.status_entrega, item.tipo_entrega)}</select></td><td>${date(item.created_at)}</td>
         <td><div class="actions"><button class="btn secondary small" data-action="order-details" data-id="${item.id}">Detalhes</button>${item.status_pagamento !== "pago" && item.status_pagamento !== "cancelado" && item.forma_pagamento !== "pix" ? `<button class="btn small" data-action="pay-order" data-id="${item.id}">Confirmar pagamento</button>` : ""}${item.status_pagamento !== "pago" && item.forma_pagamento === "pix" ? `<span class="badge pending">Confirmação automática</span>` : ""}${item.status !== "cancelada" ? `<button class="btn secondary small" data-action="cancel-order" data-id="${item.id}">Cancelar</button>` : ""}${state.ordersView !== "cancelados" && item.status_pagamento !== "pago" ? `<button class="btn danger small" data-action="delete-order" data-id="${item.id}">Excluir</button>` : ""}</div></td>
-      </tr>`).join("")}</tbody></table></div>` : empty("Ainda não há pedidos feitos pelo site.")}`;
+      </tr>`).join("")}</tbody></table></div>` : empty(state.orders.length ? "Nenhum pedido corresponde a este filtro." : "Ainda não há pedidos feitos pelo site.")}`;
   }
 
   function deliveryOptions(selected, type) {
@@ -1097,6 +1112,7 @@
     try {
       if (action === "retry" || action === "refresh") await navigate(state.view, state.product?.id);
       else if (action === "orders-view") { state.ordersView = target.dataset.view === "cancelados" ? "cancelados" : "ativos"; await renderOrders(); }
+      else if (action === "orders-delivery-filter") { state.orderDeliveryFilter = ["retirada","entrega"].includes(target.dataset.filter) ? target.dataset.filter : "todos"; renderOrdersContent(); }
       else if (action === "new-product") { if (!state.categories.length) state.categories = await request("/produtos/categorias"); openModal("Cadastrar produto", productForm()); }
       else if (action === "edit-product") await navigate("product-editor", id);
       else if (action === "edit-product-data") openModal("Editar dados do produto", productForm(state.product));
