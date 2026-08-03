@@ -901,10 +901,10 @@
     throw new Error("Tempo esgotado aguardando a aprovação na Point. Consulte o status antes de tentar novamente.");
   }
 
-  function printableWindow(title, html) {
-    const popup = window.open("", "_blank", "width=720,height=900");
+  function printableWindow(title, html, { thermal = false } = {}) {
+    const popup = window.open("", "_blank", thermal ? "width=420,height=780" : "width=720,height=900");
     if (!popup) throw new Error("Permita pop-ups para abrir a impressão.");
-    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font:14px Arial;color:#111;margin:24px}.print-doc{max-width:760px;margin:auto}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #bbb;text-align:left}.product-ref{display:block;font-weight:700;margin-top:3px}.totals{text-align:right;margin-top:18px}@media print{body{margin:0}.no-print{display:none}}</style></head><body><main class="print-doc">${html}</main><script>window.onload=()=>window.print()<\/script></body></html>`);
+    popup.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>*{box-sizing:border-box}body{font:14px Arial,sans-serif;color:#111;margin:24px;background:#fff}.print-doc{max-width:760px;margin:auto}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #bbb;text-align:left;vertical-align:top}.product-ref{display:block;font-weight:700;margin-top:3px}.totals{text-align:right;margin-top:18px}.thermal-print{width:80mm;margin:0;padding:0}.thermal-print .romaneio-print{width:72mm;max-width:72mm;margin:0;padding:4mm;font-size:11px;line-height:1.25}.romaneio-print h1{font-size:15px;line-height:1.2;margin:0 0 3mm}.romaneio-customer{margin:0 0 3mm;padding-bottom:2mm;border-bottom:1px dashed #777}.romaneio-customer p{margin:0 0 1mm;overflow-wrap:anywhere}.romaneio-print table{table-layout:fixed}.romaneio-print th,.romaneio-print td{padding:1.5mm .7mm;border-bottom:1px solid #aaa;overflow-wrap:anywhere;word-break:normal}.romaneio-print th{font-size:9px;text-transform:uppercase}.romaneio-print th:nth-child(1),.romaneio-print td:nth-child(1){width:55%}.romaneio-print th:nth-child(2),.romaneio-print td:nth-child(2){width:32%}.romaneio-print th:nth-child(3),.romaneio-print td:nth-child(3){width:13%;text-align:center}.romaneio-print small,.romaneio-print .product-ref{display:block;font-size:9px;line-height:1.2;margin-top:.7mm}.romaneio-print .product-ref{font-weight:700}@media print{@page{margin:0}${thermal ? "@page{size:80mm auto;margin:0}html,body{width:80mm;margin:0!important;padding:0!important;background:#fff}.print-doc.romaneio-print{width:72mm;max-width:72mm;margin:0;padding:4mm;page-break-after:avoid;break-after:avoid}" : "body{margin:0}"}.no-print{display:none}}</style></head><body class="${thermal ? "thermal-print" : ""}"><main class="print-doc${thermal ? " romaneio-print" : ""}">${html}</main><script>window.onload=()=>window.print()<\/script></body></html>`);
     popup.document.close();
   }
 
@@ -1113,7 +1113,7 @@
       else if (action === "edit-category") await editCategory(id);
       else if (action === "delete-category") await deleteCategory(id);
       else if (action === "order-details") await orderDetails(id);
-      else if (action === "print-order") printableWindow(`Separação do pedido #${state.currentOrder?.id}`, orderSeparationHtml(state.currentOrder));
+      else if (action === "print-order") printableWindow(`Separação do pedido #${state.currentOrder?.id}`, orderSeparationHtml(state.currentOrder), { thermal:true });
       else if (action === "pay-order") await payOrder(id);
       else if (action === "cancel-order") await cancelOrder(id);
       else if (action === "delete-order") openDeleteOrder(id);
@@ -1201,7 +1201,36 @@
 
   function orderSeparationHtml(order) {
     if (!order) return "";
-    return `<h1>Separação do pedido #${order.id}</h1><p><strong>Cliente:</strong> ${escapeHtml(order.cliente || "Cliente")}</p><table><thead><tr><th>Produto</th><th>Variação</th><th>Qtd.</th></tr></thead><tbody>${(order.itens || []).map((item) => `<tr><td><strong>${escapeHtml(item.produto_nome)}</strong>${item.codigo_ref ? `<span class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</span>` : ""}${item.codigo_barras ? `<small>Código: ${escapeHtml(item.codigo_barras)}</small>` : ""}</td><td>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / ") || "—")}</td><td><strong>${item.quantidade}</strong></td></tr>`).join("")}</tbody></table>`;
+    const delivery = order.entrega || {};
+    const firstText = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || null;
+    const deliveryType = firstText(delivery.tipo_entrega, order.tipo_entrega, order.canal_entrega, order.metodo_entrega);
+    const isDelivery = deliveryType === "entrega_local" || deliveryType === "entrega" || order.tem_entrega === true;
+    const phone = firstText(delivery.destinatario_telefone, order.cliente_telefone, order.telefone, order.whatsapp, order.cliente_whatsapp, order.contato, order.celular);
+    const street = firstText(delivery.endereco, delivery.rua, order.endereco_entrega, order.endereco, order.rua);
+    const number = firstText(delivery.numero, order.numero);
+    const city = firstText(delivery.cidade, order.cidade);
+    const stateName = firstText(delivery.estado, delivery.uf, order.estado, order.uf);
+    const zipCode = firstText(delivery.cep, order.cep_entrega, order.cep);
+    const neighborhood = firstText(delivery.bairro, order.bairro);
+    const complement = firstText(delivery.complemento, order.complemento);
+    const reference = firstText(delivery.referencia, order.referencia);
+    const notes = firstText(delivery.observacoes, order.observacoes);
+    const address = [street && [street,number].filter(Boolean).join(", "),[city,stateName].filter(Boolean).join(" / "),zipCode && `CEP ${zipCode}`].filter(Boolean).join(" · ");
+    const customerLines = [
+      `<p><strong>Cliente:</strong> ${escapeHtml(firstText(delivery.destinatario_nome, order.cliente, order.cliente_nome) || "Cliente")}</p>`,
+      `<p><strong>Telefone:</strong> ${escapeHtml(phone || "não informado")}</p>`,
+      `<p><strong>Tipo:</strong> ${isDelivery ? "Entrega" : "Retirada"}</p>`,
+      isDelivery ? `<p><strong>Endereço:</strong> ${escapeHtml(address || "não informado")}</p>` : "",
+      isDelivery && neighborhood ? `<p><strong>Bairro:</strong> ${escapeHtml(neighborhood)}</p>` : "",
+      isDelivery && complement ? `<p><strong>Complemento:</strong> ${escapeHtml(complement)}</p>` : "",
+      isDelivery && reference ? `<p><strong>Referência:</strong> ${escapeHtml(reference)}</p>` : "",
+      notes ? `<p><strong>Observações:</strong> ${escapeHtml(notes)}</p>` : "",
+    ].filter(Boolean).join("");
+    const items = (order.itens || []).map((item) => {
+      const internalCode = firstText(item.codigo_ref, item.codigo_interno, item.sku);
+      return `<tr><td><strong>${escapeHtml(firstText(item.produto_nome, item.produto, item.nome) || "Produto")}</strong>${internalCode ? `<span class="product-ref">REF: ${escapeHtml(internalCode)}</span>` : ""}${item.codigo_barras ? `<small>Barras: ${escapeHtml(item.codigo_barras)}</small>` : ""}</td><td>${escapeHtml([item.tamanho,item.cor].filter(Boolean).join(" / ") || "—")}</td><td><strong>${Number(item.quantidade || 0)}</strong></td></tr>`;
+    }).join("");
+    return `<h1>Separação do pedido #${escapeHtml(order.id)}</h1><section class="romaneio-customer">${customerLines}</section><table><thead><tr><th>Produto</th><th>Variação</th><th>Qtd.</th></tr></thead><tbody>${items || `<tr><td colspan="3">Nenhum item informado.</td></tr>`}</tbody></table>`;
   }
 
   async function payOrder(id) {
