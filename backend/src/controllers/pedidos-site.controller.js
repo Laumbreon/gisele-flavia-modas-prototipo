@@ -75,7 +75,14 @@ async function listarPedidosSite(req, res) {
 
 async function buscarPedidoCompleto(executor, id, lock = false) {
   const vendaResult = await executor.query(
-    `SELECT v.*, c.nome AS cliente, c.telefone, c.whatsapp, c.email
+    `SELECT v.*,
+            c.nome AS cliente,
+            c.nome AS cliente_nome,
+            c.telefone AS telefone,
+            c.telefone AS cliente_telefone,
+            c.whatsapp AS whatsapp,
+            c.whatsapp AS cliente_whatsapp,
+            c.email AS email
      FROM vendas v LEFT JOIN clientes c ON c.id = v.cliente_id
      WHERE v.id = $1 AND v.canal_venda = 'site' ${lock ? "FOR UPDATE OF v" : ""}`,
     [id]
@@ -83,11 +90,41 @@ async function buscarPedidoCompleto(executor, id, lock = false) {
   if (!vendaResult.rows[0]) return null;
   const [itens, entrega, pagamentos, mercadoPago] = await Promise.all([
     executor.query("SELECT * FROM itens_venda WHERE venda_id = $1 ORDER BY id", [id]),
-    executor.query("SELECT * FROM venda_entregas WHERE venda_id = $1 ORDER BY id DESC LIMIT 1", [id]),
+    executor.query(
+      `SELECT id,venda_id,tipo_entrega,status_entrega,valor_frete,
+              destinatario_nome,destinatario_telefone,cep,
+              estado,estado AS uf,cidade,bairro,
+              endereco,endereco AS rua,numero,complemento,referencia,
+              transportadora,codigo_rastreio,motoboy_nome,
+              data_prevista,data_entrega,observacoes,created_at,updated_at
+       FROM venda_entregas WHERE venda_id = $1 ORDER BY id DESC LIMIT 1`,
+      [id]
+    ),
     executor.query("SELECT * FROM pagamentos_venda WHERE venda_id = $1 ORDER BY id", [id]),
     executor.query("SELECT * FROM mercado_pago_pagamentos WHERE venda_id=$1 ORDER BY created_at DESC LIMIT 1", [id]),
   ]);
-  return { ...vendaResult.rows[0], itens: itens.rows, entrega: entrega.rows[0] || null, pagamentos: pagamentos.rows, mercado_pago: mercadoPago.rows[0] || null };
+  const venda = vendaResult.rows[0];
+  const entregaSalva = entrega.rows[0] || {};
+  const entregaNormalizada = {
+    id: entregaSalva.id || null,
+    tipo_entrega: entregaSalva.tipo_entrega || (venda.tem_entrega ? "entrega_local" : "retirada"),
+    endereco: entregaSalva.endereco || null,
+    rua: entregaSalva.rua || entregaSalva.endereco || null,
+    numero: entregaSalva.numero || null,
+    bairro: entregaSalva.bairro || null,
+    cidade: entregaSalva.cidade || null,
+    estado: entregaSalva.estado || null,
+    uf: entregaSalva.uf || entregaSalva.estado || null,
+    cep: entregaSalva.cep || venda.cep_entrega || null,
+    complemento: entregaSalva.complemento || null,
+    referencia: entregaSalva.referencia || null,
+    observacoes: entregaSalva.observacoes || null,
+    destinatario_nome: entregaSalva.destinatario_nome || venda.cliente_nome || venda.cliente || null,
+    destinatario_telefone: entregaSalva.destinatario_telefone || venda.cliente_telefone || venda.telefone || venda.cliente_whatsapp || venda.whatsapp || null,
+    status_entrega: entregaSalva.status_entrega || venda.status_entrega || null,
+    valor_frete: entregaSalva.valor_frete ?? venda.frete_valor ?? 0,
+  };
+  return { ...venda, itens: itens.rows, entrega: entregaNormalizada, pagamentos: pagamentos.rows, mercado_pago: mercadoPago.rows[0] || null };
 }
 
 async function detalharPedidoSite(req, res) {
@@ -228,7 +265,7 @@ async function atualizarStatusEntrega(req, res) {
       : new Set(["pendente", "sem_entrega", "separando", "pronto_retirada", "entregue", "cancelado"]);
     if (!permitidos.has(status)) throw Object.assign(new Error(`Status incompatível com ${tipo === "entrega_local" ? "entrega local" : "retirada"}.`), { statusCode: 400 });
     await client.query("UPDATE vendas SET status_entrega=$2, updated_at=NOW() WHERE id=$1", [id, status]);
-    if (pedido.entrega) await client.query("UPDATE venda_entregas SET status_entrega=$2, updated_at=NOW() WHERE venda_id=$1", [id, status]);
+    if (pedido.entrega?.id) await client.query("UPDATE venda_entregas SET status_entrega=$2, updated_at=NOW() WHERE venda_id=$1", [id, status]);
     await client.query("COMMIT");
     res.json({ ok: true, message: "Status de entrega atualizado.", pedido_id: id, status_entrega: status });
   } catch (error) {
