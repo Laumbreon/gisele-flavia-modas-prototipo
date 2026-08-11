@@ -81,10 +81,17 @@
       if (!response.ok) return;
       const rows = await response.json();
       const featured = ["Novidades", "Promoções"];
-      const remaining = [...new Set(rows.map(row => row.nome || row.name).filter(Boolean))]
+      const available = [...new Set(rows
+        .filter(row => Number(row.quantidade_produtos ?? row.count ?? 0) > 0)
+        .map(row => row.nome || row.name)
+        .filter(Boolean))];
+      const availableFeatured = featured.filter(featuredName =>
+        available.some(name => collator.compare(featuredName, name) === 0)
+      );
+      const remaining = available
         .filter(name => !featured.some(item => collator.compare(item, name) === 0))
         .sort((first, second) => collator.compare(first, second));
-      categories = [...featured, ...remaining];
+      categories = [...availableFeatured, ...remaining];
       arrange();
       new MutationObserver(arrange).observe(document.body, { childList:true, subtree:true });
     } catch { /* Mantém o menu original se o catálogo estiver indisponível. */ }

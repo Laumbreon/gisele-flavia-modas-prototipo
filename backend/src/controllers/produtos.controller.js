@@ -106,8 +106,19 @@ async function listarProdutos(req, res) {
 
 async function listarProdutosPublicos(req, res) {
   try {
-    const result = await query(produtosSql("WHERE p.status = 'ativo'", true));
-    res.json(result.rows);
+    const result = await query(produtosSql(`
+      WHERE p.status = 'ativo'
+        AND EXISTS (
+          SELECT 1
+          FROM produto_variacoes pv_disponivel
+          INNER JOIN estoque e_disponivel
+            ON e_disponivel.produto_variacao_id = pv_disponivel.id
+          WHERE pv_disponivel.produto_id = p.id
+            AND pv_disponivel.ativo = TRUE
+            AND e_disponivel.quantidade > 0
+        )
+    `, true));
+    res.json(result.rows.map(aplicarCategoriaPublica));
   } catch (error) {
     console.error("Erro ao listar produtos públicos:", error);
     res.status(500).json({
@@ -119,36 +130,56 @@ async function listarProdutosPublicos(req, res) {
 async function listarCategoriasPublicas(req, res) {
   try {
     const result = await query(`
+      WITH categorias_disponiveis AS (
+        SELECT
+          c.id,
+          CASE WHEN LOWER(c.slug) = 'calcados' THEN 'T-shirts' ELSE c.nome END AS nome,
+          CASE WHEN LOWER(c.slug) = 'calcados' THEN 't-shirts' ELSE c.slug END AS slug,
+          c.descricao,
+          c.ordem,
+          p.id AS produto_id
+        FROM categorias_produtos c
+        INNER JOIN produtos p
+          ON LOWER(p.categoria) = LOWER(c.nome)
+         AND p.status = 'ativo'
+        WHERE c.ativo = TRUE
+          AND EXISTS (
+            SELECT 1
+            FROM produto_variacoes pv
+            INNER JOIN estoque e ON e.produto_variacao_id = pv.id
+            WHERE pv.produto_id = p.id
+              AND pv.ativo = TRUE
+              AND e.quantidade > 0
+          )
+      )
       SELECT
-        c.id,
-        c.nome,
-        c.slug,
-        c.descricao,
-        c.ordem,
-        COUNT(DISTINCT p.id)::int AS quantidade_produtos,
+        MIN(cd.id)::int AS id,
+        cd.nome,
+        cd.slug,
+        MAX(cd.descricao) AS descricao,
+        MIN(cd.ordem)::int AS ordem,
+        COUNT(DISTINCT cd.produto_id)::int AS quantidade_produtos,
         (
-          SELECT pm.url
-          FROM produtos produto_imagem
-          INNER JOIN produto_midias pm ON pm.produto_id = produto_imagem.id
-          WHERE produto_imagem.status = 'ativo'
-            AND LOWER(produto_imagem.categoria) = LOWER(c.nome)
-            AND pm.tipo = 'imagem'
-          ORDER BY pm.principal DESC, pm.ordem ASC, pm.id ASC
-          LIMIT 1
-        ) AS imagem
-      FROM categorias_produtos c
-      LEFT JOIN produtos p
-        ON LOWER(p.categoria) = LOWER(c.nome)
-       AND p.status = 'ativo'
-      WHERE c.ativo = TRUE
-      GROUP BY c.id
-      ORDER BY c.ordem ASC, c.nome ASC;
+          ARRAY_AGG(pm.url ORDER BY pm.principal DESC, pm.ordem ASC, pm.id ASC)
+          FILTER (WHERE pm.id IS NOT NULL)
+        )[1] AS imagem
+      FROM categorias_disponiveis cd
+      LEFT JOIN produto_midias pm
+        ON pm.produto_id = cd.produto_id
+       AND pm.tipo = 'imagem'
+      GROUP BY cd.nome, cd.slug
+      ORDER BY MIN(cd.ordem) ASC, cd.nome ASC;
     `);
     res.json(result.rows);
   } catch (error) {
     console.error("Erro ao listar categorias públicas:", error);
     res.status(500).json({ message: "Não foi possível carregar as categorias." });
   }
+}
+
+function aplicarCategoriaPublica(produto) {
+  const categoria = String(produto.categoria || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return categoria === "calcados" ? { ...produto, categoria: "T-shirts" } : produto;
 }
 
 async function obterProduto(req, res) {
@@ -190,7 +221,7 @@ async function obterProdutoPublico(req, res) {
       return res.status(404).json({ message: "Produto não encontrado." });
     }
 
-    res.json(produto);
+    res.json(aplicarCategoriaPublica(produto));
   } catch (error) {
     console.error("Erro ao buscar produto público:", error);
     res.status(500).json({
