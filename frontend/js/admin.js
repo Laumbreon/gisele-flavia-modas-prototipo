@@ -35,6 +35,7 @@
     pdvCart: [],
     pdvCash: null,
     cashHistory: [],
+    cashReport: null,
     machines: [],
     labelProducts: [],
     pdvPointOrder: null,
@@ -338,6 +339,52 @@
     layout.insertBefore(panel, checkout);
   }
 
+  function inputDate(value = new Date()) {
+    const dateValue = value instanceof Date ? value : new Date(value);
+    const year = dateValue.getFullYear();
+    const month = String(dateValue.getMonth() + 1).padStart(2, "0");
+    const day = String(dateValue.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function reportMachineOptions(selectedValue = "todas") {
+    return `<option value="todas">Todas</option>${state.machines.map((item) => `<option value="${item.id}" ${String(selectedValue) === String(item.id) ? "selected" : ""}>${escapeHtml(item.nome)}</option>`).join("")}`;
+  }
+
+  function reportPaymentOptions(selectedValue = "todas") {
+    const options = ["dinheiro", "pix", "debito", "credito", "vale_haver", "cartao_solocard", "cartao_brasil_card", "cartao_asu", "mercado_pago", "cartao"];
+    return `<option value="todas">Todas</option>${options.map((item) => `<option value="${item}" ${selectedValue === item ? "selected" : ""}>${escapeHtml(paymentLabel(item))}</option>`).join("")}`;
+  }
+
+  function cashReportFiltersHtml() {
+    const today = inputDate();
+    const filters = state.cashReport?.filtros || {};
+    return `<form data-form="cash-report" class="cash-report-filters"><div class="field"><label>Data inicial</label><input name="data_inicio" type="date" value="${escapeHtml(filters.data_inicio || today)}" required></div><div class="field"><label>Data final</label><input name="data_fim" type="date" value="${escapeHtml(filters.data_fim || today)}" required></div><div class="field"><label>Caixa</label><select name="caixa_id"><option value="todas">Todos</option>${state.cashHistory.map((item) => `<option value="${item.id}" ${String(filters.caixa_id) === String(item.id) ? "selected" : ""}>Caixa #${item.id}</option>`).join("")}</select></div><div class="field"><label>Maquininha</label><select name="maquininha_id">${reportMachineOptions(filters.maquininha_id || "todas")}</select></div><div class="field"><label>Forma</label><select name="forma_pagamento">${reportPaymentOptions(filters.forma_pagamento || "todas")}</select></div><div class="field"><label>Status do caixa</label><select name="status"><option value="todos">Todos</option><option value="aberto" ${filters.status === "aberto" ? "selected" : ""}>Aberto</option><option value="fechado" ${filters.status === "fechado" ? "selected" : ""}>Fechado</option></select></div><div class="form-actions cash-report-actions"><button class="btn">Atualizar relatório</button><button type="button" class="btn secondary" data-action="print-cash-report-a4" ${state.cashReport ? "" : "disabled"}>Imprimir A4</button><button type="button" class="btn secondary" data-action="print-cash-report-thermal" ${state.cashReport ? "" : "disabled"}>Imprimir Elgin i8</button></div></form>`;
+  }
+
+  function cashReportContentHtml(report = state.cashReport) {
+    if (!report) return `<div class="empty-state">Atualize o relatório para visualizar os totais do período.</div>`;
+    const resumo = report.resumo || {};
+    const machineGroups = Object.values((report.por_maquininha || []).reduce((map, item) => {
+      const key = item.maquininha_id || item.maquininha;
+      map[key] ||= { nome: item.maquininha || "Sem maquininha / Manual", total: 0, linhas: [] };
+      map[key].total += Number(item.total || 0);
+      map[key].linhas.push(item);
+      return map;
+    }, {}));
+    return `<div class="cards cash-report-cards"><article class="card metric"><small>Total vendido</small><strong>${money(resumo.total_vendido)}</strong></article><article class="card metric"><small>Dinheiro</small><strong>${money(resumo.dinheiro)}</strong></article><article class="card metric"><small>Pix</small><strong>${money(resumo.pix)}</strong></article><article class="card metric"><small>Débito</small><strong>${money(resumo.debito)}</strong></article><article class="card metric"><small>Crédito</small><strong>${money(resumo.credito)}</strong></article><article class="card metric"><small>Externos</small><strong>${money(resumo.total_externo)}</strong></article><article class="card metric"><small>Vendas</small><strong>${Number(resumo.quantidade_vendas || 0)}</strong></article></div><div class="grid-two cash-report-grid"><section><h3>Por forma de pagamento</h3><div class="table-wrap"><table><thead><tr><th>Forma</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>${(report.por_forma_pagamento || []).map((item) => `<tr><td>${escapeHtml(paymentLabel(item.forma_pagamento))}</td><td>${Number(item.quantidade || 0)}</td><td>${money(item.total)}</td></tr>`).join("") || `<tr><td colspan="3">Sem vendas no período.</td></tr>`}</tbody></table></div></section><section><h3>Por maquininha</h3><div class="table-wrap"><table><thead><tr><th>Maquininha</th><th>Forma</th><th>Total</th></tr></thead><tbody>${machineGroups.flatMap((group) => [...group.linhas.map((item) => `<tr><td>${escapeHtml(group.nome)}</td><td>${escapeHtml(paymentLabel(item.forma_pagamento))}</td><td>${money(item.total)}</td></tr>`), `<tr class="report-subtotal"><td colspan="2">Total ${escapeHtml(group.nome)}</td><td>${money(group.total)}</td></tr>`]).join("") || `<tr><td colspan="3">Sem pagamentos no período.</td></tr>`}</tbody></table></div></section></div><h3>Vendas detalhadas</h3><div class="table-wrap"><table><thead><tr><th>Data</th><th>Venda</th><th>Cliente</th><th>Forma</th><th>Maquininha</th><th>Valor</th><th>Operador</th></tr></thead><tbody>${(report.vendas || []).map((item) => { const payments = item.pagamentos || []; return `<tr><td>${date(item.created_at)}</td><td>#${item.id}</td><td>${escapeHtml(item.cliente || "Consumidor não identificado")}</td><td>${payments.length > 1 ? "Pagamento misto" : escapeHtml(paymentLabel(payments[0]?.forma_pagamento || item.forma_pagamento))}<div class="muted">${payments.map((payment) => `${paymentLabel(payment.forma_pagamento)} ${money(payment.valor)}`).join(" · ")}</div></td><td>${escapeHtml([...new Set(payments.map((payment) => payment.maquininha || "Sem maquininha / Manual"))].join(", "))}</td><td>${money(item.valor_relatorio || item.total)}</td><td>${escapeHtml(item.operador || "—")}</td></tr>`; }).join("") || `<tr><td colspan="7">Nenhuma venda encontrada.</td></tr>`}</tbody></table></div>`;
+  }
+
+  function cashReportHtml() {
+    return `<section class="section cash-report"><div class="section-heading"><h2>Relatório de caixa</h2><span class="muted">Vendas por forma de pagamento e maquininha</span></div>${cashReportFiltersHtml()}<div id="cashReportContent">${cashReportContentHtml()}</div></section>`;
+  }
+
+  function mountCashReport() {
+    const history = document.querySelector(".pdv-history");
+    if (!history || document.querySelector(".cash-report")) return;
+    history.insertAdjacentHTML("beforebegin", cashReportHtml());
+  }
+
   function cashHistoryHtml() {
     return `<section class="section pdv-history"><div class="section-heading"><h2>Histórico de caixas</h2><span class="muted">Últimos ${state.cashHistory.length} registros</span></div>${state.cashHistory.length ? `<div class="table-wrap"><table><thead><tr><th>Caixa</th><th>Abertura</th><th>Fechamento</th><th>Responsável</th><th>Total sistema</th><th>Total informado</th><th>Diferença</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.cashHistory.map((item) => `<tr><td><strong>#${item.id}</strong></td><td>${date(item.data_abertura)}</td><td>${item.data_fechamento ? date(item.data_fechamento) : "—"}</td><td>${escapeHtml(item.usuario_abertura || "—")}</td><td>${money(item.total_sistema)}</td><td>${item.status === "fechado" ? money(item.total_informado) : "—"}</td><td>${item.status === "fechado" ? money(item.divergencia) : "—"}</td><td><span class="badge ${item.status === "aberto" ? "pending" : ""}">${escapeHtml(item.status)}</span></td><td><div class="actions"><button class="btn secondary small" data-action="cash-details" data-id="${item.id}">Detalhes</button><button class="btn secondary small" data-action="edit-cash" data-id="${item.id}">Editar</button><button class="btn secondary small" data-action="delete-cash" data-id="${item.id}">Excluir</button></div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum histórico de caixa encontrado.")}</section>`;
   }
@@ -354,12 +401,14 @@
     state.cashHistory = cashHistory;
     if (!cash) {
       view.innerHTML = `<section class="section pdv-open"><h2>Abrir caixa</h2><p class="muted">Informe o valor disponível em dinheiro antes de começar as vendas.</p><form data-form="pdv-open-cash"><div class="field-grid"><div class="field"><label>Valor inicial (R$)</label><input name="valor_inicial" type="number" min="0" step="0.01" value="0" required></div><div class="field"><label>Observação</label><input name="observacoes_abertura" maxlength="500" placeholder="Opcional"></div></div><div class="form-actions"><button class="btn">Abrir caixa e iniciar PDV</button></div></form></section>${cashHistoryHtml()}`;
+      mountCashReport();
       return;
     }
     const productCards = state.pdvProducts.flatMap((product) => (product.variacoes || [])
       .filter((variation) => variation.ativo !== false && Number(variation.quantidade_estoque) > 0)
       .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(normalizeSearch(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""} ${variation.codigo_ref || ""}`))}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span>${variation.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(variation.codigo_ref)}</small>` : ""}<small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
     view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field full"><label>Forma de pagamento</label>${paymentOptionsHtml()}</div><div class="field" id="pdvInstallmentsField" hidden><label>Parcelamento sem juros</label><select name="parcelas"><option value="1">1x sem juros</option><option value="2">2x sem juros</option><option value="3">3x sem juros</option></select></div><div class="field full" id="pdvCashReceivedField"><label>Valor entregue pela cliente (R$)</label><input name="valor_recebido_dinheiro" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"><small id="pdvCashChange">Informe quanto a cliente entregou para calcular o troco.</small></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div><div class="field full"><label class="checkbox"><input name="pagamento_confirmado" type="checkbox" required> Confirmo que o pagamento foi recebido</label><small>A venda e a baixa no estoque só serão registradas após esta confirmação.</small></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
+    mountCashReport();
     preparePdvSearchArea();
     preparePdvOperationalLayout();
     ensurePdvMixedPaymentFields();
@@ -857,6 +906,45 @@
     return Object.fromEntries(new FormData(form).entries());
   }
 
+  async function submitCashReport(form) {
+    const data = formObject(form);
+    const params = new URLSearchParams();
+    ["data_inicio", "data_fim", "caixa_id", "maquininha_id", "forma_pagamento", "status"].forEach((key) => {
+      if (data[key]) params.set(key, data[key]);
+    });
+    state.cashReport = await request(`/caixas/relatorio?${params.toString()}`);
+    const content = document.getElementById("cashReportContent");
+    if (content) content.innerHTML = cashReportContentHtml();
+    const actions = document.querySelectorAll('[data-action="print-cash-report-a4"], [data-action="print-cash-report-thermal"]');
+    actions.forEach((button) => { button.disabled = false; });
+    toast("Relatório atualizado.");
+  }
+
+  function cashReportPeriod(report = state.cashReport) {
+    const filters = report?.filtros || {};
+    const start = filters.data_inicio ? new Date(`${filters.data_inicio}T00:00:00`) : null;
+    const end = filters.data_fim ? new Date(`${filters.data_fim}T00:00:00`) : null;
+    return `${start ? date(start) : "Início"} a ${end ? date(end) : "Hoje"}`;
+  }
+
+  function cashReportPrintHtml(report = state.cashReport) {
+    if (!report) return "";
+    return `<h1>Gisele Flávia Modas</h1><h2>Relatório de Caixa</h2><p>Período: ${escapeHtml(cashReportPeriod(report))}<br>Emitido em: ${date(new Date())}</p>${cashReportContentHtml(report)}`;
+  }
+
+  function cashReportThermalHtml(report = state.cashReport) {
+    if (!report) return "";
+    const resumo = report.resumo || {};
+    const machineGroups = Object.values((report.por_maquininha || []).reduce((map, item) => {
+      const key = item.maquininha_id || item.maquininha;
+      map[key] ||= { nome: item.maquininha || "Sem maquininha / Manual", total: 0 };
+      map[key].total += Number(item.total || 0);
+      return map;
+    }, {}));
+    const valueLine = (label, value) => `<div><span>${escapeHtml(label)}</span><b>${money(value)}</b></div>`;
+    return `<div class="thermal-report"><h1>GISELE FLÁVIA MODAS</h1><h2>Relatório de Caixa</h2><p>Período: ${escapeHtml(cashReportPeriod(report))}<br>Emitido em: ${date(new Date())}</p><hr><h3>RESUMO</h3>${valueLine("Total vendido", resumo.total_vendido)}<div><span>Qtd. vendas</span><b>${Number(resumo.quantidade_vendas || 0)}</b></div><div><span>Qtd. itens</span><b>${Number(resumo.quantidade_itens || 0)}</b></div><hr><h3>FORMAS</h3>${["dinheiro","pix","debito","credito","vale_haver","cartao_solocard","cartao_brasil_card","cartao_asu"].map((key) => valueLine(paymentLabel(key), resumo[key])).join("")}<hr><h3>MAQUININHAS</h3>${machineGroups.map((item) => valueLine(item.nome, item.total)).join("") || "<p>Sem pagamentos.</p>"}<hr><h3>VENDAS</h3>${(report.vendas || []).map((item) => { const payments = item.pagamentos || []; return `<div class="thermal-sale"><span>#${item.id} ${date(item.created_at)} ${payments.length > 1 ? "Misto" : paymentLabel(payments[0]?.forma_pagamento || item.forma_pagamento)}</span><b>${money(item.valor_relatorio || item.total)}</b></div>`; }).join("") || "<p>Nenhuma venda.</p>"}</div>`;
+  }
+
   async function handleSubmit(event) {
     const form = event.target.closest("form[data-form]");
     if (!form) return;
@@ -882,6 +970,7 @@
       else if (kind === "pay-order") await submitPayOrder(form);
       else if (kind === "delete-order") await submitDeleteOrder(form);
       else if (kind === "admin") await submitAdmin(form);
+      else if (kind === "cash-report") await submitCashReport(form);
       else if (kind === "pdv-open-cash") await submitPdvOpenCash(form);
       else if (kind === "pdv-sale") await submitPdvSale(form);
       else if (kind === "pdv-close-cash") await submitPdvCloseCash(form);
@@ -1287,6 +1376,14 @@
       else if (action === "pdv-point-send") await sendPdvPointOrder();
       else if (action === "pdv-point-sync") await syncPdvPointOrder();
       else if (action === "print-sale-receipt") printableWindow(`Venda #${state.lastSale?.id}`, saleReceiptHtml(state.lastSale));
+      else if (action === "print-cash-report-a4") {
+        if (!state.cashReport) throw new Error("Atualize o relatório antes de imprimir.");
+        printableWindow("Relatório de Caixa", cashReportPrintHtml());
+      }
+      else if (action === "print-cash-report-thermal") {
+        if (!state.cashReport) throw new Error("Atualize o relatório antes de imprimir.");
+        printableWindow("Relatório de Caixa Elgin i8", cashReportThermalHtml(), { thermal: true });
+      }
       else if (action === "pdv-close-cash") openPdvCloseCash();
       else if (action === "new-machine") openMachineModal();
       else if (action === "edit-machine") openMachineModal(state.machines.find((item) => item.id === id));

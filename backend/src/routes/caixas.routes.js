@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.get("/aberto", permissoes(["caixa.ver", "vendas.criar", "relatorios.ver", "configuracoes.editar"]), caixasController.buscarCaixaAberto);
 router.get("/resumo-pdv", permissoes(["caixa.ver", "vendas.criar", "relatorios.ver", "configuracoes.editar"]), caixasController.resumoPdv);
+router.get("/relatorio", permissoes(["caixa.ver", "relatorios.ver", "configuracoes.editar"]), caixasController.relatorioCaixa);
 router.post("/abrir", permissoes(["caixa.abrir", "configuracoes.editar"]), caixasController.abrirCaixa);
 router.post("/:id/fechar", permissoes(["caixa.fechar", "configuracoes.editar"]), caixasController.fecharCaixa);
 router.get("/", permissoes(["caixa.ver", "relatorios.ver", "configuracoes.editar"]), caixasController.listarCaixas);
