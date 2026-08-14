@@ -39,6 +39,10 @@ function addReportFilter(filters, params, sql, value) {
   filters.push(sql.replace("?", `$${params.length}`));
 }
 
+function reportMoney(value) {
+  return Number(toMoney(value).toFixed(2));
+}
+
 function caixaSelectSql(where = "") {
   return `
     SELECT
@@ -469,7 +473,13 @@ async function relatorioCaixa(req, res) {
       )
     ),
     pagamentos_filtrados AS (
-      SELECT pb.*, COALESCE(m.nome, 'Sem maquininha / Manual') AS maquininha
+      SELECT
+        pb.*,
+        COALESCE(m.nome, 'Sem maquininha / Manual') AS maquininha,
+        m.codigo_externo,
+        m.pdv_codigo,
+        m.terminal_tipo,
+        m.mercado_pago_terminal_id
       FROM pagamentos_base pb
       LEFT JOIN maquininhas m ON m.id = pb.maquininha_id
       ${pagamentoWhere}
@@ -482,7 +492,7 @@ async function relatorioCaixa(req, res) {
   `;
 
   try {
-    const [resumoResult, formasResult, maquinasResult, vendasResult] = await Promise.all([
+    const [resumoResult, formasResult, maquinasResult, vendasResult, caixasResult] = await Promise.all([
       query(`${baseSql}
         SELECT
           COALESCE(SUM(pf.valor),0) AS total_vendido,
@@ -497,7 +507,9 @@ async function relatorioCaixa(req, res) {
           COALESCE(SUM(pf.valor) FILTER (WHERE pf.forma_pagamento='cartao_brasil_card'),0) AS cartao_brasil_card,
           COALESCE(SUM(pf.valor) FILTER (WHERE pf.forma_pagamento='cartao_asu'),0) AS cartao_asu,
           COALESCE(SUM(pf.valor) FILTER (WHERE pf.forma_pagamento='mercado_pago'),0) AS mercado_pago,
+          COALESCE(SUM(pf.valor) FILTER (WHERE pf.forma_pagamento='cartao'),0) AS cartao,
           COALESCE(SUM(pf.valor) FILTER (WHERE pf.forma_pagamento IN ('vale_haver','cartao_solocard','cartao_brasil_card','cartao_asu')),0) AS total_externo,
+          COALESCE(SUM(pf.valor) FILTER (WHERE pf.forma_pagamento IN ('debito','credito','cartao','cartao_solocard','cartao_brasil_card','cartao_asu')),0) AS total_cartoes,
           COALESCE((SELECT SUM(DISTINCT vr.valor_inicial) FROM vendas_relatorio vr WHERE vr.caixa_id IS NOT NULL),0) AS valor_inicial
         FROM pagamentos_filtrados pf;`, params),
       query(`${baseSql}
@@ -506,9 +518,9 @@ async function relatorioCaixa(req, res) {
         GROUP BY pf.forma_pagamento
         ORDER BY total DESC, pf.forma_pagamento;`, params),
       query(`${baseSql}
-        SELECT COALESCE(pf.maquininha_id,0) AS maquininha_id, pf.maquininha, pf.forma_pagamento, COUNT(DISTINCT pf.venda_id)::int AS quantidade, COALESCE(SUM(pf.valor),0) AS total
+        SELECT COALESCE(pf.maquininha_id,0) AS maquininha_id, pf.maquininha, pf.codigo_externo, pf.pdv_codigo, pf.terminal_tipo, pf.mercado_pago_terminal_id, pf.forma_pagamento, COUNT(DISTINCT pf.venda_id)::int AS quantidade, COALESCE(SUM(pf.valor),0) AS total
         FROM pagamentos_filtrados pf
-        GROUP BY COALESCE(pf.maquininha_id,0), pf.maquininha, pf.forma_pagamento
+        GROUP BY COALESCE(pf.maquininha_id,0), pf.maquininha, pf.codigo_externo, pf.pdv_codigo, pf.terminal_tipo, pf.mercado_pago_terminal_id, pf.forma_pagamento
         ORDER BY pf.maquininha, pf.forma_pagamento;`, params),
       query(`${baseSql}
         SELECT
@@ -517,19 +529,88 @@ async function relatorioCaixa(req, res) {
           vr.caixa_id,
           vr.cliente,
           vr.operador,
-          vr.forma_pagamento,
-          vr.total,
+          pf.forma_pagamento,
+          COALESCE(pf.maquininha, 'Sem maquininha / Manual') AS maquininha,
+          pf.maquininha_id,
+          pf.codigo_externo,
+          pf.pdv_codigo,
+          pf.mercado_pago_terminal_id,
+          pf.valor AS valor_pagamento,
+          vr.total AS total_venda,
+          vr.status AS status,
+          vr.status_pagamento,
           vr.observacoes,
-          COALESCE(SUM(pf.valor),0) AS valor_relatorio,
-          COALESCE(json_agg(json_build_object('forma_pagamento',pf.forma_pagamento,'valor',pf.valor,'maquininha',pf.maquininha,'maquininha_id',pf.maquininha_id) ORDER BY pf.forma_pagamento) FILTER (WHERE pf.venda_id IS NOT NULL),'[]'::json) AS pagamentos
+          json_build_array(json_build_object('forma_pagamento',pf.forma_pagamento,'valor',pf.valor,'maquininha',pf.maquininha,'maquininha_id',pf.maquininha_id)) AS pagamentos
         FROM vendas_relatorio vr
-        LEFT JOIN pagamentos_filtrados pf ON pf.venda_id = vr.id
-        GROUP BY vr.id, vr.created_at, vr.caixa_id, vr.cliente, vr.operador, vr.forma_pagamento, vr.total, vr.observacoes
-        ORDER BY vr.created_at DESC
+        JOIN pagamentos_filtrados pf ON pf.venda_id = vr.id
+        ORDER BY vr.created_at DESC, vr.id DESC, pf.forma_pagamento
         LIMIT 300;`, params),
+      query(`${baseSql}
+        SELECT
+          cx.id,
+          cx.status,
+          ua.nome AS responsavel,
+          uf.nome AS responsavel_fechamento,
+          cx.data_abertura AS aberto_em,
+          cx.data_fechamento AS fechado_em,
+          cx.valor_inicial,
+          cx.valor_informado_dinheiro,
+          cx.valor_informado_pix,
+          cx.valor_informado_debito,
+          cx.valor_informado_credito,
+          cx.total_informado AS valor_informado,
+          cx.total_sistema,
+          cx.divergencia AS diferenca,
+          cx.observacoes_fechamento,
+          COUNT(DISTINCT vr.id)::int AS quantidade_vendas
+        FROM vendas_relatorio vr
+        JOIN caixas cx ON cx.id = vr.caixa_id
+        LEFT JOIN usuarios ua ON ua.id = cx.usuario_abertura_id
+        LEFT JOIN usuarios uf ON uf.id = cx.usuario_fechamento_id
+        GROUP BY cx.id, ua.nome, uf.nome
+        ORDER BY cx.data_abertura DESC;`, params),
     ]);
 
+    const caixas = caixasResult.rows.map((caixa) => ({
+      ...caixa,
+      valor_inicial: reportMoney(caixa.valor_inicial),
+      valor_informado: caixa.valor_informado == null ? null : reportMoney(caixa.valor_informado),
+      total_sistema: reportMoney(caixa.total_sistema),
+      diferenca: reportMoney(caixa.diferenca),
+    }));
+    const caixaPrincipal = caixas.length === 1 ? caixas[0] : null;
+    const alertas = [];
+    caixas.forEach((caixa) => {
+      if (caixa.status === "aberto") alertas.push({ tipo: "info", mensagem: `Caixa #${caixa.id} ainda está aberto.` });
+      if (!caixa.fechado_em) alertas.push({ tipo: "info", mensagem: `Fechamento do caixa #${caixa.id} ainda não realizado.` });
+      if (Math.abs(Number(caixa.diferenca || 0)) > 0.009) alertas.push({ tipo: "atencao", mensagem: `Diferença de R$ ${reportMoney(caixa.diferenca).toFixed(2)} no caixa #${caixa.id}.` });
+    });
+    maquinasResult.rows
+      .filter((item) => !Number(item.maquininha_id) && ["pix", "debito", "credito"].includes(item.forma_pagamento))
+      .forEach((item) => alertas.push({ tipo: "atencao", mensagem: `${item.quantidade} pagamento(s) em ${item.forma_pagamento} sem maquininha vinculada.` }));
+    const externo = formasResult.rows.filter((item) => ["vale_haver", "cartao_solocard", "cartao_brasil_card", "cartao_asu"].includes(item.forma_pagamento));
+    if (externo.length) alertas.push({ tipo: "info", mensagem: "Há pagamentos externos/manuais no relatório." });
+
+    const porMaquininha = Object.values(maquinasResult.rows.reduce((map, item) => {
+      const key = Number(item.maquininha_id || 0);
+      map[key] ||= {
+        maquininha_id: key || null,
+        maquininha_nome: item.maquininha,
+        codigo_externo: item.codigo_externo || item.pdv_codigo || item.mercado_pago_terminal_id || null,
+        terminal_tipo: item.terminal_tipo || null,
+        total: 0,
+        quantidade: 0,
+        formas: [],
+      };
+      const total = reportMoney(item.total);
+      map[key].total += total;
+      map[key].quantidade += Number(item.quantidade || 0);
+      map[key].formas.push({ forma_pagamento: item.forma_pagamento, label: item.forma_pagamento, quantidade: Number(item.quantidade || 0), total });
+      return map;
+    }, {})).map((item) => ({ ...item, total: reportMoney(item.total) }));
+
     res.json({
+      periodo: { data_inicio: dataInicio, data_fim: dataFim },
       filtros: {
         data_inicio: dataInicio,
         data_fim: dataFim,
@@ -538,10 +619,13 @@ async function relatorioCaixa(req, res) {
         forma_pagamento: formaPagamento || "todas",
         status: statusCaixa || "todos",
       },
+      caixa: caixaPrincipal,
+      caixas,
+      alertas,
       formas_disponiveis: FORMAS_RELATORIO,
       resumo: resumoResult.rows[0] || {},
       por_forma_pagamento: formasResult.rows,
-      por_maquininha: maquinasResult.rows,
+      por_maquininha: porMaquininha,
       vendas: vendasResult.rows,
     });
   } catch (error) {
