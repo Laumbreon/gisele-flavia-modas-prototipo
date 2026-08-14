@@ -167,6 +167,39 @@ tbody tr:last-child td { border-bottom: 0; }
 .pdv-actions { justify-content: space-between; }
 .pdv-open { max-width: 680px; }
 .pdv-history { margin-top: 18px; }
+.payment-options {
+  display: grid;
+  gap: 8px;
+}
+.payment-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 750;
+  cursor: pointer;
+}
+.payment-option:hover {
+  border-color: #d3a4bd;
+  background: #fff8fc;
+}
+.payment-option input {
+  width: auto;
+  accent-color: var(--pink);
+}
+.payment-option:has(input:checked) {
+  border-color: var(--pink);
+  background: var(--pink-soft);
+  box-shadow: 0 0 0 3px rgba(239,0,127,.08);
+}
+.payment-option-mixed {
+  border-style: dashed;
+}
 .cash-detail-cards { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .cash-detail-cards .metric strong { font-size: 22px; }
 .cash-difference { border-color: #f0b4be; background: #fff5f6; color: var(--danger); }

@@ -1,6 +1,21 @@
 const { pool } = require("../config/db");
 
-const FORMAS_PAGAMENTO = ["dinheiro", "pix", "debito", "credito"];
+const FORMAS_PAGAMENTO = [
+  "dinheiro",
+  "pix",
+  "debito",
+  "credito",
+  "vale_haver",
+  "cartao_solocard",
+  "cartao_brasil_card",
+  "cartao_asu",
+];
+const FORMAS_COM_MAQUININHA = ["pix", "debito", "credito"];
+
+function maquininhaPagamento(formaPagamento, maquininhaId) {
+  if (!FORMAS_COM_MAQUININHA.includes(formaPagamento)) return null;
+  return maquininhaId ? Number(maquininhaId) : null;
+}
 
 function toNumber(value, fallback = 0) {
   const number = Number(value);
@@ -43,16 +58,17 @@ function buildPagamentos(reqBody, totalVenda) {
     return reqBody.pagamentos.map((pagamento) => ({
       forma_pagamento: normalizeLower(pagamento.forma_pagamento),
       valor: roundMoney(pagamento.valor),
-      maquininha_id: pagamento.maquininha_id ? Number(pagamento.maquininha_id) : null,
+      maquininha_id: maquininhaPagamento(normalizeLower(pagamento.forma_pagamento), pagamento.maquininha_id),
       observacoes: normalizeOptional(pagamento.observacoes),
     }));
   }
 
+  const formaPagamento = normalizeLower(reqBody.forma_pagamento || "dinheiro");
   return [
     {
-      forma_pagamento: normalizeLower(reqBody.forma_pagamento || "dinheiro"),
+      forma_pagamento: formaPagamento,
       valor: roundMoney(totalVenda),
-      maquininha_id: reqBody.maquininha_id ? Number(reqBody.maquininha_id) : null,
+      maquininha_id: maquininhaPagamento(formaPagamento, reqBody.maquininha_id),
       observacoes: normalizeOptional(reqBody.observacoes),
       legacy: true,
     },

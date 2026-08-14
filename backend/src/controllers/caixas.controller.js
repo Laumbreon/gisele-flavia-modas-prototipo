@@ -1,7 +1,17 @@
 const { pool, query } = require("../config/db");
 const { importarVendasSitePendentes } = require("../services/caixa-site.service");
 
-const FORMAS_PAGAMENTO = ["dinheiro", "pix", "debito", "credito"];
+const FORMAS_PAGAMENTO = [
+  "dinheiro",
+  "pix",
+  "debito",
+  "credito",
+  "vale_haver",
+  "cartao_solocard",
+  "cartao_brasil_card",
+  "cartao_asu",
+];
+const FORMAS_CREDITO_EXTERNAS = ["credito", "vale_haver", "cartao_solocard", "cartao_brasil_card", "cartao_asu"];
 const TIPOS_MOVIMENTACAO_MANUAL = ["entrada", "saida", "sangria", "reforco"];
 
 function toMoney(value, fallback = 0) {
@@ -198,13 +208,13 @@ async function calcularTotaisSistema(client, caixaId, valorInicial) {
         COALESCE(SUM(CASE WHEN forma_pagamento = 'debito' THEN
           CASE WHEN tipo IN ('saida', 'sangria') THEN -valor ELSE valor END
         ELSE 0 END), 0) AS debito,
-        COALESCE(SUM(CASE WHEN forma_pagamento = 'credito' THEN
+        COALESCE(SUM(CASE WHEN forma_pagamento = ANY($2::text[]) THEN
           CASE WHEN tipo IN ('saida', 'sangria') THEN -valor ELSE valor END
         ELSE 0 END), 0) AS credito
       FROM caixa_movimentacoes
       WHERE caixa_id = $1;
     `,
-    [caixaId]
+    [caixaId, FORMAS_CREDITO_EXTERNAS]
   );
 
   const row = result.rows[0] || {};

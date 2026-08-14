@@ -1,6 +1,6 @@
 function formaCaixa(value) {
   const forma = String(value || "").toLowerCase();
-  if (["pix", "dinheiro", "debito", "credito"].includes(forma)) return forma;
+  if (["pix", "dinheiro", "debito", "credito", "vale_haver", "cartao_solocard", "cartao_brasil_card", "cartao_asu"].includes(forma)) return forma;
   if (["cartao", "credit_card"].includes(forma)) return "credito";
   if (forma === "debit_card") return "debito";
   return "pix";

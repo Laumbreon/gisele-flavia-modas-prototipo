@@ -3,7 +3,15 @@ const { enviarComprovanteVendaPaga } = require("../services/comprovante.service"
 const { consultarPagamento, cancelarPagamentoPendente } = require("../services/mercado-pago.service");
 const { registrarVendaSiteNoCaixa } = require("../services/caixa-site.service");
 
-const FORMAS_PAGAMENTO = new Set(["pix", "dinheiro", "cartao"]);
+const FORMAS_PAGAMENTO = new Set([
+  "pix",
+  "dinheiro",
+  "cartao",
+  "vale_haver",
+  "cartao_solocard",
+  "cartao_brasil_card",
+  "cartao_asu",
+]);
 const STATUS_ENTREGA = new Set(["pendente", "separando", "pronto_retirada", "saiu_entrega", "entregue", "cancelado"]);
 
 function idPedido(req, res) {
