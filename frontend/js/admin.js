@@ -117,6 +117,7 @@
   const paymentLabel = (value) => PAYMENT_LABELS[value] || (value === "misto" ? "Pagamento misto" : String(value || "—"));
   const paymentOptionsHtml = (selectedValue = "dinheiro") => `<div class="payment-options">${PAYMENT_METHODS.map((item) => `<label class="payment-option"><input type="radio" name="forma_pagamento" value="${item.value}" ${item.value === selectedValue ? "checked" : ""} required><span>${escapeHtml(item.label)}</span></label>`).join("")}<label class="payment-option payment-option-mixed"><input type="radio" name="forma_pagamento" value="misto" required><span>Pagamento misto</span></label></div>`;
   const exactCode = (value) => normalizeSearch(value).replace(/\s+/g, "");
+  const pdvPaymentValue = () => document.querySelector('[name="forma_pagamento"]:checked')?.value || document.querySelector('[data-form="pdv-sale"] [name="forma_pagamento"]')?.value || "";
 
   function toast(message, error = false) {
     toastElement.textContent = message;
@@ -271,9 +272,10 @@
   function updatePdvCashPayment() {
     const form = document.querySelector('[data-form="pdv-sale"]');
     if (!form) return;
-    const isCash = form.elements.forma_pagamento?.value === "dinheiro";
-    const isMixed = form.elements.forma_pagamento?.value === "misto";
-    const isCredit = form.elements.forma_pagamento?.value === "credito";
+    const payment = pdvPaymentValue();
+    const isCash = payment === "dinheiro";
+    const isMixed = payment === "misto";
+    const isCredit = payment === "credito";
     const field = document.getElementById("pdvCashReceivedField");
     const mixedField = document.getElementById("pdvMixedPaymentField");
     const installmentsField = document.getElementById("pdvInstallmentsField");
@@ -303,6 +305,23 @@
     }
   }
 
+  function preparePdvOperationalLayout() {
+    const layout = document.querySelector(".pdv-layout");
+    const checkout = document.querySelector(".pdv-checkout");
+    const form = document.querySelector('[data-form="pdv-sale"]');
+    if (!layout || !checkout || !form || document.querySelector(".pdv-payment-panel")) return;
+    form.id = form.id || "pdvSaleForm";
+    const paymentField = [...form.querySelectorAll(".field")].find((field) => field.querySelector(".payment-options"));
+    if (!paymentField) return;
+    paymentField.classList.add("pdv-payment-field");
+    paymentField.querySelectorAll('[name="forma_pagamento"]').forEach((input) => input.setAttribute("form", form.id));
+    const panel = document.createElement("section");
+    panel.className = "section pdv-payment-panel";
+    panel.innerHTML = "<h2>Forma de pagamento</h2>";
+    panel.appendChild(paymentField);
+    layout.insertBefore(panel, checkout);
+  }
+
   function cashHistoryHtml() {
     return `<section class="section pdv-history"><div class="section-heading"><h2>Histórico de caixas</h2><span class="muted">Últimos ${state.cashHistory.length} registros</span></div>${state.cashHistory.length ? `<div class="table-wrap"><table><thead><tr><th>Caixa</th><th>Abertura</th><th>Fechamento</th><th>Responsável</th><th>Total sistema</th><th>Total informado</th><th>Diferença</th><th>Status</th><th>Ações</th></tr></thead><tbody>${state.cashHistory.map((item) => `<tr><td><strong>#${item.id}</strong></td><td>${date(item.data_abertura)}</td><td>${item.data_fechamento ? date(item.data_fechamento) : "—"}</td><td>${escapeHtml(item.usuario_abertura || "—")}</td><td>${money(item.total_sistema)}</td><td>${item.status === "fechado" ? money(item.total_informado) : "—"}</td><td>${item.status === "fechado" ? money(item.divergencia) : "—"}</td><td><span class="badge ${item.status === "aberto" ? "pending" : ""}">${escapeHtml(item.status)}</span></td><td><div class="actions"><button class="btn secondary small" data-action="cash-details" data-id="${item.id}">Detalhes</button><button class="btn secondary small" data-action="edit-cash" data-id="${item.id}">Editar</button><button class="btn secondary small" data-action="delete-cash" data-id="${item.id}">Excluir</button></div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhum histórico de caixa encontrado.")}</section>`;
   }
@@ -326,6 +345,7 @@
       .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(normalizeSearch(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""} ${variation.codigo_ref || ""}`))}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span>${variation.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(variation.codigo_ref)}</small>` : ""}<small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
     view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field full"><label>Forma de pagamento</label>${paymentOptionsHtml()}</div><div class="field" id="pdvInstallmentsField" hidden><label>Parcelamento sem juros</label><select name="parcelas"><option value="1">1x sem juros</option><option value="2">2x sem juros</option><option value="3">3x sem juros</option></select></div><div class="field full" id="pdvCashReceivedField"><label>Valor entregue pela cliente (R$)</label><input name="valor_recebido_dinheiro" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"><small id="pdvCashChange">Informe quanto a cliente entregou para calcular o troco.</small></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div><div class="field full"><label class="checkbox"><input name="pagamento_confirmado" type="checkbox" required> Confirmo que o pagamento foi recebido</label><small>A venda e a baixa no estoque só serão registradas após esta confirmação.</small></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
     preparePdvSearchArea();
+    preparePdvOperationalLayout();
     ensurePdvMixedPaymentFields();
     updatePdvCashPayment();
     const machineSelect = view.querySelector('[name="maquininha_id"]');
@@ -345,7 +365,7 @@
 
   function pdvPointStatusHtml() {
     const machine = selectedPdvMachine();
-    const payment = document.querySelector('[data-form="pdv-sale"] [name="forma_pagamento"]')?.value;
+    const payment = pdvPaymentValue();
     if (EXTERNAL_PAYMENT_METHODS.includes(payment)) return `<p><b>${escapeHtml(paymentLabel(payment))}:</b> registre como pagamento manual externo. Não há cobrança Mercado Pago/Point para esta forma.</p>`;
     if (![...POINT_PAYMENT_METHODS,"misto"].includes(payment)) return `<p>Selecione Pix, débito, crédito ou pagamento misto para usar uma maquininha.</p>`;
     if (!machine) return `<p>${payment === "pix" ? "A maquininha é opcional para Pix." : "Selecione a maquininha utilizada no pagamento."}</p>`;
@@ -991,6 +1011,10 @@
     return state.machines.find((item) => Number(item.id) === id) || null;
   }
 
+  function isPdvSaleControl(target, names) {
+    return names.includes(target.name) && (target.closest('[data-form="pdv-sale"]') || target.getAttribute("form") === "pdvSaleForm");
+  }
+
   async function sendPdvPointOrder() {
     if (!state.pdvCart.length) throw new Error("Adicione produtos antes de enviar a cobrança.");
     const form = document.querySelector('[data-form="pdv-sale"]'), data = formObject(form), machine = selectedPdvMachine(), totals = pdvTotals();
@@ -1388,9 +1412,9 @@
   }
 
   async function handleChange(event) {
-    if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="maquininha_id"], [data-form="pdv-sale"] [name="parcelas"]')) invalidatePdvPoint();
-    if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="maquininha_id"]')) updatePdvMachinePaymentUi();
-    if (event.target.matches('[data-form="pdv-sale"] [name="forma_pagamento"], [data-form="pdv-sale"] [name="valor_recebido_dinheiro"], [data-form="pdv-sale"] [name="pdv_desconto"]')) updatePdvCashPayment();
+    if (isPdvSaleControl(event.target, ["forma_pagamento", "maquininha_id", "parcelas"])) invalidatePdvPoint();
+    if (isPdvSaleControl(event.target, ["forma_pagamento", "maquininha_id"])) updatePdvMachinePaymentUi();
+    if (isPdvSaleControl(event.target, ["forma_pagamento", "valor_recebido_dinheiro", "pdv_desconto"])) updatePdvCashPayment();
     const select = event.target.closest('[data-action="delivery-status"]');
     if (select) {
       try { const result = await request(`/pedidos-site/${select.dataset.id}/status-entrega`, { method: "POST", body: JSON.stringify({ status_entrega: select.value }) }); toast(result.message); }
