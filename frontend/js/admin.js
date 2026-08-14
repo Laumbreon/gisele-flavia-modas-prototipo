@@ -300,9 +300,19 @@
       installmentsField.style.display = isCredit ? "" : "none";
     }
     const change = document.getElementById("pdvCashChange");
-    if (change) change.textContent = isCash && received >= total
-      ? `Troco a devolver: ${money(received - total)}`
-      : "Informe quanto a cliente entregou para calcular o troco.";
+    if (change) {
+      const difference = Math.round((received - total) * 100) / 100;
+      change.className = "pdv-change-box";
+      if (isCash && difference > 0) {
+        change.classList.add("is-positive");
+        change.innerHTML = `<span class="pdv-change-label">Troco a devolver</span><strong class="pdv-change-value">${money(difference)}</strong>`;
+      } else if (isCash && received > 0 && difference < 0) {
+        change.classList.add("is-pending");
+        change.innerHTML = `<span class="pdv-change-label">Falta receber</span><strong class="pdv-change-value">${money(Math.abs(difference))}</strong>`;
+      } else {
+        change.textContent = "Informe quanto a cliente entregou para calcular o troco.";
+      }
+    }
     const mixedStatus = document.getElementById("pdvMixedStatus");
     if (mixedStatus) {
       const mixedPaid = MIXED_PAYMENT_METHODS.reduce((sum, method) => sum + Number(form.elements[`misto_${method}`]?.value || 0), 0);

@@ -169,6 +169,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .pdv-totals { display: grid; gap: 8px; padding: 16px 0; }
 .pdv-totals span { display: flex; justify-content: space-between; gap: 12px; }
 .pdv-totals .pdv-total { padding-top: 10px; border-top: 1px solid var(--line); font-size: 19px; }
+.pdv-change-box { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.pdv-change-box.is-positive, .pdv-change-box.is-pending { padding: 12px 14px; border-radius: 12px; }
+.pdv-change-box.is-positive { border: 1px solid rgba(248,0,128,.32); background: linear-gradient(135deg, #fff7fb, #fff1f8); box-shadow: 0 8px 20px rgba(248,0,128,.1); color: var(--pink-dark); }
+.pdv-change-box.is-pending { border: 1px solid rgba(212,175,55,.45); background: #fffaf0; color: #7a5a00; }
+.pdv-change-label { display: block; font-size: 11px; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
+.pdv-change-value { display: block; margin-top: 3px; font-size: 28px; line-height: 1; color: var(--pink); }
+.pdv-change-box.is-pending .pdv-change-value { font-size: 18px; color: #7a5a00; }
 .pdv-actions { justify-content: space-between; }
 .pdv-open { max-width: 680px; }
 .pdv-history { margin-top: 18px; }
