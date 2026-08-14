@@ -266,7 +266,13 @@
   function ensurePdvMixedPaymentFields() {
     const paymentSelect = view.querySelector('[name="forma_pagamento"]');
     if (paymentSelect?.tagName === "SELECT" && !paymentSelect.querySelector('option[value="misto"]')) paymentSelect.insertAdjacentHTML("beforeend", '<option value="misto">Pagamento misto</option>');
-    if (!document.getElementById("pdvMixedPaymentField")) document.getElementById("pdvCashReceivedField")?.insertAdjacentHTML("afterend", `<div class="field full" id="pdvMixedPaymentField" hidden><label>Distribuição do pagamento</label><div class="field-grid">${MIXED_PAYMENT_METHODS.map((method) => `<div class="field"><label>${escapeHtml(paymentLabel(method))} (R$)</label><input name="misto_${method}" type="number" min="0" step="0.01" value="0" inputmode="decimal"></div>`).join("")}</div><strong id="pdvMixedStatus">Distribua o total entre pelo menos duas formas.</strong></div>`);
+    const mixedHtml = `<div class="field full" id="pdvMixedPaymentField" hidden><label>Distribuição</label><div class="field-grid">${MIXED_PAYMENT_METHODS.map((method) => `<div class="field"><label>${escapeHtml(paymentLabel(method))} (R$)</label><input name="misto_${method}" type="number" min="0" step="0.01" value="0" inputmode="decimal" form="pdvSaleForm"></div>`).join("")}</div><strong id="pdvMixedStatus">Distribua o total entre pelo menos duas formas.</strong></div>`;
+    if (!document.getElementById("pdvMixedPaymentField")) {
+      const paymentField = document.querySelector(".pdv-payment-field");
+      if (paymentField) paymentField.insertAdjacentHTML("beforeend", mixedHtml);
+      else document.getElementById("pdvCashReceivedField")?.insertAdjacentHTML("afterend", mixedHtml);
+    }
+    document.querySelectorAll('#pdvMixedPaymentField [name^="misto_"]').forEach((input) => input.setAttribute("form", "pdvSaleForm"));
   }
 
   function updatePdvCashPayment() {
