@@ -116,6 +116,7 @@
   const EXTERNAL_PAYMENT_METHODS = PAYMENT_METHODS.filter((item) => item.external).map((item) => item.value);
   const paymentLabel = (value) => PAYMENT_LABELS[value] || (value === "misto" ? "Pagamento misto" : String(value || "—"));
   const paymentOptionsHtml = (selectedValue = "dinheiro") => `<div class="payment-options">${PAYMENT_METHODS.map((item) => `<label class="payment-option"><input type="radio" name="forma_pagamento" value="${item.value}" ${item.value === selectedValue ? "checked" : ""} required><span>${escapeHtml(item.label)}</span></label>`).join("")}<label class="payment-option payment-option-mixed"><input type="radio" name="forma_pagamento" value="misto" required><span>Pagamento misto</span></label></div>`;
+  const exactCode = (value) => normalizeSearch(value).replace(/\s+/g, "");
 
   function toast(message, error = false) {
     toastElement.textContent = message;
@@ -324,6 +325,7 @@
       .filter((variation) => variation.ativo !== false && Number(variation.quantidade_estoque) > 0)
       .map((variation) => `<button type="button" class="pdv-product" data-action="pdv-add" data-id="${variation.id}" data-search="${escapeHtml(normalizeSearch(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""} ${variation.codigo_ref || ""}`))}"><strong>${escapeHtml(product.nome)}</strong><span>${escapeHtml(variation.tamanho)} · ${escapeHtml(variation.cor)}</span>${variation.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(variation.codigo_ref)}</small>` : ""}<small>${Number(variation.quantidade_estoque)} em estoque</small><b>${money(pdvUnitPrice(product, variation))}</b></button>`)).join("");
     view.innerHTML = `<div class="pdv-status"><div><span class="badge">Caixa #${cash.id} aberto</span><span>Inicial: <strong>${money(cash.valor_inicial)}</strong></span></div><button type="button" class="btn danger small" data-action="pdv-close-cash">Fechar caixa</button></div><div class="pdv-layout"><section class="section pdv-catalog"><div class="section-heading"><h2>Produtos</h2><span class="muted">${state.pdvProducts.length} produto(s)</span></div><div class="field"><label for="pdvSearch">Buscar por nome, tamanho, cor ou código</label><input id="pdvSearch" name="pdv_busca" type="search" autocomplete="off" placeholder="Digite para buscar..."></div><div id="pdvProducts" class="pdv-products">${productCards || empty("Nenhum produto com estoque disponível.")}</div></section><section class="section pdv-checkout"><h2>Venda atual</h2><div id="pdvCart">${pdvCartHtml()}</div><form data-form="pdv-sale"><div class="field-grid"><div class="field full"><label>Cliente (opcional)</label><select name="cliente_id"><option value="">Consumidor não identificado</option>${customers.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}${item.telefone ? ` — ${escapeHtml(item.telefone)}` : ""}</option>`).join("")}</select></div><div class="field"><label>Desconto (R$)</label><input name="pdv_desconto" type="number" min="0" step="0.01" value="0"></div><div class="field full"><label>Forma de pagamento</label>${paymentOptionsHtml()}</div><div class="field" id="pdvInstallmentsField" hidden><label>Parcelamento sem juros</label><select name="parcelas"><option value="1">1x sem juros</option><option value="2">2x sem juros</option><option value="3">3x sem juros</option></select></div><div class="field full" id="pdvCashReceivedField"><label>Valor entregue pela cliente (R$)</label><input name="valor_recebido_dinheiro" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"><small id="pdvCashChange">Informe quanto a cliente entregou para calcular o troco.</small></div><div class="field full"><label>Maquininha (cartões)</label><select name="maquininha_id"><option value="">Nenhuma</option>${state.machines.map((item) => `<option value="${item.id}">${escapeHtml(item.nome)}</option>`).join("")}</select></div><div class="field full"><label class="checkbox"><input name="pagamento_confirmado" type="checkbox" required> Confirmo que o pagamento foi recebido</label><small>A venda e a baixa no estoque só serão registradas após esta confirmação.</small></div></div><div class="form-actions pdv-actions"><button type="button" class="btn secondary" data-action="pdv-clear">Limpar</button><button class="btn" ${state.pdvCart.length ? "" : "disabled"}>Finalizar venda</button></div></form></section></div>${cashHistoryHtml()}`;
+    preparePdvSearchArea();
     ensurePdvMixedPaymentFields();
     updatePdvCashPayment();
     const machineSelect = view.querySelector('[name="maquininha_id"]');
@@ -337,6 +339,8 @@
       actions?.insertAdjacentHTML("beforebegin", `<div id="pdvPointStatus" class="point-payment-box">${pdvPointStatusHtml()}</div>`);
       updatePdvMachinePaymentUi();
     }
+    updatePdvProductSearch("");
+    setTimeout(() => document.getElementById("pdvSearch")?.focus(), 40);
   }
 
   function pdvPointStatusHtml() {
@@ -374,6 +378,85 @@
       if (variation) return { product, variation };
     }
     return null;
+  }
+
+  function pdvSearchText(product, variation) {
+    return normalizeSearch(`${product.nome} ${product.categoria} ${variation.tamanho} ${variation.cor} ${variation.sku || ""} ${variation.codigo_barras || ""} ${variation.codigo_ref || ""} ${variation.codigo_interno || ""}`);
+  }
+
+  function pdvSearchableVariations() {
+    return state.pdvProducts.flatMap((product) => (product.variacoes || [])
+      .filter((variation) => product.ativo !== false && variation.ativo !== false && Number(variation.quantidade_estoque) > 0)
+      .map((variation) => ({ product, variation })));
+  }
+
+  function preparePdvSearchArea() {
+    const searchInput = document.getElementById("pdvSearch");
+    const searchLabel = document.querySelector('label[for="pdvSearch"]');
+    const productsBox = document.getElementById("pdvProducts");
+    if (searchLabel) searchLabel.textContent = "Buscar por nome, tamanho, cor, REF ou código de barras";
+    if (searchInput) searchInput.placeholder = "Digite ou leia o código e pressione Enter...";
+    if (productsBox && !document.getElementById("pdvSearchHint")) {
+      productsBox.insertAdjacentHTML("afterbegin", `<div id="pdvSearchHint" class="pdv-search-message">Pesquise por nome, tamanho, cor, REF ou código de barras para adicionar produtos.</div>`);
+    }
+    document.querySelectorAll(".pdv-product").forEach((card) => {
+      const found = findPdvVariation(Number(card.dataset.id));
+      if (found) card.dataset.search = pdvSearchText(found.product, found.variation);
+      card.hidden = true;
+    });
+  }
+
+  function findExactPdvCode(rawCode) {
+    const code = exactCode(rawCode);
+    if (!code) return null;
+    return pdvSearchableVariations().find(({ variation }) => [variation.codigo_barras, variation.codigo_ref, variation.sku, variation.codigo_interno]
+      .some((value) => value && exactCode(value) === code)) || null;
+  }
+
+  function updatePdvProductSearch(rawValue) {
+    const search = normalizeSearch(rawValue);
+    const cards = [...document.querySelectorAll(".pdv-product")];
+    const hint = document.getElementById("pdvSearchHint");
+    if (!cards.length) return 0;
+    if (search.length < 2) {
+      cards.forEach((card) => { card.hidden = true; });
+      if (hint) {
+        hint.hidden = false;
+        hint.textContent = "Pesquise por nome, tamanho, cor, REF ou código de barras para adicionar produtos.";
+      }
+      return 0;
+    }
+    let matches = 0;
+    cards.forEach((card) => {
+      const match = card.dataset.search.includes(search);
+      card.hidden = !match;
+      if (match) matches += 1;
+    });
+    if (hint) {
+      hint.hidden = matches > 0;
+      hint.textContent = matches ? "" : "Nenhum produto encontrado para este código.";
+    }
+    return matches;
+  }
+
+  function handlePdvSearchEnter(event) {
+    if (event.key !== "Enter" || event.target.id !== "pdvSearch") return;
+    event.preventDefault();
+    const input = event.target;
+    const rawValue = input.value.trim();
+    if (!rawValue) return;
+    const found = findExactPdvCode(rawValue);
+    if (found) {
+      changePdvItem(Number(found.variation.id), 1);
+      input.value = "";
+      updatePdvProductSearch("");
+      input.focus();
+      toast(`${found.product.nome} adicionado ao carrinho.`);
+      return;
+    }
+    const matches = updatePdvProductSearch(rawValue);
+    input.focus();
+    if (!matches) toast("Nenhum produto encontrado para este código.", true);
   }
 
   function changePdvItem(variationId, change) {
@@ -1334,11 +1417,13 @@
       if (event.target.name === "valor_recebido_dinheiro") updatePdvCashPayment();
       if (event.target.name?.startsWith("misto_")) updatePdvCashPayment();
       if (event.target.name === "pdv_busca") {
-        const search = normalizeSearch(event.target.value);
-        document.querySelectorAll(".pdv-product").forEach((item) => { item.hidden = Boolean(search && !item.dataset.search.includes(search)); });
+        updatePdvProductSearch(event.target.value);
       }
     });
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !modal.hidden) closeModal(); });
+    document.addEventListener("keydown", (event) => {
+      handlePdvSearchEnter(event);
+      if (event.key === "Escape" && !modal.hidden) closeModal();
+    });
   }
 
   async function init() {
