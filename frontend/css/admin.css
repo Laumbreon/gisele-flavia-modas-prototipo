@@ -56,9 +56,28 @@ button { cursor: pointer; }
 .btn.danger { background: var(--danger); }
 .btn.small { min-height: 32px; padding: 6px 10px; font-size: 12px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 16px; }
-.card { padding: 21px; border: 1px solid var(--line); border-radius: 17px; background: var(--paper); box-shadow: 0 8px 25px rgba(66,16,42,.04); }
-.metric small { color: var(--muted); font-weight: 650; }
-.metric strong { display: block; margin-top: 10px; font: 700 31px Georgia,serif; }
+.card { min-width: 0; padding: 21px; border: 1px solid var(--line); border-radius: 17px; background: var(--paper); box-shadow: 0 8px 25px rgba(66,16,42,.04); overflow: hidden; }
+.metric { min-width: 0; overflow: hidden; }
+.metric small {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.metric strong {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 10px;
+    font: 700 clamp(18px, 1.55vw, 25px)/1.05 Georgia,serif;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
 .metric.accent { color: #fff; border: 0; background: linear-gradient(135deg,var(--pink),#b90063); }
 .metric.accent small { color: #ffe0f0; }
 .grid-two { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(280px,.75fr); gap: 18px; margin-top: 18px; }
@@ -219,32 +238,37 @@ tbody tr:last-child td { border-bottom: 0; }
 #pdvMixedPaymentField input { padding-block: 9px; }
 #pdvMixedStatus { display: block; margin-top: 10px; color: var(--pink-dark); font-size: 13px; }
 .cash-detail-cards { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.cash-detail-cards .metric strong { font-size: 22px; }
+.cash-detail-cards .metric strong { font-size: clamp(18px, 1.45vw, 22px); }
 .cash-difference { border-color: #f0b4be; background: #fff5f6; color: var(--danger); }
 .cash-report-filters { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 12px; align-items: end; margin-bottom: 18px; }
 .cash-report-actions { grid-column: 1 / -1; justify-content: flex-end; }
-.cash-report-cards { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); margin-bottom: 18px; }
+.cash-report-cards { grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); margin-bottom: 18px; }
 .cash-report .cash-report-cards .metric {
     min-width: 0;
+    overflow: hidden;
     padding: clamp(14px, 1.8vw, 18px);
 }
 .cash-report .cash-report-cards .metric small {
     display: block;
-    font-size: clamp(11px, 0.95vw, 13px);
-    line-height: 1.2;
+    max-width: 100%;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
 }
 .cash-report .cash-report-cards .metric strong {
     margin-top: 7px;
     max-width: 100%;
-    font-size: clamp(18px, 1.8vw, 24px);
+    min-width: 0;
+    font-size: clamp(17px, 1.45vw, 22px);
     line-height: 1.05;
+    white-space: normal;
+    overflow-wrap: anywhere;
     word-break: normal;
-    overflow-wrap: normal;
-    white-space: nowrap;
 }
 .cash-report .cash-report-cards .cash-ok strong,
 .cash-report .cash-report-cards .cash-difference strong {
-    font-size: clamp(17px, 1.65vw, 23px);
+    font-size: clamp(16px, 1.35vw, 21px);
 }
 .cash-report-grid { align-items: start; margin-bottom: 18px; }
 .cash-report h3 { margin: 0 0 10px; color: var(--pink-dark); }
