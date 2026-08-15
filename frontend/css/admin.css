@@ -224,6 +224,28 @@ tbody tr:last-child td { border-bottom: 0; }
 .cash-report-filters { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 12px; align-items: end; margin-bottom: 18px; }
 .cash-report-actions { grid-column: 1 / -1; justify-content: flex-end; }
 .cash-report-cards { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); margin-bottom: 18px; }
+.cash-report .cash-report-cards .metric {
+    min-width: 0;
+    padding: clamp(14px, 1.8vw, 18px);
+}
+.cash-report .cash-report-cards .metric small {
+    display: block;
+    font-size: clamp(11px, 0.95vw, 13px);
+    line-height: 1.2;
+}
+.cash-report .cash-report-cards .metric strong {
+    margin-top: 7px;
+    max-width: 100%;
+    font-size: clamp(18px, 1.8vw, 24px);
+    line-height: 1.05;
+    word-break: normal;
+    overflow-wrap: normal;
+    white-space: nowrap;
+}
+.cash-report .cash-report-cards .cash-ok strong,
+.cash-report .cash-report-cards .cash-difference strong {
+    font-size: clamp(17px, 1.65vw, 23px);
+}
 .cash-report-grid { align-items: start; margin-bottom: 18px; }
 .cash-report h3 { margin: 0 0 10px; color: var(--pink-dark); }
 .cash-ok { border-color: #b9e4c7; background: #f3fff7; }
