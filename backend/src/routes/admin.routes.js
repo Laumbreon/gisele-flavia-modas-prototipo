@@ -4,6 +4,12 @@ const adminController = require("../controllers/admin.controller");
 const permissoes = require("../middlewares/permissoes.middleware");
 
 const router = express.Router();
+router.get(
+  "/correios/status",
+  authMiddleware,
+  permissoes(["configuracoes.editar"]),
+  adminController.statusCorreios
+);
 router.post(
   "/validar-pin",
   authMiddleware,

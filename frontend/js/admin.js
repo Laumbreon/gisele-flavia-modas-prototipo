@@ -612,6 +612,11 @@
         <div class="field"><label>Preço promocional (R$)</label><input name="preco_promocional" type="number" min="0" step="0.01" value="${escapeHtml(valueOrEmpty(product?.preco_promocional))}"></div>
         <div class="field"><label class="checkbox"><input name="ativo" type="checkbox" ${product?.ativo !== false ? "checked" : ""}> Produto visível na loja</label></div>
         <div class="field full"><label>Descrição</label><textarea name="descricao" maxlength="5000">${escapeHtml(product?.descricao || "")}</textarea></div>
+        <div class="field full help"><strong>Dados para envio Correios</strong><br><small>Opcionais nesta fase. Informe as medidas da peça já embalada.</small></div>
+        <div class="field"><label>Peso embalado (gramas)</label><input name="peso_gramas" type="number" min="1" step="1" value="${escapeHtml(valueOrEmpty(product?.peso_gramas))}" placeholder="Ex.: 350"></div>
+        <div class="field"><label>Comprimento (cm)</label><input name="comprimento_cm" type="number" min="0.01" step="0.01" value="${escapeHtml(valueOrEmpty(product?.comprimento_cm))}" placeholder="Ex.: 25"></div>
+        <div class="field"><label>Largura (cm)</label><input name="largura_cm" type="number" min="0.01" step="0.01" value="${escapeHtml(valueOrEmpty(product?.largura_cm))}" placeholder="Ex.: 18"></div>
+        <div class="field"><label>Altura (cm)</label><input name="altura_cm" type="number" min="0.01" step="0.01" value="${escapeHtml(valueOrEmpty(product?.altura_cm))}" placeholder="Ex.: 6"></div>
         ${product ? "" : `<div class="field"><label>Tamanho inicial</label><input name="tamanho" value="Único" required></div><div class="field"><label>Cor inicial</label><input name="cor" value="Única" required></div><div class="field"><label>Estoque inicial</label><input name="estoque" type="number" min="0" step="1" value="0" required></div>`}
       </div>
       <div class="form-actions"><button type="button" class="btn secondary" data-close-modal>Cancelar</button><button class="btn">${product ? "Salvar alterações" : "Cadastrar e adicionar fotos"}</button></div>
@@ -647,7 +652,7 @@
     view.innerHTML = `
       <div class="page-actions"><div><button class="btn secondary small" data-nav="products">← Voltar aos produtos</button><p>Produto #${product.id}</p></div><span class="badge ${product.ativo ? "" : "inactive"}">${product.ativo ? "Visível na loja" : "Arquivado"}</span></div>
       <section class="section"><div class="section-heading"><h2>Dados do produto</h2><button class="btn secondary small" data-action="edit-product-data">Editar dados</button></div>
-        <div class="field-grid"><div><strong>${escapeHtml(product.nome)}</strong><p class="muted">${escapeHtml(product.categoria)} · ${money(product.preco_promocional || product.preco)}</p></div><div><strong>${Number(product.estoque_total || 0)} unidade(s)</strong><p class="muted">Estoque total de todas as variações</p></div><div class="field full help">${escapeHtml(product.descricao || "Sem descrição cadastrada.")}</div></div>
+        <div class="field-grid"><div><strong>${escapeHtml(product.nome)}</strong><p class="muted">${escapeHtml(product.categoria)} · ${money(product.preco_promocional || product.preco)}</p></div><div><strong>${Number(product.estoque_total || 0)} unidade(s)</strong><p class="muted">Estoque total de todas as variações</p></div><div class="field full help">${escapeHtml(product.descricao || "Sem descrição cadastrada.")}</div><div class="field full help"><strong>Dados para envio Correios</strong><br>${product.peso_gramas ? `${Number(product.peso_gramas)} g` : "Peso não informado"} · ${product.comprimento_cm && product.largura_cm && product.altura_cm ? `${Number(product.comprimento_cm)} × ${Number(product.largura_cm)} × ${Number(product.altura_cm)} cm` : "Dimensões não informadas"}</div></div>
       </section>
       <section class="section"><div class="section-heading"><h2>Variações e estoque</h2><button class="btn small" data-action="new-variation">＋ Adicionar variação</button></div>
         ${variations.length ? `<div class="table-wrap"><table><thead><tr><th>Tamanho</th><th>Cor</th><th>SKU / REF</th><th>Estoque</th><th>Preço</th><th>Ações</th></tr></thead><tbody>${variations.map((item) => `<tr><td>${escapeHtml(item.tamanho)}</td><td>${escapeHtml(item.cor)}</td><td>${escapeHtml(item.sku || "—")}${item.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(item.codigo_ref)}</small>` : ""}</td><td>${Number(item.quantidade_estoque || 0)}</td><td>${item.preco_venda == null ? "Preço do produto" : money(item.preco_venda)}</td><td><div class="actions"><button class="btn secondary small" data-action="edit-variation" data-id="${item.id}">Editar</button><button class="btn secondary small" data-action="delete-variation" data-id="${item.id}">Remover</button></div></td></tr>`).join("")}</tbody></table></div>` : empty("Nenhuma variação cadastrada.")}
@@ -996,7 +1001,8 @@
   async function submitProduct(form) {
     const data = formObject(form);
     const id = form.dataset.id;
-    const payload = { nome: data.nome, categoria: data.categoria, descricao: data.descricao, preco: Number(data.preco), preco_promocional: data.preco_promocional === "" ? null : Number(data.preco_promocional), ativo: form.elements.ativo.checked };
+    const optionalNumber = (value) => value === "" ? null : Number(value);
+    const payload = { nome: data.nome, categoria: data.categoria, descricao: data.descricao, preco: Number(data.preco), preco_promocional: optionalNumber(data.preco_promocional), peso_gramas: optionalNumber(data.peso_gramas), comprimento_cm: optionalNumber(data.comprimento_cm), largura_cm: optionalNumber(data.largura_cm), altura_cm: optionalNumber(data.altura_cm), ativo: form.elements.ativo.checked };
     if (!id) payload.variacoes = [{ tamanho: data.tamanho, cor: data.cor, quantidade_inicial: Number(data.estoque || 0), estoque_minimo: 0 }];
     const product = await request(id ? `/produtos/${id}` : "/produtos", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
     closeModal(); toast(id ? "Produto atualizado." : "Produto cadastrado. Agora adicione as fotos.");

@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const { query } = require("../config/db");
+const { obterStatusConfiguracaoCorreios } = require("../services/correios-token.service");
 
 async function validarPin(req, res) {
   const pin = String(req.body.pin || "");
@@ -15,4 +16,8 @@ async function validarPin(req, res) {
   }
 }
 
-module.exports = { validarPin };
+function statusCorreios(_req, res) {
+  res.json(obterStatusConfiguracaoCorreios());
+}
+
+module.exports = { validarPin, statusCorreios };

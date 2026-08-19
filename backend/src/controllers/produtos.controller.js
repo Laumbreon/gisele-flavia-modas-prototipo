@@ -69,6 +69,10 @@ function produtosSql(whereClause = "", somenteVariacoesAtivas = false) {
       p.preco,
       p.preco_promocional,
       p.descricao,
+      p.peso_gramas,
+      p.comprimento_cm,
+      p.largura_cm,
+      p.altura_cm,
       (p.status = 'ativo') AS ativo,
       COALESCE(v.estoque_total, 0)::int AS estoque_total,
       COALESCE(v.variacoes, '[]'::json) AS variacoes,
@@ -418,14 +422,25 @@ async function buscarProdutoPorCodigo(req, res) {
 const inteiroPositivo = value => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
 const textoV2 = (value, limite = 5000) => String(value ?? "").trim().slice(0, limite);
 const numeroNaoNegativo = value => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+const numeroPositivoOpcional = (value, inteiro = false) => {
+  if (value === null || value === undefined || value === "") return { valor: null };
+  const numero = Number(value);
+  if (!Number.isFinite(numero) || numero <= 0 || inteiro && !Number.isInteger(numero)) return { erro: true };
+  return { valor: numero };
+};
 
 function validarProduto(body) {
   const nome = textoV2(body.nome, 140), categoria = textoV2(body.categoria, 80);
   const preco = numeroNaoNegativo(body.preco);
   const promocional = body.preco_promocional === null || body.preco_promocional === "" || body.preco_promocional === undefined ? null : numeroNaoNegativo(body.preco_promocional);
+  const peso = numeroPositivoOpcional(body.peso_gramas, true);
+  const comprimento = numeroPositivoOpcional(body.comprimento_cm);
+  const largura = numeroPositivoOpcional(body.largura_cm);
+  const altura = numeroPositivoOpcional(body.altura_cm);
   if (!nome || !categoria) return { erro: "Nome e categoria são obrigatórios." };
   if (preco === null || promocional === null && body.preco_promocional !== null && body.preco_promocional !== "" && body.preco_promocional !== undefined) return { erro: "Informe preços válidos e não negativos." };
-  return { nome, categoria, preco, promocional, descricao: textoV2(body.descricao), status: body.ativo === false || body.status === "inativo" ? "inativo" : "ativo" };
+  if (peso.erro || comprimento.erro || largura.erro || altura.erro) return { erro: "Peso e dimensões para envio devem ser números positivos. O peso deve ser informado em gramas inteiras." };
+  return { nome, categoria, preco, promocional, descricao: textoV2(body.descricao), status: body.ativo === false || body.status === "inativo" ? "inativo" : "ativo", peso_gramas: peso.valor, comprimento_cm: comprimento.valor, largura_cm: largura.valor, altura_cm: altura.valor };
 }
 
 async function codigoUnicoParaVariacao(client, produtoNome, produtoCategoria, variacao, ignorarId = null) {
@@ -467,7 +482,7 @@ async function criarProduto(req, res) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const produto = (await client.query(`INSERT INTO produtos (nome,categoria,descricao,preco,preco_promocional,status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`, [dados.nome, dados.categoria, dados.descricao || null, dados.preco, dados.promocional, dados.status])).rows[0];
+    const produto = (await client.query(`INSERT INTO produtos (nome,categoria,descricao,preco,preco_promocional,status,peso_gramas,comprimento_cm,largura_cm,altura_cm) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [dados.nome, dados.categoria, dados.descricao || null, dados.preco, dados.promocional, dados.status, dados.peso_gramas, dados.comprimento_cm, dados.largura_cm, dados.altura_cm])).rows[0];
     for (const variacao of Array.isArray(req.body.variacoes) ? req.body.variacoes : []) await inserirVariacao(client, produto.id, produto.nome, produto.categoria, variacao);
     await client.query("COMMIT");
     const completo = await query(produtosSql("WHERE p.id=$1"), [produto.id]); res.status(201).json(completo.rows[0]);
@@ -477,7 +492,7 @@ async function criarProduto(req, res) {
 
 async function atualizarProduto(req, res) {
   const id = inteiroPositivo(req.params.id), dados = validarProduto(req.body || {}); if (!id) return res.status(400).json({ message: "Produto inválido." }); if (dados.erro) return res.status(400).json({ message: dados.erro });
-  try { const result = await query(`UPDATE produtos SET nome=$2,categoria=$3,descricao=$4,preco=$5,preco_promocional=$6,status=$7,updated_at=NOW() WHERE id=$1 RETURNING *`, [id, dados.nome, dados.categoria, dados.descricao || null, dados.preco, dados.promocional, dados.status]); if (!result.rows[0]) return res.status(404).json({ message: "Produto não encontrado." }); res.json(result.rows[0]); }
+  try { const result = await query(`UPDATE produtos SET nome=$2,categoria=$3,descricao=$4,preco=$5,preco_promocional=$6,status=$7,peso_gramas=$8,comprimento_cm=$9,largura_cm=$10,altura_cm=$11,updated_at=NOW() WHERE id=$1 RETURNING *`, [id, dados.nome, dados.categoria, dados.descricao || null, dados.preco, dados.promocional, dados.status, dados.peso_gramas, dados.comprimento_cm, dados.largura_cm, dados.altura_cm]); if (!result.rows[0]) return res.status(404).json({ message: "Produto não encontrado." }); res.json(result.rows[0]); }
   catch (error) { res.status(500).json({ message: "Não foi possível atualizar o produto." }); }
 }
 
