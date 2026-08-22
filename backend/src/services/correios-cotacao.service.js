@@ -1,5 +1,6 @@
 const { getCorreiosConfig, getCorreiosToken, clearCorreiosTokenCache } = require("./correios-token.service");
 const { sanitizarCep } = require("./correios-cep.service");
+const { resolverDrCorreios } = require("./correios-contrato.service");
 
 function correiosError(message, code, statusCode = 502) {
   return Object.assign(new Error(message), { code, statusCode });
@@ -82,10 +83,10 @@ async function calcularPrecoCorreios(input) {
     cepOrigem: origem, cepDestino: destino, psObjeto: String(peso), tpObjeto: "2",
     comprimento: String(comprimento), largura: String(largura), altura: String(altura),
   });
-  if (config.contrato && !config.dr) throw correiosError("A DR dos Correios deve ser configurada para calcular o preço do contrato.", "CORREIOS_DR_AUSENTE", 503);
   if (config.contrato) {
+    const dr = await resolverDrCorreios();
     params.set("nuContrato", config.contrato);
-    params.set("nuDR", config.dr);
+    params.set("nuDR", dr);
   }
   const payload = await correiosGet(`/preco/v1/nacional/${encodeURIComponent(servico)}?${params}`, "PRECO");
   if (textoErroPayload(payload)) throw correiosError("Serviço de entrega indisponível para o trecho ou pacote informado.", "CORREIOS_PRECO_INDISPONIVEL", 422);

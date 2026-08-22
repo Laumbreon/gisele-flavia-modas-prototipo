@@ -1,4 +1,9 @@
+const crypto = require("crypto");
 const { getCorreiosConfig, getCorreiosToken, clearCorreiosTokenCache, getCorreiosLocalStatus, maskCorreiosValue } = require("./correios-token.service");
+
+let drCache = null;
+let drRequest = null;
+const DR_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function correiosError(message, code, statusCode = 502) { return Object.assign(new Error(message), { code, statusCode }); }
 function onlyDigits(value) { return String(value || "").replace(/\D/g, ""); }
@@ -100,6 +105,23 @@ async function listarServicosCartao(numeroContrato = getCorreiosConfig().contrat
 function contratoNumero(item) { return String(item?.nuContrato || item?.numero || item?.contrato || "").trim(); }
 function cartaoNumero(item) { return String(item?.nuCartaoPostagem || item?.numero || item?.cartaoPostagem || "").trim(); }
 function isAtivo(item) { const status = normalizeText(item?.status || item?.situacao); return status === "ATIVO" || status === "ATIVA"; }
+function drValue(item) {
+  const value = String(item?.nuSe ?? item?.nuSE ?? item?.dr ?? item?.numeroDR ?? "").replace(/\D/g, "");
+  return value && value.length <= 6 ? value : null;
+}
+function drFingerprint(config) {
+  return crypto.createHash("sha256").update([config.env, config.cnpj, config.contrato, config.cartaoPostagem].join("\0")).digest("hex");
+}
+function cacheDetectedDr(value, config = getCorreiosConfig()) {
+  const dr = drValue({ nuSe: value });
+  if (dr) drCache = { value: dr, fingerprint: drFingerprint(config), expiresAt: Date.now() + DR_CACHE_TTL_MS };
+  return dr;
+}
+function getCorreiosDrStatus() {
+  const config = getCorreiosConfig();
+  const detected = !config.dr && drCache?.fingerprint === drFingerprint(config) && drCache.expiresAt > Date.now();
+  return { dr_configurada: Boolean(config.dr), dr_detectada: Boolean(detected) };
+}
 function servicoResumo(item) {
   return { codigo: String(item?.coServico || item?.codigo || item?.coProduto || item?.codigoServico || "").trim(), descricao: String(item?.noServico || item?.descricao || item?.nome || item?.nomeServico || "").trim() };
 }
@@ -161,6 +183,41 @@ async function resolverServicosEntregaCorreios() {
   return result;
 }
 
+async function detectDrCorreios(config) {
+  let contract = null;
+  if (config.contrato) {
+    try { contract = await consultarContrato(config.contrato); }
+    catch { /* A tentativa pelo cartão ainda pode localizar a DR. */ }
+  } else {
+    try { contract = (await listarContratos()).find(isAtivo) || null; }
+    catch { /* O erro final permanece controlado abaixo. */ }
+  }
+  const contractDr = drValue(contract);
+  if (contractDr) return cacheDetectedDr(contractDr, config);
+  const contractNumber = contratoNumero(contract) || config.contrato;
+  if (contractNumber) {
+    try {
+      const cards = await listarCartoes(contractNumber);
+      const configuredCard = onlyDigits(config.cartaoPostagem);
+      const card = configuredCard
+        ? cards.find(item => onlyDigits(cartaoNumero(item)) === configuredCard) || null
+        : cards.find(isAtivo) || null;
+      const cardDr = drValue(card);
+      if (cardDr) return cacheDetectedDr(cardDr, config);
+    } catch { /* O erro final permanece controlado abaixo. */ }
+  }
+  throw correiosError("Não foi possível detectar a DR/SE do contrato. Informe CORREIOS_DR no .env ou verifique o campo nuSe na API Meu Contrato.", "CORREIOS_DR_NAO_DETECTADA", 503);
+}
+
+async function resolverDrCorreios() {
+  const config = getCorreiosConfig();
+  if (config.dr) return config.dr;
+  const fingerprint = drFingerprint(config);
+  if (drCache?.fingerprint === fingerprint && drCache.expiresAt > Date.now()) return drCache.value;
+  if (!drRequest) drRequest = detectDrCorreios(config).finally(() => { drRequest = null; });
+  return drRequest;
+}
+
 async function diagnosticarContratoCorreios() {
   const config = getCorreiosConfig(), local = getCorreiosLocalStatus();
   const result = {
@@ -168,6 +225,7 @@ async function diagnosticarContratoCorreios() {
     identificadores: { cnpj: maskCorreiosValue(config.cnpj), contrato: maskCorreiosValue(config.contrato), cartao_postagem: maskCorreiosValue(config.cartaoPostagem) },
     conectividade: { token: "nao_testado", meu_contrato: "nao_testado", contrato_ativo: false, cartao_ativo: false, servicos_encontrados: false },
     servicos_detectados: [], avisos: [],
+    ...getCorreiosDrStatus(),
   };
   try { await getCorreiosToken(); result.conectividade.token = "ok"; }
   catch (error) { result.conectividade.token = "erro"; result.avisos.push(error.message); return result; }
@@ -180,6 +238,7 @@ async function diagnosticarContratoCorreios() {
     const numeroContrato = contratoNumero(contrato) || config.contrato;
     result.conectividade.meu_contrato = "ok";
     result.conectividade.contrato_ativo = Boolean(contrato && isAtivo(contrato));
+    if (!config.dr && drValue(contrato)) cacheDetectedDr(drValue(contrato), config);
     if (!contrato) result.avisos.push(contratoConfigurado ? "O contrato configurado não foi localizado entre os contratos ativos do CNPJ." : "Nenhum contrato ativo foi localizado para o CNPJ configurado.");
     const [cartoesResult, servicosContratoResult] = await Promise.allSettled([listarCartoes(numeroContrato), listarServicosContrato(numeroContrato)]);
     const cartoes = cartoesResult.status === "fulfilled" ? cartoesResult.value : [];
@@ -188,6 +247,7 @@ async function diagnosticarContratoCorreios() {
       ? cartoes.find(item => onlyDigits(cartaoNumero(item)) === cartaoConfigurado) || null
       : cartoes.find(isAtivo) || null;
     result.conectividade.cartao_ativo = Boolean(cartao && isAtivo(cartao));
+    if (!config.dr && !getCorreiosDrStatus().dr_detectada && drValue(cartao)) cacheDetectedDr(drValue(cartao), config);
     if (cartoesResult.status === "rejected") result.avisos.push(cartoesResult.reason.message);
     else if (!cartao) result.avisos.push(cartaoConfigurado ? "O cartão de postagem configurado não foi localizado entre os cartões ativos do contrato." : "Nenhum cartão de postagem ativo foi localizado para o contrato.");
     let servicos = servicosContratoResult.status === "fulfilled" ? servicosContratoResult.value : [];
@@ -202,10 +262,11 @@ async function diagnosticarContratoCorreios() {
     result.servicos_detectados = [...unique.values()];
     result.conectividade.servicos_encontrados = result.servicos_detectados.length > 0;
     if (!result.conectividade.servicos_encontrados) result.avisos.push("PAC, SEDEX ou APIs necessárias não foram identificados nos serviços consultados.");
+    Object.assign(result, getCorreiosDrStatus());
     return result;
   } catch (error) {
     result.conectividade.meu_contrato = "erro"; result.avisos.push(error.message); return result;
   }
 }
 
-module.exports = { listarContratos, consultarContrato, listarCartoes, listarServicosContrato, listarServicosCartao, resolverServicosEntregaCorreios, diagnosticarContratoCorreios };
+module.exports = { listarContratos, consultarContrato, listarCartoes, listarServicosContrato, listarServicosCartao, resolverServicosEntregaCorreios, resolverDrCorreios, getCorreiosDrStatus, diagnosticarContratoCorreios };

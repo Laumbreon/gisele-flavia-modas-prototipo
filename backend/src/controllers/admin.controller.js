@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const { randomUUID } = require("crypto");
 const { pool, query } = require("../config/db");
 const { getCorreiosLocalStatus, getCorreiosConfig } = require("../services/correios-token.service");
-const { diagnosticarContratoCorreios, resolverServicosEntregaCorreios } = require("../services/correios-contrato.service");
+const { diagnosticarContratoCorreios, resolverServicosEntregaCorreios, getCorreiosDrStatus } = require("../services/correios-contrato.service");
 const { consultarCepCorreios, sanitizarCep } = require("../services/correios-cep.service");
 const { cotarFreteCorreios } = require("../services/correios-cotacao.service");
 
@@ -21,7 +21,7 @@ async function validarPin(req, res) {
 }
 
 async function statusCorreios(req, res) {
-  if (String(req.query.check || "") !== "1") return res.json(getCorreiosLocalStatus());
+  if (String(req.query.check || "") !== "1") return res.json({ ...getCorreiosLocalStatus(), ...getCorreiosDrStatus() });
   try {
     return res.json(await diagnosticarContratoCorreios());
   } catch (error) {

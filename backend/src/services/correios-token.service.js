@@ -37,7 +37,8 @@ function getCorreiosLocalStatus() {
   return {
     enabled: config.enabled, env: config.env, cep_origem_configurado: config.cepOrigem.length === 8,
     cnpj_configurado: config.cnpj.length === 14, contrato_configurado: Boolean(config.contrato),
-    cartao_postagem_configurado: Boolean(config.cartaoPostagem), servicos_configurados: config.servicos,
+    cartao_postagem_configurado: Boolean(config.cartaoPostagem), dr_configurada: Boolean(config.dr),
+    servicos_configurados: config.servicos,
   };
 }
 
