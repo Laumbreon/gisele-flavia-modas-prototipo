@@ -680,7 +680,7 @@
 
   function getOrderDeliveryType(order) {
     const raw = String(order?.tipo_entrega || order?.canal_entrega || order?.entrega?.tipo_entrega || order?.metodo_entrega || order?.canal_venda || "").trim().toLowerCase();
-    return ["entrega", "delivery", "motoboy"].some((term) => raw.includes(term)) ? "entrega" : "retirada";
+    return ["entrega", "delivery", "motoboy", "correios"].some((term) => raw.includes(term)) ? "entrega" : "retirada";
   }
 
   function renderOrdersContent() {
@@ -698,7 +698,7 @@
   }
 
   function deliveryOptions(selected, type) {
-    const values = type === "entrega_local"
+    const values = ["entrega_local", "correios"].includes(String(type || "").toLowerCase())
       ? [["pendente","Pendente"],["separando","Separando"],["saiu_entrega","Saiu para entrega"],["entregue","Entregue"]]
       : [["pendente","Pendente"],["separando","Em preparação"],["pronto_retirada","Pronto para retirada"],["entregue","Retirado"]];
     if (selected === "cancelado") values.push(["cancelado", "Cancelado"]);
@@ -1516,7 +1516,7 @@
     state.currentOrder = item;
     const delivery = item.entrega || {};
     const phone = delivery.destinatario_telefone || item.cliente_telefone || item.telefone || item.cliente_whatsapp || item.whatsapp || "Telefone não informado";
-    const isDelivery = ["entrega_local", "entrega"].includes(String(delivery.tipo_entrega || item.tipo_entrega || "").toLowerCase()) || item.tem_entrega === true;
+    const isDelivery = ["entrega_local", "entrega", "correios"].includes(String(delivery.tipo_entrega || item.tipo_entrega || "").toLowerCase()) || item.tem_entrega === true;
     const address = [delivery.endereco,delivery.numero,delivery.bairro,delivery.cidade,delivery.estado].filter(Boolean).join(", ");
     openModal(`Pedido #${id}`, `<div class="field-grid"><div><strong>${escapeHtml(item.cliente_nome || item.cliente || "Cliente")}</strong><p class="muted">${escapeHtml(phone)}</p><p class="muted">${isDelivery ? "Entrega" : "Retirada"}</p></div><div><strong>${money(item.total)}</strong><p class="muted">${escapeHtml(paymentLabel(item.forma_pagamento))}</p></div></div><div style="height:16px"></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th></tr></thead><tbody>${(item.itens || []).map((line) => `<tr><td><strong>${escapeHtml(line.produto_nome)}</strong>${line.codigo_ref ? `<small class="product-ref">REF: ${escapeHtml(line.codigo_ref)}</small>` : ""}${line.codigo_barras ? `<small>Código: ${escapeHtml(line.codigo_barras)}</small>` : ""}</td><td>${line.quantidade}</td><td>${money(line.subtotal || Number(line.preco_unitario) * Number(line.quantidade))}</td></tr>`).join("")}</tbody></table></div>${isDelivery ? `<div class="help" style="margin-top:16px"><strong>Entrega:</strong> ${escapeHtml(address || "Endereço não informado")}${delivery.complemento ? `<br><strong>Complemento:</strong> ${escapeHtml(delivery.complemento)}` : ""}${delivery.referencia ? `<br><strong>Referência:</strong> ${escapeHtml(delivery.referencia)}` : ""}</div>` : ""}<div class="form-actions"><button class="btn secondary" data-close-modal>Fechar</button><button class="btn" data-action="print-order">Imprimir separação</button></div>`);
   }
@@ -1527,7 +1527,7 @@
     const firstText = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || null;
     const deliveryType = firstText(delivery.tipo_entrega, order.tipo_entrega, order.canal_entrega, order.metodo_entrega)?.toLowerCase();
     const hasDeliveryAddress = Boolean(firstText(delivery.endereco, delivery.rua, order.endereco_entrega, order.endereco, order.rua));
-    const isDelivery = ["entrega_local", "entrega", "delivery"].includes(deliveryType) || order.tem_entrega === true || order.tem_entrega === "true" || hasDeliveryAddress;
+    const isDelivery = ["entrega_local", "entrega", "delivery", "correios"].includes(deliveryType) || order.tem_entrega === true || order.tem_entrega === "true" || hasDeliveryAddress;
     const phone = firstText(delivery.destinatario_telefone, delivery.telefone, delivery.whatsapp, order.cliente_telefone, order.telefone, order.whatsapp, order.cliente_whatsapp, order.contato, order.celular);
     const street = firstText(delivery.endereco, delivery.rua, order.endereco_entrega, order.endereco, order.rua);
     const number = firstText(delivery.numero, order.numero);
