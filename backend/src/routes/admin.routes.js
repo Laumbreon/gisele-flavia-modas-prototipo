@@ -11,6 +11,12 @@ router.get(
   adminController.statusCorreios
 );
 router.post(
+  "/correios/testar-cotacao",
+  authMiddleware,
+  permissoes(["configuracoes.editar"]),
+  adminController.testarCotacaoCorreios
+);
+router.post(
   "/validar-pin",
   authMiddleware,
   permissoes(["admin.sensivel", "fiscal.gerenciar", "mercado_pago.configurar", "configuracoes.editar"]),

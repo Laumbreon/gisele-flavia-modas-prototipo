@@ -31,6 +31,7 @@
     settings: {},
     mercadoPagoConfig: null,
     correiosStatus: null,
+    correiosQuote: null,
     product: null,
     pdvProducts: [],
     pdvCart: [],
@@ -825,7 +826,14 @@
     const flag = (label, ok) => `<span class="badge ${ok ? "" : "inactive"}">${escapeHtml(label)}: ${ok ? "OK" : "Não"}</span>`;
     const connection = (label, value) => `<span class="badge ${value === "ok" ? "" : value === "erro" ? "cancelado" : "inactive"}">${escapeHtml(label)}: ${escapeHtml(value || "não testado")}</span>`;
     const checkedFlags = "contrato_ativo" in connectivity ? `${flag("Contrato ativo", connectivity.contrato_ativo)}${flag("Cartão ativo", connectivity.cartao_ativo)}${flag("Serviços", connectivity.servicos_encontrados)}` : "";
-    return `<div class="carousel-settings"><div class="section-heading"><div><h3>Status Correios</h3><p class="help">Diagnóstico seguro da configuração e dos serviços vinculados ao contrato.</p></div><span class="badge ${status.enabled ? "" : "inactive"}">${status.enabled ? "Ativo" : "Inativo"}</span></div><div class="button-row">${flag("CEP origem", status.cep_origem_configurado)}${flag("Contrato", status.contrato_configurado)}${flag("Cartão", status.cartao_postagem_configurado)}${connection("Token", connectivity.token)}${connection("Meu Contrato", connectivity.meu_contrato)}${checkedFlags}</div><p class="muted">Ambiente: ${escapeHtml(status.env || "homologacao")} · Serviços configurados: ${escapeHtml((status.servicos_configurados || []).join(", ") || "nenhum")}</p>${status.servicos_detectados?.length ? `<div class="help"><strong>Serviços encontrados:</strong> ${status.servicos_detectados.map(item => escapeHtml([item.codigo,item.descricao].filter(Boolean).join(" — "))).join(" · ")}</div>` : ""}${status.avisos?.length ? `<div class="help">${status.avisos.map(escapeHtml).join("<br>")}</div>` : ""}<div class="form-actions"><button type="button" class="btn secondary" data-action="correios-status-local">Ver configuração</button><button type="button" class="btn" data-action="correios-status-check">Testar conexão</button></div></div>`;
+    return `<div class="carousel-settings"><div class="section-heading"><div><h3>Status Correios</h3><p class="help">Diagnóstico seguro da configuração e dos serviços vinculados ao contrato.</p></div><span class="badge ${status.enabled ? "" : "inactive"}">${status.enabled ? "Ativo" : "Inativo"}</span></div><div class="button-row">${flag("CEP origem", status.cep_origem_configurado)}${flag("Contrato", status.contrato_configurado)}${flag("Cartão", status.cartao_postagem_configurado)}${connection("Token", connectivity.token)}${connection("Meu Contrato", connectivity.meu_contrato)}${checkedFlags}</div><p class="muted">Ambiente: ${escapeHtml(status.env || "homologacao")} · Serviços configurados: ${escapeHtml((status.servicos_configurados || []).join(", ") || "nenhum")}</p>${status.servicos_detectados?.length ? `<div class="help"><strong>Serviços encontrados:</strong> ${status.servicos_detectados.map(item => escapeHtml([item.codigo,item.descricao].filter(Boolean).join(" — "))).join(" · ")}</div>` : ""}${status.avisos?.length ? `<div class="help">${status.avisos.map(escapeHtml).join("<br>")}</div>` : ""}<div class="form-actions"><button type="button" class="btn secondary" data-action="correios-status-local">Ver configuração</button><button type="button" class="btn" data-action="correios-status-check">Testar conexão</button></div><hr><h3>Testar cotação</h3><p class="help">Teste interno de CEP, preço e prazo. Esta cotação ainda não aparece no checkout.</p><form data-form="correios-quote"><div class="field-grid"><div class="field"><label>CEP destino</label><input name="cep_destino" inputmode="numeric" maxlength="9" placeholder="00000-000" required></div><div class="field"><label>Peso em gramas</label><input name="peso_gramas" type="number" min="1" step="1" value="300" required></div><div class="field"><label>Comprimento (cm)</label><input name="comprimento_cm" type="number" min="0.01" step="0.01" value="25" required></div><div class="field"><label>Largura (cm)</label><input name="largura_cm" type="number" min="0.01" step="0.01" value="18" required></div><div class="field"><label>Altura (cm)</label><input name="altura_cm" type="number" min="0.01" step="0.01" value="6" required></div></div><div class="form-actions"><button class="btn" type="submit">Testar cotação</button></div></form><div id="correiosQuoteResult">${correiosQuoteHtml()}</div></div>`;
+  }
+
+  function correiosQuoteHtml(result = state.correiosQuote) {
+    if (!result) return "";
+    const address = result.cep ? [result.cep.logradouro, result.cep.bairro, [result.cep.cidade,result.cep.uf].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") : "";
+    const options = (result.opcoes || []).map((item) => `<div class="summary-card"><div class="section-heading"><div><strong>${escapeHtml(item.servico)}</strong><p class="muted">${escapeHtml(item.descricao || "")} · Código ${escapeHtml(item.codigo)}</p></div><strong>${money(item.valor)}</strong></div><p>Prazo: <strong>${Number(item.prazo_dias_uteis)} dia(s) útil(eis)</strong></p><p class="muted">Válida até ${date(item.expira_em)}</p></div>`).join("");
+    return `<div class="help"><strong>CEP consultado:</strong> ${escapeHtml(result.cep?.cep || "")} ${address ? `· ${escapeHtml(address)}` : ""}</div><div class="summary-grid">${options}</div>${result.avisos?.length ? `<div class="help">${result.avisos.map(escapeHtml).join("<br>")}</div>` : ""}`;
   }
 
   async function refreshCorreiosStatus(check = false) {
@@ -833,6 +841,23 @@
     const container = document.getElementById("correiosStatusArea");
     if (container) container.innerHTML = correiosStatusHtml();
     toast(check ? "Diagnóstico dos Correios concluído." : "Configuração dos Correios atualizada.");
+  }
+
+  async function submitCorreiosQuote(form) {
+    const data = formObject(form);
+    state.correiosQuote = await request("/admin/correios/testar-cotacao", {
+      method: "POST",
+      body: JSON.stringify({
+        cep_destino: data.cep_destino,
+        peso_gramas: Number(data.peso_gramas),
+        comprimento_cm: Number(data.comprimento_cm),
+        largura_cm: Number(data.largura_cm),
+        altura_cm: Number(data.altura_cm),
+      }),
+    });
+    const container = document.getElementById("correiosQuoteResult");
+    if (container) container.innerHTML = correiosQuoteHtml();
+    toast("Cotação dos Correios concluída.");
   }
 
   async function renderSettings() {
@@ -996,6 +1021,7 @@
       else if (kind === "freight") await submitFreight(form);
       else if (kind === "settings") await submitSettings(form);
       else if (kind === "mercado-pago-config") await submitMercadoPagoConfig(form);
+      else if (kind === "correios-quote") await submitCorreiosQuote(form);
       else if (kind === "carousel-upload") await submitCarouselUpload(form);
       else if (kind === "informative-upload") await submitInformativeUpload(form);
       else if (kind === "delete-product-permanent") await submitDeleteProductPermanent(form);

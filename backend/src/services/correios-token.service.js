@@ -20,6 +20,8 @@ function getCorreiosConfig() {
     cepOrigem: textoEnv("CORREIOS_CEP_ORIGEM").replace(/\D/g, ""),
     timeoutMs: inteiroEnv("CORREIOS_TIMEOUT_MS", 8000), tokenSafetySeconds: inteiroEnv("CORREIOS_TOKEN_SAFETY_SECONDS", 60),
     servicos: textoEnv("CORREIOS_SERVICOS").split(",").map(item => item.trim().toUpperCase()).filter(Boolean),
+    servicoPac: textoEnv("CORREIOS_SERVICO_PAC"), servicoSedex: textoEnv("CORREIOS_SERVICO_SEDEX"),
+    cotacaoTtlMinutes: inteiroEnv("CORREIOS_COTACAO_TTL_MINUTES", 30),
   };
 }
 

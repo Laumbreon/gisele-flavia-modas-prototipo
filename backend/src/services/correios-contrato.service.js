@@ -4,6 +4,7 @@ function correiosError(message, code, statusCode = 502) { return Object.assign(n
 function onlyDigits(value) { return String(value || "").replace(/\D/g, ""); }
 function segment(value) { return encodeURIComponent(String(value || "").trim()); }
 function normalizeText(value) { return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim(); }
+const TECHNICAL_SERVICE_CODES = new Set(["38202", "38210", "86738"]);
 
 function rows(payload) {
   if (Array.isArray(payload)) return payload;
@@ -107,6 +108,59 @@ function relevantService(item, configured) {
   return ["PAC", "SEDEX", "API PRECO", "API PRECOS", "API PRAZO", "API PRAZOS", "BUSCA CEP", "API CEP", " CEP", ...configured.map(normalizeText)].some(term => text.includes(term));
 }
 
+function isDeliveryCandidate(item, type) {
+  const code = String(item.codigo || "").trim();
+  const text = normalizeText(item.descricao);
+  const excludedWords = ["REVERSO", "LOG+", "GRANDES FORMATOS", "HOJE", "LOCKER", "PACKET", "INTERNACIONAL", "ARMAZENAGEM"];
+  if (!code || !text || TECHNICAL_SERVICE_CODES.has(code) || excludedWords.some(word => text.includes(word))) return false;
+  if (/\b(SEDEX\s*)?(10|12)\b/.test(text)) return false;
+  return type === "pac" ? /\bPAC\b/.test(text) : /\bSEDEX\b/.test(text);
+}
+
+function configuredDeliveryService(code, type, warnings) {
+  const value = String(code || "").trim();
+  if (TECHNICAL_SERVICE_CODES.has(value)) {
+    warnings.push(`${value} é um serviço técnico da API e não pode ser usado como modalidade ${type === "pac" ? "PAC" : "SEDEX"}.`);
+    return null;
+  }
+  return value ? { codigo: value, descricao: type === "pac" ? "PAC (configurado)" : "SEDEX (configurado)" } : null;
+}
+
+function chooseDeliveryService(services, type, warnings) {
+  const candidates = services.filter(item => isDeliveryCandidate(item, type));
+  if (candidates.length === 1) return candidates[0];
+  const label = type === "pac" ? "PAC" : "SEDEX";
+  if (!candidates.length) warnings.push(`${label} não foi identificado com segurança. Configure CORREIOS_SERVICO_${label} no ambiente.`);
+  else warnings.push(`Mais de um serviço ${label} plausível foi encontrado. Configure CORREIOS_SERVICO_${label} no ambiente.`);
+  return null;
+}
+
+async function resolverServicosEntregaCorreios() {
+  const config = getCorreiosConfig();
+  const result = { pac: null, sedex: null, avisos: [] };
+  result.pac = configuredDeliveryService(config.servicoPac, "pac", result.avisos);
+  result.sedex = configuredDeliveryService(config.servicoSedex, "sedex", result.avisos);
+  if (result.pac && result.sedex) return result;
+  if (!config.contrato) {
+    result.avisos.push("Contrato não configurado para detectar serviços de entrega automaticamente.");
+    return result;
+  }
+  const queries = [listarServicosContrato(config.contrato)];
+  if (config.cartaoPostagem) queries.push(listarServicosCartao(config.contrato, config.cartaoPostagem));
+  const settled = await Promise.allSettled(queries);
+  const services = settled.flatMap(item => item.status === "fulfilled" ? item.value : []);
+  settled.filter(item => item.status === "rejected").forEach(item => result.avisos.push(item.reason.message));
+  const unique = new Map();
+  services.map(servicoResumo).filter(item => item.codigo || item.descricao).forEach(item => {
+    const key = item.codigo || item.descricao;
+    if (!unique.has(key)) unique.set(key, item);
+  });
+  const normalized = [...unique.values()];
+  if (!result.pac) result.pac = chooseDeliveryService(normalized, "pac", result.avisos);
+  if (!result.sedex) result.sedex = chooseDeliveryService(normalized, "sedex", result.avisos);
+  return result;
+}
+
 async function diagnosticarContratoCorreios() {
   const config = getCorreiosConfig(), local = getCorreiosLocalStatus();
   const result = {
@@ -154,4 +208,4 @@ async function diagnosticarContratoCorreios() {
   }
 }
 
-module.exports = { listarContratos, consultarContrato, listarCartoes, listarServicosContrato, listarServicosCartao, diagnosticarContratoCorreios };
+module.exports = { listarContratos, consultarContrato, listarCartoes, listarServicosContrato, listarServicosCartao, resolverServicosEntregaCorreios, diagnosticarContratoCorreios };
