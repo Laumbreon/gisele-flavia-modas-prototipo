@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const { query } = require("../config/db");
-const { obterStatusConfiguracaoCorreios } = require("../services/correios-token.service");
+const { getCorreiosLocalStatus } = require("../services/correios-token.service");
+const { diagnosticarContratoCorreios } = require("../services/correios-contrato.service");
 
 async function validarPin(req, res) {
   const pin = String(req.body.pin || "");
@@ -16,8 +17,13 @@ async function validarPin(req, res) {
   }
 }
 
-function statusCorreios(_req, res) {
-  res.json(obterStatusConfiguracaoCorreios());
+async function statusCorreios(req, res) {
+  if (String(req.query.check || "") !== "1") return res.json(getCorreiosLocalStatus());
+  try {
+    return res.json(await diagnosticarContratoCorreios());
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : "Não foi possível verificar a integração com os Correios." });
+  }
 }
 
 module.exports = { validarPin, statusCorreios };

@@ -30,6 +30,7 @@
     users: [],
     settings: {},
     mercadoPagoConfig: null,
+    correiosStatus: null,
     product: null,
     pdvProducts: [],
     pdvCart: [],
@@ -818,12 +819,29 @@
     popup.document.close();
   }
 
+  function correiosStatusHtml(status = state.correiosStatus) {
+    if (!status) return `<div class="carousel-settings"><h3>Status Correios</h3><p class="help">Seu perfil não possui acesso ao diagnóstico ou a configuração ainda não está disponível.</p></div>`;
+    const connectivity = status.conectividade || {};
+    const flag = (label, ok) => `<span class="badge ${ok ? "" : "inactive"}">${escapeHtml(label)}: ${ok ? "OK" : "Não"}</span>`;
+    const connection = (label, value) => `<span class="badge ${value === "ok" ? "" : value === "erro" ? "cancelado" : "inactive"}">${escapeHtml(label)}: ${escapeHtml(value || "não testado")}</span>`;
+    const checkedFlags = "contrato_ativo" in connectivity ? `${flag("Contrato ativo", connectivity.contrato_ativo)}${flag("Cartão ativo", connectivity.cartao_ativo)}${flag("Serviços", connectivity.servicos_encontrados)}` : "";
+    return `<div class="carousel-settings"><div class="section-heading"><div><h3>Status Correios</h3><p class="help">Diagnóstico seguro da configuração e dos serviços vinculados ao contrato.</p></div><span class="badge ${status.enabled ? "" : "inactive"}">${status.enabled ? "Ativo" : "Inativo"}</span></div><div class="button-row">${flag("CEP origem", status.cep_origem_configurado)}${flag("Contrato", status.contrato_configurado)}${flag("Cartão", status.cartao_postagem_configurado)}${connection("Token", connectivity.token)}${connection("Meu Contrato", connectivity.meu_contrato)}${checkedFlags}</div><p class="muted">Ambiente: ${escapeHtml(status.env || "homologacao")} · Serviços configurados: ${escapeHtml((status.servicos_configurados || []).join(", ") || "nenhum")}</p>${status.servicos_detectados?.length ? `<div class="help"><strong>Serviços encontrados:</strong> ${status.servicos_detectados.map(item => escapeHtml([item.codigo,item.descricao].filter(Boolean).join(" — "))).join(" · ")}</div>` : ""}${status.avisos?.length ? `<div class="help">${status.avisos.map(escapeHtml).join("<br>")}</div>` : ""}<div class="form-actions"><button type="button" class="btn secondary" data-action="correios-status-local">Ver configuração</button><button type="button" class="btn" data-action="correios-status-check">Testar conexão</button></div></div>`;
+  }
+
+  async function refreshCorreiosStatus(check = false) {
+    state.correiosStatus = await request(`/admin/correios/status${check ? "?check=1" : ""}`);
+    const container = document.getElementById("correiosStatusArea");
+    if (container) container.innerHTML = correiosStatusHtml();
+    toast(check ? "Diagnóstico dos Correios concluído." : "Configuração dos Correios atualizada.");
+  }
+
   async function renderSettings() {
     loading("Carregando dados do site...");
-    [state.settings, state.mercadoPagoConfig, state.categories] = await Promise.all([
+    [state.settings, state.mercadoPagoConfig, state.categories, state.correiosStatus] = await Promise.all([
       request("/configuracoes-site"),
       request("/mercado-pago/config").catch(() => null),
       request("/produtos/categorias").catch(() => state.categories || []),
+      request("/admin/correios/status").catch(() => null),
     ]);
     const s = state.settings;
     const mp = state.mercadoPagoConfig;
@@ -882,6 +900,7 @@
         ${s.imagem_informativa ? `<div class="informative-preview"><img src="${escapeHtml(s.imagem_informativa)}" alt="Prévia da imagem informativa"></div>` : `<div class="empty-state"><strong>Nenhuma imagem informativa anexada.</strong></div>`}
         <form data-form="informative-upload" class="upload-zone"><label>Selecionar imagem informativa</label><input name="imagem" type="file" accept="image/jpeg,image/png,image/webp" required><small>JPG, PNG ou WEBP · máximo de 10 MB.</small><div class="form-actions"><button class="btn" type="submit">Anexar imagem</button></div></form>
       </div>
+      <div id="correiosStatusArea">${correiosStatusHtml()}</div>
       ${mp ? `<div class="carousel-settings"><h3>Mercado Pago</h3><p class="help">Checkout e confirmação automática de pagamentos. As credenciais secretas são protegidas no servidor e não são exibidas no painel.</p>
         <form data-form="mercado-pago-config"><div class="field-grid">
           <div class="field"><label>Ambiente</label><select name="ambiente"><option value="sandbox" ${selected(mp.ambiente || "sandbox", "sandbox")}>Sandbox (testes)</option><option value="producao" ${selected(mp.ambiente, "producao")}>Produção</option></select></div>
@@ -1375,6 +1394,8 @@
       else if (action === "categories") categoriesModal();
       else if (action === "edit-category") await editCategory(id);
       else if (action === "delete-category") await deleteCategory(id);
+      else if (action === "correios-status-local") await refreshCorreiosStatus(false);
+      else if (action === "correios-status-check") await refreshCorreiosStatus(true);
       else if (action === "order-details") await orderDetails(id);
       else if (action === "print-order") printableWindow(`Separação do pedido #${state.currentOrder?.id}`, orderSeparationHtml(state.currentOrder), { thermal:true });
       else if (action === "pay-order") await payOrder(id);
